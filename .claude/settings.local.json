@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Skill(update-config)",
+      "Bash(python -m json.tool)",
+      "Bash(claude mcp:*)",
+      "Bash(find /c/Users/alejo/.claude -name *.json)",
+      "Bash(xargs grep:*)",
+      "mcp__supabase__list_organizations",
+      "mcp__supabase__get_cost",
+      "mcp__supabase__confirm_cost",
+      "mcp__supabase__create_project",
+      "mcp__supabase__apply_migration"
+    ]
+  },
+  "mcpServers": {
+    "supabase": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@supabase/mcp-server-supabase@latest",
+        "--access-token",
+        "sbp_c0dd55676b4c1714098dc791814a5e1caf9753d5"
+      ]
+    }
+  }
+}
