@@ -20,6 +20,15 @@ class AppColors {
   static const orangeLight = Color(0xFFFFEDD5);
 }
 
+class AppTextStyles {
+  static final passengerTitle = GoogleFonts.manrope(
+    fontSize: 18,
+    fontWeight: FontWeight.w700,
+    color: Color(0xFF1E293B),
+    letterSpacing: -0.45,
+  );
+}
+
 class AppTheme {
   static ThemeData get light => ThemeData(
         useMaterial3: true,

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../shared/widgets/role_option_card.dart';
 
 class PassengerHomeScreen extends StatelessWidget {
@@ -9,7 +10,7 @@ class PassengerHomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Pasajero'),
+        title: Text('Pasajero', style: AppTextStyles.passengerTitle),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.go('/'),

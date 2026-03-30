@@ -32,7 +32,16 @@ final _router = GoRouter(
         GoRoute(path: '/driver/passenger-requests', builder: (_, __) => const PassengerRequestsScreen()),
         GoRoute(path: '/passenger', builder: (_, __) => const PassengerHomeScreen()),
         GoRoute(path: '/passenger/search-trips', builder: (_, __) => const SearchTripsScreen()),
-        GoRoute(path: '/passenger/search-results', builder: (_, __) => const SearchResultsScreen()),
+        GoRoute(
+          path: '/passenger/search-results',
+          builder: (_, state) {
+            final extra = state.extra as Map<String, String?>? ?? {};
+            return SearchResultsScreen(
+              origin: extra['origin'] ?? '',
+              destination: extra['destination'],
+            );
+          },
+        ),
         GoRoute(path: '/passenger/create-request', builder: (_, __) => const CreateRequestScreen()),
         GoRoute(path: '/history', builder: (_, __) => const HistoryScreen()),
         GoRoute(path: '/chats', builder: (_, __) => const ChatsScreen()),
