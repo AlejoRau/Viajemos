@@ -10,9 +10,9 @@ class HomeScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: AppColors.pageBackground,
       body: SafeArea(
-        child: Center(
+          child: Center(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24),
             child: Column(
@@ -57,7 +57,7 @@ class HomeScreen extends ConsumerWidget {
             ),
           ),
         ),
-      ),
+        ),
     );
   }
 }

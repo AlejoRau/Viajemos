@@ -50,15 +50,15 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
         ),
       ),
       body: Column(
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
+          children: [
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // Ruta
-                  const SectionTitle('Ruta deseada'),
+                  const SectionTitle('Ruta deseada', icon: Icons.route_rounded),
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: _originController,
@@ -82,7 +82,7 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
 
                   const SizedBox(height: 24),
                   // Fecha y hora
-                  const SectionTitle('Fecha y horario'),
+                  const SectionTitle('Fecha y horario', icon: Icons.schedule_rounded),
                   const SizedBox(height: 12),
                   Row(
                     children: [
@@ -128,7 +128,7 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
 
                   const SizedBox(height: 24),
                   // Asientos
-                  const SectionTitle('Asientos'),
+                  const SectionTitle('Asientos', icon: Icons.airline_seat_recline_normal_rounded),
                   const SizedBox(height: 12),
                   Row(
                     children: [
@@ -165,14 +165,14 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
 
                   const SizedBox(height: 24),
                   // Preferencias
-                  const SectionTitle('Mis preferencias'),
+                  const SectionTitle('Mis preferencias', icon: Icons.tune_rounded),
                   const SizedBox(height: 8),
                   _PrefRow(label: 'Viajo con mascota', value: _hasPet, onChanged: (v) => setState(() => _hasPet = v)),
                   _PrefRow(label: 'Soy fumador', value: _isSmoker, onChanged: (v) => setState(() => _isSmoker = v)),
 
                   const SizedBox(height: 24),
                   // Descripción
-                  const SectionTitle('Descripción (opcional)'),
+                  const SectionTitle('Descripción (opcional)', icon: Icons.notes_rounded),
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: _descriptionController,

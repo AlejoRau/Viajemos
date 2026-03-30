@@ -76,10 +76,10 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
         ),
       ),
       body: Column(
-        children: [
-          // Filtros
-          Container(
-            color: Colors.white,
+          children: [
+            // Filtros
+            Container(
+            color: AppColors.pageBackground,
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class AppColors {
   static const primary = Color(0xFF1A73E8);
   static const primaryDark = Color(0xFF1557B0);
   static const primaryLight = Color(0xFFE8F0FE);
   static const background = Color(0xFFFFFFFF);
+  static const pageBackground = Color(0xFFF8FAFC);
   static const surface = Color(0xFFFFFFFF);
   static const textPrimary = Color(0xFF1F2937);
   static const textSecondary = Color(0xFF6B7280);
   static const border = Color(0xFFE5E7EB);
+  static const appBarDivider = Color(0xFFE2E8F0);
   static const inputBackground = Color(0xFFF3F3F5);
   static const green = Color(0xFF15803D);
   static const greenLight = Color(0xFFDCFCE7);
@@ -22,21 +26,25 @@ class AppTheme {
         colorScheme: ColorScheme.fromSeed(
           seedColor: AppColors.primary,
           primary: AppColors.primary,
-          surface: AppColors.surface,
-          background: AppColors.background,
+          surface: AppColors.pageBackground,
         ),
-        scaffoldBackgroundColor: AppColors.background,
-        appBarTheme: const AppBarTheme(
-          backgroundColor: AppColors.primary,
-          foregroundColor: Colors.white,
-          elevation: 2,
+        scaffoldBackgroundColor: AppColors.pageBackground,
+        appBarTheme: AppBarTheme(
+          backgroundColor: AppColors.pageBackground,
+          foregroundColor: AppColors.textPrimary,
+          elevation: 0,
+          scrolledUnderElevation: 0,
           centerTitle: false,
-          titleTextStyle: TextStyle(
-            color: Colors.white,
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
+          systemOverlayStyle: SystemUiOverlayStyle.dark,
+          titleTextStyle: GoogleFonts.manrope(
+            fontSize: 20,
+            fontWeight: FontWeight.w700,
+            color: AppColors.primary,
           ),
-          iconTheme: IconThemeData(color: Colors.white),
+          iconTheme: const IconThemeData(color: AppColors.textSecondary),
+          shape: const Border(
+            bottom: BorderSide(color: AppColors.appBarDivider, width: 1),
+          ),
         ),
         elevatedButtonTheme: ElevatedButtonThemeData(
           style: ElevatedButton.styleFrom(

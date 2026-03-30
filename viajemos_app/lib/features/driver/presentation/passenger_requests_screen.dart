@@ -60,11 +60,11 @@ class _PassengerRequestsScreenState extends State<PassengerRequestsScreen> {
         ),
       ),
       body: Column(
-        children: [
-          // Filtros
-          Container(
+          children: [
+            // Filtros
+            Container(
             padding: const EdgeInsets.all(20),
-            color: const Color(0xFFF9FAFB),
+            color: AppColors.pageBackground,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [

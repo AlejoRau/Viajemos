@@ -110,7 +110,7 @@ class _NavItem extends StatelessWidget {
           vertical: selected ? 10 : 8,
         ),
         decoration: BoxDecoration(
-          color: selected ? AppColors.primary : Colors.transparent,
+          color: selected ? AppColors.primaryLight : Colors.transparent,
           borderRadius: BorderRadius.circular(20),
         ),
         child: Column(
@@ -119,7 +119,7 @@ class _NavItem extends StatelessWidget {
             Icon(
               selected ? activeIcon : icon,
               size: 22,
-              color: selected ? Colors.white : AppColors.textSecondary,
+              color: selected ? AppColors.primary : AppColors.textSecondary,
             ),
             if (selected) ...[
               const SizedBox(height: 3),
@@ -128,7 +128,7 @@ class _NavItem extends StatelessWidget {
                 style: const TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
-                  color: Colors.white,
+                  color: AppColors.primary,
                 ),
               ),
             ],

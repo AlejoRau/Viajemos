@@ -62,11 +62,11 @@ class _SearchTripsScreenState extends State<SearchTripsScreen> {
         ),
       ),
       body: SingleChildScrollView(
-        child: Column(
+          child: Column(
           children: [
             // Formulario de búsqueda
             Container(
-              color: const Color(0xFFF9FAFB),
+              color: AppColors.pageBackground,
               padding: const EdgeInsets.all(20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -189,7 +189,7 @@ class _SearchTripsScreenState extends State<SearchTripsScreen> {
             ],
           ],
         ),
-      ),
+        ),
     );
   }
 }
