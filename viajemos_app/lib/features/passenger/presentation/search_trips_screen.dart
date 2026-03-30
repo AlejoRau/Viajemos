@@ -2,40 +2,33 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../shared/formatters/date_formatter.dart';
 
-class _Trip {
-  const _Trip({
-    required this.driverName,
-    required this.rating,
+// ── Modelo de búsqueda reciente ───────────────────────────────────────────────
+
+class _RecentSearch {
+  const _RecentSearch({
     required this.origin,
-    required this.destination,
-    required this.stops,
-    required this.date,
-    required this.time,
-    required this.totalSeats,
-    required this.availableSeats,
-    required this.pricePerSeat,
-    required this.acceptsPets,
-    required this.acceptsSmokers,
+    this.destination,
+    this.dateFrom,
+    this.dateTo,
+    this.maxPrice,
   });
-  final String driverName;
-  final double rating;
   final String origin;
-  final String destination;
-  final int stops;
-  final String date;
-  final String time;
-  final int totalSeats;
-  final int availableSeats;
-  final int pricePerSeat;
-  final bool acceptsPets;
-  final bool acceptsSmokers;
+  final String? destination;
+  final String? dateFrom;
+  final String? dateTo;
+  final String? maxPrice;
+
+  String get label => destination != null ? '$origin → $destination' : origin;
 }
 
-const _mockTrips = [
-  _Trip(driverName: 'Carlos Rodríguez', rating: 4.8, origin: 'Buenos Aires', destination: 'Córdoba', stops: 2, date: '05/04/2026', time: '08:00', totalSeats: 4, availableSeats: 2, pricePerSeat: 6500, acceptsPets: true, acceptsSmokers: false),
-  _Trip(driverName: 'Ana López', rating: 4.9, origin: 'Rosario', destination: 'Buenos Aires', stops: 0, date: '06/04/2026', time: '14:30', totalSeats: 3, availableSeats: 2, pricePerSeat: 4000, acceptsPets: false, acceptsSmokers: false),
-  _Trip(driverName: 'Diego Fernández', rating: 4.7, origin: 'Mendoza', destination: 'San Luis', stops: 1, date: '08/04/2026', time: '10:00', totalSeats: 5, availableSeats: 3, pricePerSeat: 5500, acceptsPets: true, acceptsSmokers: true),
+// Mock — reemplazar con datos reales de search_history en Supabase
+final _mockRecentSearches = [
+  const _RecentSearch(origin: 'Palermo', destination: 'La Plata', dateFrom: '15/04', dateTo: '16/04', maxPrice: '8000'),
+  const _RecentSearch(origin: 'Rosario', destination: 'San Nicolás', dateFrom: '20/04', maxPrice: '5000'),
+  const _RecentSearch(origin: 'Córdoba', destination: 'Buenos Aires'),
 ];
+
+// ── Pantalla ──────────────────────────────────────────────────────────────────
 
 class SearchTripsScreen extends StatelessWidget {
   const SearchTripsScreen({super.key});
@@ -60,55 +53,15 @@ class SearchTripsScreen extends StatelessWidget {
           child: Container(color: const Color(0xFFE2E8F0), height: 1.0),
         ),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const _FilterCard(),
-            const SizedBox(height: 32),
-            const Text(
-              'RECIENTES',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF64748B),
-                letterSpacing: 0.5,
-              ),
-            ),
-            const SizedBox(height: 12),
-            _buildRecentSearch('Palermo', 'La Plata'),
-            _buildRecentSearch('Rosario', 'San Nicolás'),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildRecentSearch(String from, String to) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.history, color: Color(0xFF94A3B8), size: 20),
-          const SizedBox(width: 12),
-          Text(
-            '$from → $to',
-            style: const TextStyle(fontWeight: FontWeight.w500, color: Color(0xFF1E293B)),
-          ),
-          const Spacer(),
-          const Icon(Icons.chevron_right, color: Color(0xFFCBD5E1)),
-        ],
+      body: const SingleChildScrollView(
+        padding: EdgeInsets.all(24),
+        child: _FilterCard(),
       ),
     );
   }
 }
+
+// ── Tarjeta de filtros ────────────────────────────────────────────────────────
 
 class _FilterCard extends StatefulWidget {
   const _FilterCard();
@@ -123,6 +76,20 @@ class _FilterCardState extends State<_FilterCard> {
   final _fromDateController = TextEditingController();
   final _toDateController = TextEditingController();
   final _priceController = TextEditingController();
+  final _originFocusNode = FocusNode();
+  bool _showHistory = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _originFocusNode.addListener(() {
+      if (!_originFocusNode.hasFocus) {
+        Future.delayed(const Duration(milliseconds: 150), () {
+          if (mounted) setState(() => _showHistory = false);
+        });
+      }
+    });
+  }
 
   @override
   void dispose() {
@@ -131,7 +98,28 @@ class _FilterCardState extends State<_FilterCard> {
     _fromDateController.dispose();
     _toDateController.dispose();
     _priceController.dispose();
+    _originFocusNode.dispose();
     super.dispose();
+  }
+
+  void _applyRecentSearch(_RecentSearch s) {
+    setState(() {
+      _fromController.text = s.origin;
+      _toController.text = s.destination ?? '';
+      _fromDateController.text = s.dateFrom ?? '';
+      _toDateController.text = s.dateTo ?? '';
+      _priceController.text = s.maxPrice ?? '';
+      _showHistory = false;
+    });
+    _originFocusNode.unfocus();
+  }
+
+  void _swapOriginDestination() {
+    setState(() {
+      final tmp = _fromController.text;
+      _fromController.text = _toController.text;
+      _toController.text = tmp;
+    });
   }
 
   @override
@@ -152,21 +140,25 @@ class _FilterCardState extends State<_FilterCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ORIGEN
           _buildInputLabel('ORIGEN'),
-          _buildTextField('¿Desde dónde salís?', Icons.search, _fromController),
-          const SizedBox(height: 20),
+          _buildOriginField(),
+          if (_showHistory && _mockRecentSearches.isNotEmpty) _buildHistoryDropdown(),
+
+          const SizedBox(height: 12),
+
+          // DESTINO
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               _buildInputLabel('DESTINO'),
-              const Text(
-                '(Opcional)',
-                style: TextStyle(fontSize: 10, color: Color(0xFF94A3B8)),
-              ),
+              const Text('(Opcional)', style: TextStyle(fontSize: 10, color: Color(0xFF94A3B8))),
             ],
           ),
           _buildTextField('¿A dónde vas?', Icons.location_on, _toController),
           const SizedBox(height: 20),
+
+          // Fechas
           Row(
             children: [
               Expanded(child: _buildDateInput('DESDE', _fromDateController)),
@@ -175,6 +167,8 @@ class _FilterCardState extends State<_FilterCard> {
             ],
           ),
           const SizedBox(height: 20),
+
+          // Precio
           _buildInputLabel('PRECIO MÁXIMO (ARS)'),
           Container(
             decoration: BoxDecoration(
@@ -194,6 +188,8 @@ class _FilterCardState extends State<_FilterCard> {
             ),
           ),
           const SizedBox(height: 24),
+
+          // Buscar
           SizedBox(
             width: double.infinity,
             height: 56,
@@ -204,21 +200,89 @@ class _FilterCardState extends State<_FilterCard> {
               }),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF1A73E8),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(28),
-                ),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
                 elevation: 0,
               ),
               child: const Text(
                 'Buscar',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOriginField() {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFFF1F5F9),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: TextField(
+        controller: _fromController,
+        focusNode: _originFocusNode,
+        onTap: () => setState(() => _showHistory = true),
+        decoration: InputDecoration(
+          hintText: '¿Desde dónde salís?',
+          prefixIcon: const Icon(Icons.search, color: Color(0xFF1A73E8), size: 20),
+          suffixIcon: GestureDetector(
+            onTap: _swapOriginDestination,
+            child: const Icon(Icons.swap_vert, color: Color(0xFF94A3B8), size: 20),
+          ),
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+          hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 15),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHistoryDropdown() {
+    return Container(
+      margin: const EdgeInsets.only(top: 4),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          for (int i = 0; i < _mockRecentSearches.length; i++) ...[
+            if (i > 0) const Divider(height: 1, indent: 16, endIndent: 16, color: Color(0xFFF1F5F9)),
+            InkWell(
+              onTap: () => _applyRecentSearch(_mockRecentSearches[i]),
+              borderRadius: BorderRadius.circular(12),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: Row(
+                  children: [
+                    const Icon(Icons.history, size: 16, color: Color(0xFF94A3B8)),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        _mockRecentSearches[i].label,
+                        style: const TextStyle(fontSize: 14, color: Color(0xFF1E293B), fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                    if (_mockRecentSearches[i].dateFrom != null)
+                      Text(
+                        _mockRecentSearches[i].dateFrom!,
+                        style: const TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -229,11 +293,7 @@ class _FilterCardState extends State<_FilterCard> {
       padding: const EdgeInsets.only(bottom: 8.0),
       child: Text(
         label,
-        style: const TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.bold,
-          color: Color(0xFF64748B),
-        ),
+        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF64748B)),
       ),
     );
   }
@@ -281,150 +341,6 @@ class _FilterCardState extends State<_FilterCard> {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _TripCard extends StatelessWidget {
-  const _TripCard({required this.trip});
-  final _Trip trip;
-
-  String get _initials {
-    final parts = trip.driverName.split(' ');
-    if (parts.length >= 2) return '${parts[0][0]}${parts[1][0]}';
-    return trip.driverName.substring(0, 2).toUpperCase();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: const Color(0xFFE2E8F0), width: 2),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: const [BoxShadow(color: Color(0x0A000000), blurRadius: 8, offset: Offset(0, 2))],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              CircleAvatar(
-                radius: 24,
-                backgroundColor: const Color(0xFFEFF6FF),
-                child: Text(_initials, style: const TextStyle(color: Color(0xFF1A73E8), fontWeight: FontWeight.bold)),
-              ),
-              const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(trip.driverName, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
-                  Row(
-                    children: [
-                      const Icon(Icons.star_rounded, size: 16, color: Color(0xFFFACC15)),
-                      const SizedBox(width: 2),
-                      Text('${trip.rating}', style: const TextStyle(fontSize: 13, color: Color(0xFF64748B))),
-                    ],
-                  ),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Text(trip.origin, style: const TextStyle(fontWeight: FontWeight.w500)),
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 6),
-                child: Icon(Icons.arrow_forward, size: 16, color: Color(0xFF1A73E8)),
-              ),
-              Text(trip.destination, style: const TextStyle(fontWeight: FontWeight.w500)),
-              if (trip.stops > 0) ...[
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(color: const Color(0xFFEFF6FF), borderRadius: BorderRadius.circular(20)),
-                  child: Text('${trip.stops} parada${trip.stops > 1 ? 's' : ''}',
-                      style: const TextStyle(fontSize: 11, color: Color(0xFF1A73E8), fontWeight: FontWeight.w500)),
-                ),
-              ],
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text('📅 ${trip.date}  🕐 ${trip.time}',
-              style: const TextStyle(fontSize: 13, color: Color(0xFF64748B))),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              const Text('Viajeros: ', style: TextStyle(fontSize: 13, color: Color(0xFF64748B))),
-              for (int i = 0; i < (trip.totalSeats - trip.availableSeats); i++)
-                Padding(
-                  padding: const EdgeInsets.only(right: 2),
-                  child: CircleAvatar(radius: 14, backgroundColor: const Color(0xFF1A73E8),
-                      child: Text('${i + 1}', style: const TextStyle(color: Colors.white, fontSize: 11))),
-                ),
-              for (int i = 0; i < trip.availableSeats; i++)
-                const Padding(
-                  padding: EdgeInsets.only(right: 2),
-                  child: CircleAvatar(radius: 14, backgroundColor: Color(0xFFE5E7EB)),
-                ),
-              const SizedBox(width: 6),
-              Text('${trip.availableSeats}/${trip.totalSeats} disponibles',
-                  style: const TextStyle(fontSize: 11, color: Color(0xFF64748B))),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '\$${trip.pricePerSeat.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.')}',
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1A73E8)),
-          ),
-          if (trip.acceptsPets || trip.acceptsSmokers) ...[
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                if (trip.acceptsPets)
-                  _Badge(label: 'Mascotas', icon: Icons.pets_rounded, bg: const Color(0xFFDCFCE7), fg: const Color(0xFF16A34A)),
-                if (trip.acceptsPets && trip.acceptsSmokers) const SizedBox(width: 8),
-                if (trip.acceptsSmokers)
-                  _Badge(label: 'Fumadores', icon: Icons.smoking_rooms_rounded, bg: const Color(0xFFFFF7ED), fg: const Color(0xFFEA580C)),
-              ],
-            ),
-          ],
-          const SizedBox(height: 12),
-          ElevatedButton(
-            onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Ver detalles del viaje con ${trip.driverName}')),
-            ),
-            style: ElevatedButton.styleFrom(minimumSize: const Size(double.infinity, 44)),
-            child: const Text('Ver detalles'),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Badge extends StatelessWidget {
-  const _Badge({required this.label, required this.icon, required this.bg, required this.fg});
-  final String label;
-  final IconData icon;
-  final Color bg;
-  final Color fg;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(20)),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 13, color: fg),
-          const SizedBox(width: 4),
-          Text(label, style: TextStyle(fontSize: 12, color: fg, fontWeight: FontWeight.w500)),
-        ],
-      ),
     );
   }
 }
