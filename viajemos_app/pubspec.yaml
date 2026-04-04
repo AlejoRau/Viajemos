@@ -13,6 +13,9 @@ dependencies:
   flutter_riverpod: ^2.5.1
   google_fonts: ^6.2.1
   riverpod_annotation: ^2.3.5
+  flutter_map: ^7.0.2
+  latlong2: ^0.9.0
+  http: ^1.0.0
 
 dev_dependencies:
   flutter_test:

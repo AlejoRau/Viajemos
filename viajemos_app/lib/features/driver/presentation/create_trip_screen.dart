@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/widgets/suggestion_chip_input.dart';
 import '../../../shared/formatters/date_formatter.dart';
+import 'trip_map_screen.dart';
 
 final _placeInputFormatter = FilteringTextInputFormatter.allow(
   RegExp(r'[a-zA-ZáéíóúÁÉÍÓÚüÜñÑ\s,.\-]'),
@@ -62,13 +63,13 @@ class CreateTripScreen extends StatefulWidget {
 class _CreateTripScreenState extends State<CreateTripScreen> {
   final _originController = TextEditingController();
   final _destinationController = TextEditingController();
-  final _dateFromController = TextEditingController();
-  final _dateToController = TextEditingController();
+  final _dateController = TextEditingController();
   final _timeFromController = TextEditingController();
   final _timeToController = TextEditingController();
   final _descriptionController = TextEditingController();
   bool _acceptsPets = false;
-  bool _acceptsSmokers = false;
+  bool _picksUpPassengers = false;   // Paso a buscar a cada pasajero
+  bool _dropsOffPassengers = false;  // Dejo a cada pasajero en su destino
   final List<String> _routes = [];
   final List<String> _stops = [];
 
@@ -76,12 +77,53 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
   void dispose() {
     _originController.dispose();
     _destinationController.dispose();
-    _dateFromController.dispose();
-    _dateToController.dispose();
+    _dateController.dispose();
     _timeFromController.dispose();
     _timeToController.dispose();
     _descriptionController.dispose();
     super.dispose();
+  }
+
+  Future<void> _onNext(BuildContext context) async {
+    // If driver picks up AND drops off at door, no maps needed
+    if (_picksUpPassengers && _dropsOffPassengers) {
+      _publish(context);
+      return;
+    }
+
+    // Step 1: origin map (only if driver does NOT pick up at door)
+    if (!_picksUpPassengers) {
+      final origin = await Navigator.push<MapResult>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const TripMapScreen(title: 'Punto de salida'),
+        ),
+      );
+      if (origin == null) return; // user cancelled
+    }
+
+    // Step 2: destination map (only if driver does NOT drop off at door)
+    if (!_dropsOffPassengers && context.mounted) {
+      final dest = await Navigator.push<MapResult>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const TripMapScreen(title: 'Punto de llegada'),
+        ),
+      );
+      if (dest == null) return; // user cancelled
+    }
+
+    if (context.mounted) _publish(context);
+  }
+
+  void _publish(BuildContext context) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('¡Viaje publicado con éxito!'),
+        backgroundColor: Color(0xFF16A34A),
+      ),
+    );
+    context.go('/driver');
   }
 
   Widget _buildLocationInput({
@@ -197,14 +239,42 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
             const SizedBox(height: 16),
             const _SubLabel('FECHA DE SALIDA'),
             const SizedBox(height: 8),
-            _RangeInputRow(
-              label1: 'Desde',
-              label2: 'Hasta',
-              controller1: _dateFromController,
-              controller2: _dateToController,
-              formatter: DayMonthFormatter(),
-              hint: 'DD/MM',
-              icon: Icons.calendar_month_rounded,
+            GestureDetector(
+              onTap: () async {
+                final picked = await showDatePicker(
+                  context: context,
+                  initialDate: DateTime.now(),
+                  firstDate: DateTime.now(),
+                  lastDate: DateTime.now().add(const Duration(days: 365)),
+                );
+                if (picked != null) {
+                  setState(() {
+                    _dateController.text =
+                        '${picked.day.toString().padLeft(2, '0')}/${picked.month.toString().padLeft(2, '0')}';
+                  });
+                }
+              },
+              child: AbsorbPointer(
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: TextField(
+                    controller: _dateController,
+                    decoration: const InputDecoration(
+                      hintText: 'Seleccionar fecha',
+                      hintStyle:
+                          TextStyle(color: Color(0xFF94A3B8), fontSize: 14),
+                      border: InputBorder.none,
+                      contentPadding:
+                          EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                      suffixIcon: Icon(Icons.calendar_month_rounded,
+                          color: Color(0xFF64748B), size: 18),
+                    ),
+                  ),
+                ),
+              ),
             ),
             const SizedBox(height: 16),
             const _SubLabel('VENTANA DE SALIDA'),
@@ -215,7 +285,8 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
               controller1: _timeFromController,
               controller2: _timeToController,
               formatter: TimeFormatter(),
-              hint: 'HH:MM',
+              hint1: 'ej: 11:00',
+              hint2: 'ej: 13:00',
               icon: Icons.access_time_rounded,
             ),
 
@@ -239,10 +310,17 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
             ),
             const SizedBox(height: 8),
             _PreferenceToggle(
-              icon: Icons.smoking_rooms_rounded,
-              title: 'Acepta fumadores',
-              value: _acceptsSmokers,
-              onChanged: (v) => setState(() => _acceptsSmokers = v),
+              icon: Icons.house_rounded,
+              title: 'Paso a buscar a cada pasajero',
+              value: _picksUpPassengers,
+              onChanged: (v) => setState(() => _picksUpPassengers = v),
+            ),
+            const SizedBox(height: 8),
+            _PreferenceToggle(
+              icon: Icons.door_front_door_rounded,
+              title: 'Dejo a cada pasajero en su destino',
+              value: _dropsOffPassengers,
+              onChanged: (v) => setState(() => _dropsOffPassengers = v),
             ),
 
             const SizedBox(height: 32),
@@ -254,25 +332,22 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
 
             const SizedBox(height: 40),
 
-            // ── BOTÓN PUBLICAR ────────────────────────────────────────────
+            // ── BOTÓN SIGUIENTE ───────────────────────────────────────────
             SizedBox(
               width: double.infinity,
               height: 56,
               child: ElevatedButton(
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('¡Viaje publicado con éxito!')),
-                  );
-                  context.go('/driver');
-                },
+                onPressed: () => _onNext(context),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
                   elevation: 0,
                 ),
-                child: const Text(
-                  'Publicar viaje',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                child: Text(
+                  _picksUpPassengers && _dropsOffPassengers
+                      ? 'Publicar viaje'
+                      : 'Siguiente',
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
                 ),
               ),
             ),
@@ -335,8 +410,9 @@ class _RangeInputRow extends StatelessWidget {
     required this.controller1,
     required this.controller2,
     required this.formatter,
-    required this.hint,
     required this.icon,
+    this.hint1 = 'DD/MM',
+    this.hint2 = 'DD/MM',
   });
 
   final String label1;
@@ -344,10 +420,11 @@ class _RangeInputRow extends StatelessWidget {
   final TextEditingController controller1;
   final TextEditingController controller2;
   final TextInputFormatter formatter;
-  final String hint;
   final IconData icon;
+  final String hint1;
+  final String hint2;
 
-  Widget _buildBox(String label, TextEditingController controller) {
+  Widget _buildBox(String label, TextEditingController controller, String hint) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -379,12 +456,12 @@ class _RangeInputRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Expanded(child: _buildBox(label1, controller1)),
+        Expanded(child: _buildBox(label1, controller1, hint1)),
         const Padding(
           padding: EdgeInsets.only(top: 14, left: 8, right: 8),
           child: Text('y', style: TextStyle(color: Color(0xFF64748B))),
         ),
-        Expanded(child: _buildBox(label2, controller2)),
+        Expanded(child: _buildBox(label2, controller2, hint2)),
       ],
     );
   }
