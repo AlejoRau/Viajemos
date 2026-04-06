@@ -1,40 +1,118 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/formatters/date_formatter.dart';
+import '../../../shared/widgets/city_autocomplete_field.dart';
+import '../data/passenger_request_repository.dart';
 
-final _placeInputFormatter = FilteringTextInputFormatter.allow(
-  RegExp(r'[a-zA-ZáéíóúÁÉÍÓÚüÜñÑ\s,.\-]'),
-);
-
-class CreateRequestScreen extends StatefulWidget {
+class CreateRequestScreen extends ConsumerStatefulWidget {
   const CreateRequestScreen({super.key});
 
   @override
-  State<CreateRequestScreen> createState() => _CreateRequestScreenState();
+  ConsumerState<CreateRequestScreen> createState() => _CreateRequestScreenState();
 }
 
-class _CreateRequestScreenState extends State<CreateRequestScreen> {
+class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
   final _originController = TextEditingController();
   final _destinationController = TextEditingController();
-  final _dateFromController = TextEditingController();
-  final _dateToController = TextEditingController();
   final _timeFromController = TextEditingController();
   final _timeToController = TextEditingController();
   final _descriptionController = TextEditingController();
+
+  DateTime? _dateFrom;
+  DateTime? _dateTo;
   bool _hasPet = false;
+  int _seats = 1;
+  int _price = 4500;
+  bool _publishing = false;
 
   @override
   void dispose() {
     _originController.dispose();
     _destinationController.dispose();
-    _dateFromController.dispose();
-    _dateToController.dispose();
     _timeFromController.dispose();
     _timeToController.dispose();
     _descriptionController.dispose();
     super.dispose();
+  }
+
+  String? _validate() {
+    if (_originController.text.trim().isEmpty) return 'Ingresá el origen';
+    if (_destinationController.text.trim().isEmpty) return 'Ingresá el destino';
+    if (_dateFrom == null) return 'Seleccioná la fecha de inicio';
+    if (_dateTo == null) return 'Seleccioná la fecha de fin';
+    if (_dateTo!.isBefore(_dateFrom!)) return 'La fecha de fin debe ser igual o posterior al inicio';
+    final tf = _timeFromController.text.trim();
+    final tt = _timeToController.text.trim();
+    if (tf.isNotEmpty && tt.isNotEmpty) {
+      final parts1 = tf.split(':');
+      final parts2 = tt.split(':');
+      if (parts1.length == 2 && parts2.length == 2) {
+        final from = int.tryParse(parts1[0]) ?? 0;
+        final to = int.tryParse(parts2[0]) ?? 0;
+        final fromMin = int.tryParse(parts1[1]) ?? 0;
+        final toMin = int.tryParse(parts2[1]) ?? 0;
+        if (from * 60 + fromMin >= to * 60 + toMin) {
+          return 'La hora de fin debe ser mayor a la de inicio';
+        }
+      }
+    }
+    return null;
+  }
+
+  Future<void> _publish() async {
+    final error = _validate();
+    if (error != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error), backgroundColor: Colors.red.shade600),
+      );
+      return;
+    }
+
+    setState(() => _publishing = true);
+    try {
+      await PassengerRequestRepository().publishRequest(
+        originAddress: _originController.text.trim(),
+        destinationAddress: _destinationController.text.trim(),
+        dateFrom: _dateFrom!,
+        dateTo: _dateTo!,
+        seatsNeeded: _seats,
+        hasPet: _hasPet,
+        isSmoker: false,
+        maxPrice: _price,
+        departureTime: _timeFromController.text.trim().isEmpty
+            ? null
+            : _timeFromController.text.trim(),
+        departureTimeTo: _timeToController.text.trim().isEmpty
+            ? null
+            : _timeToController.text.trim(),
+        description: _descriptionController.text.trim().isEmpty
+            ? null
+            : _descriptionController.text.trim(),
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('¡Pedido publicado con éxito!'),
+            backgroundColor: Color(0xFF16A34A),
+          ),
+        );
+        context.go('/passenger');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al publicar: $e'),
+            backgroundColor: Colors.red.shade600,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _publishing = false);
+    }
   }
 
   Widget _buildLocationInput({
@@ -42,23 +120,10 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
     required String placeholder,
     required IconData icon,
   }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFFF1F5F9),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: TextField(
-        controller: controller,
-        inputFormatters: [_placeInputFormatter],
-        textCapitalization: TextCapitalization.words,
-        decoration: InputDecoration(
-          hintText: placeholder,
-          prefixIcon: Icon(icon, color: const Color(0xFF94A3B8), size: 20),
-          border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-          hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 15),
-        ),
-      ),
+    return CityAutocompleteField(
+      controller: controller,
+      hint: placeholder,
+      icon: icon,
     );
   }
 
@@ -128,7 +193,11 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
                 Expanded(
                   child: _DatePickerInput(
                     label: 'Desde',
-                    controller: _dateFromController,
+                    value: _dateFrom,
+                    onPicked: (d) => setState(() {
+                      _dateFrom = d;
+                      if (_dateTo != null && _dateTo!.isBefore(d)) _dateTo = d;
+                    }),
                   ),
                 ),
                 const Padding(
@@ -138,7 +207,9 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
                 Expanded(
                   child: _DatePickerInput(
                     label: 'Hasta',
-                    controller: _dateToController,
+                    value: _dateTo,
+                    onPicked: (d) => setState(() => _dateTo = d),
+                    firstDate: _dateFrom,
                   ),
                 ),
               ],
@@ -162,7 +233,12 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
             // ── ASIENTOS Y PRECIO ─────────────────────────────────────────
             const _SectionHeader(icon: Icons.payments_outlined, title: 'Asientos y precio'),
             const SizedBox(height: 16),
-            const _SeatsAndPriceCard(),
+            _SeatsAndPriceCard(
+              seats: _seats,
+              price: _price,
+              onSeatsChanged: (v) => setState(() => _seats = v),
+              onPriceChanged: (v) => setState(() => _price = v),
+            ),
 
             const SizedBox(height: 32),
 
@@ -190,24 +266,22 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
               width: double.infinity,
               height: 56,
               child: ElevatedButton(
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('¡Pedido publicado con éxito!'),
-                      backgroundColor: Color(0xFF16A34A),
-                    ),
-                  );
-                  context.go('/passenger');
-                },
+                onPressed: _publishing ? null : _publish,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
                   elevation: 0,
                 ),
-                child: const Text(
-                  'Publicar pedido',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
-                ),
+                child: _publishing
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
+                      )
+                    : const Text(
+                        'Publicar pedido',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                      ),
               ),
             ),
             const SizedBox(height: 40),
@@ -327,15 +401,30 @@ class _RangeInputRow extends StatelessWidget {
 }
 
 class _SeatsAndPriceCard extends StatefulWidget {
-  const _SeatsAndPriceCard();
+  const _SeatsAndPriceCard({
+    required this.seats,
+    required this.price,
+    required this.onSeatsChanged,
+    required this.onPriceChanged,
+  });
+
+  final int seats;
+  final int price;
+  final ValueChanged<int> onSeatsChanged;
+  final ValueChanged<int> onPriceChanged;
 
   @override
   State<_SeatsAndPriceCard> createState() => _SeatsAndPriceCardState();
 }
 
 class _SeatsAndPriceCardState extends State<_SeatsAndPriceCard> {
-  int _seats = 1;
-  final _priceController = TextEditingController(text: '4500');
+  late final TextEditingController _priceController;
+
+  @override
+  void initState() {
+    super.initState();
+    _priceController = TextEditingController(text: '${widget.price}');
+  }
 
   @override
   void dispose() {
@@ -378,15 +467,19 @@ class _SeatsAndPriceCardState extends State<_SeatsAndPriceCard> {
                 child: Row(
                   children: [
                     IconButton(
-                      onPressed: () => setState(() { if (_seats > 1) _seats--; }),
+                      onPressed: () {
+                        if (widget.seats > 1) widget.onSeatsChanged(widget.seats - 1);
+                      },
                       icon: const Icon(Icons.remove, color: AppColors.primary),
                     ),
                     Text(
-                      '$_seats',
+                      '${widget.seats}',
                       style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
                     ),
                     IconButton(
-                      onPressed: () => setState(() => _seats++),
+                      onPressed: () {
+                        if (widget.seats < 5) widget.onSeatsChanged(widget.seats + 1);
+                      },
                       icon: const Icon(Icons.add, color: AppColors.primary),
                     ),
                   ],
@@ -407,7 +500,7 @@ class _SeatsAndPriceCardState extends State<_SeatsAndPriceCard> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Precio máximo por asiento',
+                    'Precio que buscas pagar por asiento',
                     style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15, color: Color(0xFF1E293B)),
                   ),
                   Text(
@@ -428,6 +521,10 @@ class _SeatsAndPriceCardState extends State<_SeatsAndPriceCard> {
                   textAlign: TextAlign.right,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  onChanged: (v) {
+                    final parsed = int.tryParse(v);
+                    if (parsed != null) widget.onPriceChanged(parsed);
+                  },
                   decoration: const InputDecoration(
                     prefixIcon: Padding(
                       padding: EdgeInsets.only(left: 12, top: 12),
@@ -520,50 +617,59 @@ class _DescriptionField extends StatelessWidget {
 }
 
 class _DatePickerInput extends StatelessWidget {
-  const _DatePickerInput({required this.label, required this.controller});
+  const _DatePickerInput({
+    required this.label,
+    required this.value,
+    required this.onPicked,
+    this.firstDate,
+  });
+
   final String label;
-  final TextEditingController controller;
+  final DateTime? value;
+  final ValueChanged<DateTime> onPicked;
+  final DateTime? firstDate;
 
   @override
   Widget build(BuildContext context) {
+    final displayText = value == null
+        ? null
+        : '${value!.day.toString().padLeft(2, '0')}/${value!.month.toString().padLeft(2, '0')}';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label,
-            style: const TextStyle(fontSize: 10, color: Color(0xFF94A3B8))),
+        Text(label, style: const TextStyle(fontSize: 10, color: Color(0xFF94A3B8))),
         const SizedBox(height: 4),
         GestureDetector(
           onTap: () async {
+            final initial = value ?? DateTime.now();
+            final earliest = firstDate ?? DateTime.now();
             final picked = await showDatePicker(
               context: context,
-              initialDate: DateTime.now(),
-              firstDate: DateTime.now(),
+              initialDate: initial.isBefore(earliest) ? earliest : initial,
+              firstDate: earliest,
               lastDate: DateTime.now().add(const Duration(days: 365)),
             );
-            if (picked != null) {
-              controller.text =
-                  '${picked.day.toString().padLeft(2, '0')}/${picked.month.toString().padLeft(2, '0')}';
-            }
+            if (picked != null) onPicked(picked);
           },
-          child: AbsorbPointer(
-            child: Container(
-              decoration: BoxDecoration(
-                color: const Color(0xFFF1F5F9),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: TextField(
-                controller: controller,
-                decoration: const InputDecoration(
-                  hintText: 'DD/MM',
-                  hintStyle:
-                      TextStyle(color: Color(0xFF94A3B8), fontSize: 14),
-                  border: InputBorder.none,
-                  contentPadding:
-                      EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                  suffixIcon: Icon(Icons.calendar_month_rounded,
-                      color: Color(0xFF64748B), size: 18),
+          child: Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    displayText ?? 'DD/MM',
+                    style: TextStyle(
+                      color: value == null ? const Color(0xFF94A3B8) : const Color(0xFF1E293B),
+                      fontSize: 14,
+                    ),
+                  ),
                 ),
-              ),
+                const Icon(Icons.calendar_month_rounded, color: Color(0xFF64748B), size: 18),
+              ],
             ),
           ),
         ),

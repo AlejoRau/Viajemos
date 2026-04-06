@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__supabase__list_tables",
+      "mcp__supabase__execute_sql",
+      "mcp__supabase__apply_migration",
+      "Bash(flutter pub:*)",
+      "Bash(flutter analyze:*)",
+      "Bash(curl -s \"https://photon.komoot.io/api/?q=Tandil&limit=5&lang=es&lat=-34&lon=-64\")",
+      "Bash(curl -s \"https://photon.komoot.io/api/?q=Tandil&limit=5&lat=-34&lon=-64\")",
+      "Bash(python -c \"import sys,json; data=json.load\\(sys.stdin\\); [print\\(f['properties'].get\\('name',''\\), '-', f['properties'].get\\('state',''\\), '-', f['properties'].get\\('osm_value',''\\)\\) for f in data.get\\('features',[]\\)]\")",
+      "Bash(curl -s \"https://photon.komoot.io/api/?q=Rosa&limit=7&lat=-34&lon=-64\")",
+      "Bash(curl -s \"https://photon.komoot.io/api/?q=Rosa&limit=7&lat=-34&lon=-64&bbox=-73,-55,-53,-22\")",
+      "Bash(python -c \"import sys,json; data=json.load\\(sys.stdin\\); [print\\(f['properties'].get\\('name',''\\), '-', f['properties'].get\\('state',''\\), '-', f['properties'].get\\('country',''\\), '-', f['properties'].get\\('osm_value',''\\)\\) for f in data.get\\('features',[]\\)]\")"
+    ]
+  }
+}

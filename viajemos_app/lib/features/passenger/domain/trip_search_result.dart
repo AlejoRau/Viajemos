@@ -1,0 +1,103 @@
+class TripSearchResult {
+  const TripSearchResult({
+    required this.id,
+    required this.driverName,
+    required this.driverRating,
+    required this.originAddress,
+    required this.destinationAddress,
+    required this.departureDate,
+    this.departureTime,
+    required this.availableSeats,
+    required this.seatsTaken,
+    required this.pricePerSeat,
+    required this.allowsPets,
+    required this.picksUpAtDoor,
+    required this.dropsOffAtDoor,
+    required this.via,
+    this.description,
+    this.vehicleBrand,
+    this.vehicleModel,
+    this.vehicleColor,
+  });
+
+  final String id;
+  final String driverName;
+  final double driverRating;
+  final String originAddress;
+  final String destinationAddress;
+  final String departureDate; // ISO "YYYY-MM-DD"
+  final String? departureTime; // "HH:mm:ss" or null
+  final int availableSeats;
+  final int seatsTaken;
+  final int pricePerSeat;
+  final bool allowsPets;
+  final bool picksUpAtDoor;
+  final bool dropsOffAtDoor;
+  final List<String> via;
+  final String? description;
+  final String? vehicleBrand;
+  final String? vehicleModel;
+  final String? vehicleColor;
+
+  int get freeSeats => availableSeats - seatsTaken;
+
+  String get vehicleDisplay {
+    if (vehicleBrand == null) return '';
+    return '$vehicleBrand $vehicleModel · $vehicleColor';
+  }
+
+  /// "15 de abril"
+  String get formattedDate {
+    const months = [
+      'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+      'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
+    ];
+    try {
+      final d = DateTime.parse(departureDate);
+      return '${d.day} de ${months[d.month - 1]}';
+    } catch (_) {
+      return departureDate;
+    }
+  }
+
+  /// "HH:mm" from "HH:mm:ss"
+  String get formattedTime {
+    if (departureTime == null) return '';
+    return departureTime!.substring(0, 5);
+  }
+
+  String get driverInitials {
+    final parts = driverName.trim().split(' ');
+    if (parts.length >= 2) return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
+    return driverName.isNotEmpty ? driverName[0].toUpperCase() : '?';
+  }
+
+  factory TripSearchResult.fromJson(Map<String, dynamic> json) {
+    final profile = json['profiles'] as Map<String, dynamic>? ?? {};
+    final vehicle = json['vehicles'] as Map<String, dynamic>?;
+    return TripSearchResult(
+      id: json['id'] as String,
+      driverName: (profile['full_name'] as String?) ?? 'Conductor',
+      driverRating:
+          (profile['avg_rating'] as num?)?.toDouble() ?? 0.0,
+      originAddress: json['origin_address'] as String,
+      destinationAddress: json['destination_address'] as String,
+      departureDate: json['departure_date'] as String,
+      departureTime: json['departure_time'] as String?,
+      availableSeats: json['available_seats'] as int,
+      seatsTaken: json['seats_taken'] as int,
+      pricePerSeat: (json['price_per_seat'] as num).toInt(),
+      allowsPets: json['allows_pets'] as bool? ?? false,
+      picksUpAtDoor: json['picks_up_at_door'] as bool? ?? false,
+      dropsOffAtDoor: json['drops_off_at_door'] as bool? ?? false,
+      via: (json['via'] as List<dynamic>?)
+              ?.map((e) => e as String)
+              .toList() ??
+          [],
+      description: json['description'] as String?,
+      vehicleBrand: vehicle?['brand'] as String?,
+      vehicleModel: vehicle?['model'] as String?,
+      vehicleColor: vehicle?['color'] as String?,
+    );
+  }
+}

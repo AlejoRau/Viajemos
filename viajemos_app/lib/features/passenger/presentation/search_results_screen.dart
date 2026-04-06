@@ -1,78 +1,66 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
+import '../data/trip_search_repository.dart';
+import '../domain/trip_search_result.dart';
 
-class _Trip {
-  const _Trip({
-    required this.driverName,
-    required this.rating,
-    required this.reviewCount,
-    required this.origin,
-    required this.destination,
-    required this.stops,
-    required this.date,
-    this.endDate,
-    required this.time,
-    required this.totalSeats,
-    required this.availableSeats,
-    required this.pricePerSeat,
-    required this.acceptsPets,
-    required this.acceptsSmokers,
-    required this.car,
-    this.passengerInitials = const [],
-  });
-  final String driverName;
-  final double rating;
-  final int reviewCount;
-  final String origin;
-  final String destination;
-  final int stops;
-  final String date;
-  final String? endDate;
-  final String time;
-  final int totalSeats;
-  final int availableSeats;
-  final int pricePerSeat;
-  final bool acceptsPets;
-  final bool acceptsSmokers;
-  final String car;
-  final List<String> passengerInitials;
-}
+// ── Screen ────────────────────────────────────────────────────────────────────
 
-const _mockTrips = [
-  _Trip(driverName: 'Carlos Rodríguez', rating: 4.8, reviewCount: 23, origin: 'Buenos Aires', destination: 'Córdoba', stops: 2, date: '05/04', endDate: '07/04', time: '08:00', totalSeats: 4, availableSeats: 2, pricePerSeat: 6500, acceptsPets: true, acceptsSmokers: false, car: 'Toyota Corolla · Gris', passengerInitials: ['ML', 'JP']),
-  _Trip(driverName: 'Ana López', rating: 4.9, reviewCount: 41, origin: 'Rosario', destination: 'Buenos Aires', stops: 0, date: '06/04', time: '14:30', totalSeats: 3, availableSeats: 2, pricePerSeat: 4000, acceptsPets: false, acceptsSmokers: false, car: 'Honda Civic · Blanco', passengerInitials: ['GR']),
-  _Trip(driverName: 'Diego Fernández', rating: 4.7, reviewCount: 17, origin: 'Mendoza', destination: 'San Luis', stops: 1, date: '08/04', time: '10:00', totalSeats: 5, availableSeats: 3, pricePerSeat: 5500, acceptsPets: true, acceptsSmokers: true, car: 'Ford Focus · Negro', passengerInitials: ['AM', 'SV']),
-  _Trip(driverName: 'Laura Gómez', rating: 4.6, reviewCount: 9, origin: 'Buenos Aires', destination: 'Mar del Plata', stops: 0, date: '05/04', time: '06:00', totalSeats: 3, availableSeats: 1, pricePerSeat: 3500, acceptsPets: false, acceptsSmokers: false, car: 'Volkswagen Gol · Rojo', passengerInitials: ['NB', 'TC']),
-];
-
-String _formatDate(String date) {
-  const months = [
-    'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
-    'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
-  ];
-  final parts = date.split('/');
-  if (parts.length != 2) return date;
-  final day = int.tryParse(parts[0]) ?? 0;
-  final month = int.tryParse(parts[1]) ?? 0;
-  if (month < 1 || month > 12 || day < 1) return date;
-  return '$day de ${months[month - 1]}';
-}
-
-class SearchResultsScreen extends StatelessWidget {
+class SearchResultsScreen extends ConsumerStatefulWidget {
   const SearchResultsScreen({
     super.key,
     required this.origin,
     this.destination,
+    this.dateFromStr,
+    this.dateToStr,
+    this.maxPriceStr,
   });
 
   final String origin;
   final String? destination;
+  final String? dateFromStr; // "DD/MM"
+  final String? dateToStr;
+  final String? maxPriceStr;
+
+  @override
+  ConsumerState<SearchResultsScreen> createState() =>
+      _SearchResultsScreenState();
+}
+
+class _SearchResultsScreenState
+    extends ConsumerState<SearchResultsScreen> {
+  late Future<List<TripSearchResult>> _future;
+
+  /// Parse "DD/MM" → DateTime (current year).
+  DateTime? _parseDate(String? text) {
+    if (text == null || text.isEmpty) return null;
+    final parts = text.split('/');
+    if (parts.length != 2) return null;
+    final day = int.tryParse(parts[0]);
+    final month = int.tryParse(parts[1]);
+    if (day == null || month == null) return null;
+    return DateTime(DateTime.now().year, month, day);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _future = TripSearchRepository().searchTrips(
+      origin: widget.origin,
+      destination: widget.destination,
+      dateFrom: _parseDate(widget.dateFromStr),
+      dateTo: _parseDate(widget.dateToStr),
+      maxPrice: int.tryParse(widget.maxPriceStr ?? ''),
+    );
+  }
 
   String get _title {
-    final from = origin.isNotEmpty ? origin : 'Origen';
-    if (destination != null && destination!.isNotEmpty) {
-      return '$from  →  $destination';
+    final from =
+        widget.origin.isNotEmpty ? widget.origin : 'Origen';
+    if (widget.destination != null &&
+        widget.destination!.isNotEmpty) {
+      return '$from  →  ${widget.destination}';
     }
     return '$from  →';
   }
@@ -83,32 +71,83 @@ class SearchResultsScreen extends StatelessWidget {
       appBar: AppBar(
         title: Text(
           _title,
-          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          style: const TextStyle(
+              fontSize: 16, fontWeight: FontWeight.bold),
         ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.pop(),
         ),
       ),
-      body: ListView.separated(
-        padding: const EdgeInsets.all(16),
-        itemCount: _mockTrips.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 14),
-        itemBuilder: (_, i) => _TripCard(trip: _mockTrips[i]),
+      body: FutureBuilder<List<TripSearchResult>>(
+        future: _future,
+        builder: (context, snap) {
+          if (snap.connectionState == ConnectionState.waiting) {
+            return const Center(
+                child: CircularProgressIndicator());
+          }
+          if (snap.hasError) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  'Error al buscar viajes:\n${snap.error}',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.red),
+                ),
+              ),
+            );
+          }
+          final trips = snap.data ?? [];
+          if (trips.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.search_off_rounded,
+                      size: 64, color: Color(0xFFCBD5E1)),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'No encontramos viajes\npara esa búsqueda',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                        fontSize: 16,
+                        color: Color(0xFF64748B),
+                        fontWeight: FontWeight.w500),
+                  ),
+                  const SizedBox(height: 8),
+                  TextButton(
+                    onPressed: () => context.pop(),
+                    child: const Text('Modificar búsqueda'),
+                  ),
+                ],
+              ),
+            );
+          }
+          return ListView.separated(
+            padding: const EdgeInsets.all(16),
+            itemCount: trips.length,
+            separatorBuilder: (_, __) =>
+                const SizedBox(height: 14),
+            itemBuilder: (_, i) =>
+                _TripCard(trip: trips[i]),
+          );
+        },
       ),
     );
   }
 }
 
+// ── Trip Card ─────────────────────────────────────────────────────────────────
+
 class _TripCard extends StatelessWidget {
   const _TripCard({required this.trip});
-  final _Trip trip;
+  final TripSearchResult trip;
 
-  String get _initials {
-    final parts = trip.driverName.split(' ');
-    if (parts.length >= 2) return '${parts[0][0]}${parts[1][0]}';
-    return trip.driverName.substring(0, 2).toUpperCase();
-  }
+  String _formatPrice(int price) => '\$${price.toString().replaceAllMapped(
+        RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+        (m) => '${m[1]}.',
+      )}';
 
   void _showDetails(BuildContext context) {
     showModalBottomSheet(
@@ -129,136 +168,232 @@ class _TripCard extends StatelessWidget {
           color: AppColors.background,
           border: Border.all(color: AppColors.border, width: 2),
           borderRadius: BorderRadius.circular(20),
-          boxShadow: const [BoxShadow(color: Color(0x0A000000), blurRadius: 8, offset: Offset(0, 2))],
+          boxShadow: const [
+            BoxShadow(
+                color: Color(0x0A000000),
+                blurRadius: 8,
+                offset: Offset(0, 2))
+          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Conductor + precio
+            // Driver + price
             Row(
               children: [
                 CircleAvatar(
                   radius: 22,
                   backgroundColor: AppColors.primaryLight,
-                  child: Text(_initials, style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
+                  child: Text(trip.driverInitials,
+                      style: const TextStyle(
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.bold)),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(trip.driverName, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                      Text(trip.driverName,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14)),
                       Row(
                         children: [
-                          const Icon(Icons.star_rounded, size: 14, color: Color(0xFFFACC15)),
+                          const Icon(Icons.star_rounded,
+                              size: 14,
+                              color: Color(0xFFFACC15)),
                           const SizedBox(width: 2),
-                          Text('${trip.rating}', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                          Text(
+                            trip.driverRating > 0
+                                ? trip.driverRating
+                                    .toStringAsFixed(1)
+                                : 'Sin calificación',
+                            style: const TextStyle(
+                                fontSize: 12,
+                                color: AppColors.textSecondary),
+                          ),
                         ],
                       ),
                     ],
                   ),
                 ),
                 Text(
-                  '\$${trip.pricePerSeat.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.')}',
-                  style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: AppColors.primary),
+                  _formatPrice(trip.pricePerSeat),
+                  style: const TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.primary),
                 ),
               ],
             ),
             const SizedBox(height: 10),
 
-            // Ruta
+            // Route
             Row(
               children: [
-                Text(trip.origin, style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14)),
+                Flexible(
+                  child: Text(trip.originAddress,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w500,
+                          fontSize: 14),
+                      overflow: TextOverflow.ellipsis),
+                ),
                 const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 6),
-                  child: Icon(Icons.arrow_forward, size: 14, color: AppColors.primary),
+                  child: Icon(Icons.arrow_forward,
+                      size: 14, color: AppColors.primary),
                 ),
-                Text(trip.destination, style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14)),
-                if (trip.stops > 0) ...[
+                Flexible(
+                  child: Text(trip.destinationAddress,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w500,
+                          fontSize: 14),
+                      overflow: TextOverflow.ellipsis),
+                ),
+                if (trip.via.isNotEmpty) ...[
                   const SizedBox(width: 6),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                    decoration: BoxDecoration(color: AppColors.primaryLight, borderRadius: BorderRadius.circular(20)),
-                    child: Text('${trip.stops} parada${trip.stops > 1 ? 's' : ''}',
-                        style: const TextStyle(fontSize: 11, color: AppColors.primary)),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 7, vertical: 2),
+                    decoration: BoxDecoration(
+                        color: AppColors.primaryLight,
+                        borderRadius: BorderRadius.circular(20)),
+                    child: Text(
+                      '${trip.via.length} parada${trip.via.length > 1 ? 's' : ''}',
+                      style: const TextStyle(
+                          fontSize: 11,
+                          color: AppColors.primary),
+                    ),
                   ),
                 ],
               ],
             ),
             const SizedBox(height: 6),
 
-            // Fecha y hora
+            // Date & time
             Row(
               children: [
-                const Icon(Icons.calendar_today_rounded, size: 13, color: AppColors.textSecondary),
+                const Icon(Icons.calendar_today_rounded,
+                    size: 13,
+                    color: AppColors.textSecondary),
                 const SizedBox(width: 4),
-                Text('${trip.date}  •  ${trip.time}',
-                    style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                Text(
+                  trip.formattedTime.isNotEmpty
+                      ? '${trip.formattedDate}  •  ${trip.formattedTime}'
+                      : trip.formattedDate,
+                  style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textSecondary),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+
+            // Seats
+            Row(
+              children: [
+                const Icon(Icons.event_seat_rounded,
+                    size: 13,
+                    color: AppColors.textSecondary),
+                const SizedBox(width: 4),
+                Text(
+                  '${trip.freeSeats} lugar${trip.freeSeats != 1 ? 'es' : ''} disponible${trip.freeSeats != 1 ? 's' : ''}',
+                  style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textSecondary),
+                ),
               ],
             ),
 
-            // Badges
-            if (trip.acceptsPets || trip.acceptsSmokers) ...[
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  if (trip.acceptsPets)
-                    _Badge(label: 'Mascotas', icon: Icons.pets_rounded, bg: AppColors.greenLight, fg: AppColors.green),
-                  if (trip.acceptsPets && trip.acceptsSmokers) const SizedBox(width: 6),
-                  if (trip.acceptsSmokers)
-                    _Badge(label: 'Fumadores', icon: Icons.smoking_rooms_rounded, bg: AppColors.orangeLight, fg: AppColors.orange),
-                ],
-              ),
-            ],
-            const SizedBox(height: 10),
+            // Badges — siempre visibles, grises si inactivos
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                _Badge(
+                    label: 'Mascotas',
+                    icon: Icons.pets_rounded,
+                    bg: AppColors.greenLight,
+                    fg: AppColors.green,
+                    active: trip.allowsPets,
+                    large: true),
+                _Badge(
+                    label: 'Pasa a buscarte',
+                    icon: Icons.home_rounded,
+                    bg: const Color(0xFFEFF6FF),
+                    fg: const Color(0xFF1D4ED8),
+                    active: trip.picksUpAtDoor,
+                    large: true),
+                _Badge(
+                    label: 'Te deja en destino',
+                    icon: Icons.where_to_vote_rounded,
+                    bg: const Color(0xFFF5F3FF),
+                    fg: const Color(0xFF6D28D9),
+                    active: trip.dropsOffAtDoor,
+                    large: true),
+              ],
+            ),
 
-            // Viajeros
+            // Seats visualization
+            const SizedBox(height: 10),
             Row(
               children: [
-                const Text(
-                  'Viajeros:',
-                  style: TextStyle(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w500),
-                ),
+                const Text('Viajeros:',
+                    style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textSecondary,
+                        fontWeight: FontWeight.w500)),
                 const SizedBox(width: 8),
-                for (int i = 0; i < (trip.totalSeats - trip.availableSeats); i++)
+                for (int i = 0; i < trip.seatsTaken; i++)
                   Padding(
                     padding: const EdgeInsets.only(right: 4),
                     child: CircleAvatar(
                       radius: 12,
                       backgroundColor: AppColors.primary,
-                      child: Text(
-                        i < trip.passengerInitials.length ? trip.passengerInitials[i] : '?',
-                        style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
-                      ),
+                      child: const Icon(Icons.person,
+                          size: 13, color: Colors.white),
                     ),
                   ),
-                for (int i = 0; i < trip.availableSeats; i++)
+                for (int i = 0; i < trip.freeSeats; i++)
                   Padding(
                     padding: const EdgeInsets.only(right: 4),
                     child: CircleAvatar(
                       radius: 12,
                       backgroundColor: AppColors.inputBackground,
-                      child: const Icon(Icons.person_outline, size: 14, color: AppColors.textSecondary),
+                      child: const Icon(Icons.person_outline,
+                          size: 13,
+                          color: AppColors.textSecondary),
                     ),
                   ),
                 const SizedBox(width: 6),
                 Text(
-                  '${trip.totalSeats - trip.availableSeats}/${trip.totalSeats}',
-                  style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w600),
+                  '${trip.seatsTaken}/${trip.availableSeats}',
+                  style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textSecondary,
+                      fontWeight: FontWeight.w600),
                 ),
               ],
             ),
-            const SizedBox(height: 6),
 
-            // Auto
-            Row(
-              children: [
-                const Icon(Icons.directions_car_rounded, size: 13, color: AppColors.textSecondary),
-                const SizedBox(width: 4),
-                Text(trip.car, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
-              ],
-            ),
+            // Car
+            if (trip.vehicleDisplay.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  const Icon(Icons.directions_car_rounded,
+                      size: 13,
+                      color: AppColors.textSecondary),
+                  const SizedBox(width: 4),
+                  Text(trip.vehicleDisplay,
+                      style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textSecondary)),
+                ],
+              ),
+            ],
           ],
         ),
       ),
@@ -266,24 +401,16 @@ class _TripCard extends StatelessWidget {
   }
 }
 
+// ── Trip Details Sheet ────────────────────────────────────────────────────────
+
 class _TripDetailsSheet extends StatelessWidget {
   const _TripDetailsSheet({required this.trip});
-  final _Trip trip;
+  final TripSearchResult trip;
 
-  String get _initials {
-    final parts = trip.driverName.split(' ');
-    if (parts.length >= 2) return '${parts[0][0]}${parts[1][0]}';
-    return trip.driverName.substring(0, 2).toUpperCase();
-  }
-
-  String get _dateTitle {
-    final from = _formatDate(trip.date);
-    if (trip.endDate != null) return '$from - ${_formatDate(trip.endDate!)}';
-    return from;
-  }
-
-  String get _formattedPrice =>
-      '\$${trip.pricePerSeat.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.')}';
+  String _formatPrice(int price) => '\$${price.toString().replaceAllMapped(
+        RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+        (m) => '${m[1]}.',
+      )}';
 
   @override
   Widget build(BuildContext context) {
@@ -291,56 +418,61 @@ class _TripDetailsSheet extends StatelessWidget {
       height: MediaQuery.of(context).size.height * 0.85,
       decoration: const BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        borderRadius:
+            BorderRadius.vertical(top: Radius.circular(28)),
       ),
       child: Column(
         children: [
-          // Handle
           const SizedBox(height: 12),
           Center(
             child: Container(
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: const Color(0xFFE2E8F0),
-                borderRadius: BorderRadius.circular(2),
-              ),
+                  color: const Color(0xFFE2E8F0),
+                  borderRadius: BorderRadius.circular(2)),
             ),
           ),
           const SizedBox(height: 20),
-
-          // Scrollable content
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 24),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Fecha
+                  // Date title
                   Text(
-                    _dateTitle,
+                    trip.formattedDate,
                     style: const TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF1E293B),
-                    ),
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF1E293B)),
                   ),
                   const SizedBox(height: 4),
 
-                  // Ruta
+                  // Route
                   Row(
                     children: [
-                      Text(
-                        trip.origin,
-                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: Color(0xFF64748B)),
+                      Flexible(
+                        child: Text(trip.originAddress,
+                            style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w500,
+                                color: Color(0xFF64748B))),
                       ),
                       const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 6),
-                        child: Icon(Icons.arrow_forward, size: 15, color: AppColors.primary),
+                        padding:
+                            EdgeInsets.symmetric(horizontal: 6),
+                        child: Icon(Icons.arrow_forward,
+                            size: 15, color: AppColors.primary),
                       ),
-                      Text(
-                        trip.destination,
-                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: Color(0xFF64748B)),
+                      Flexible(
+                        child: Text(trip.destinationAddress,
+                            style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w500,
+                                color: Color(0xFF64748B))),
                       ),
                     ],
                   ),
@@ -348,148 +480,186 @@ class _TripDetailsSheet extends StatelessWidget {
                   const Divider(color: Color(0xFFE2E8F0)),
                   const SizedBox(height: 20),
 
-                  // Conductor
-                  GestureDetector(
-                    onTap: () {
-                      // TODO: navegar al perfil del conductor
-                    },
-                    child: Row(
-                      children: [
-                        CircleAvatar(
-                          radius: 28,
-                          backgroundColor: AppColors.primaryLight,
-                          child: Text(
-                            _initials,
+                  // Driver
+                  Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 28,
+                        backgroundColor: AppColors.primaryLight,
+                        child: Text(trip.driverInitials,
                             style: const TextStyle(
-                              color: AppColors.primary,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                trip.driverName,
+                                color: AppColors.primary,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16)),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment:
+                              CrossAxisAlignment.start,
+                          children: [
+                            Text(trip.driverName,
                                 style: const TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 15,
-                                  color: Color(0xFF1E293B),
-                                ),
-                              ),
-                              const SizedBox(height: 3),
-                              Row(
-                                children: [
-                                  const Icon(Icons.star_rounded, size: 15, color: Color(0xFFFACC15)),
-                                  const SizedBox(width: 3),
-                                  Text(
-                                    '${trip.rating}',
-                                    style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 15,
+                                    color: Color(0xFF1E293B))),
+                            const SizedBox(height: 3),
+                            Row(
+                              children: [
+                                const Icon(Icons.star_rounded,
+                                    size: 15,
+                                    color: Color(0xFFFACC15)),
+                                const SizedBox(width: 3),
+                                Text(
+                                  trip.driverRating > 0
+                                      ? trip.driverRating
+                                          .toStringAsFixed(1)
+                                      : 'Sin calificación',
+                                  style: const TextStyle(
                                       fontSize: 13,
                                       fontWeight: FontWeight.w600,
-                                      color: Color(0xFF1E293B),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    '· ${trip.reviewCount} opiniones',
-                                    style: const TextStyle(fontSize: 13, color: Color(0xFF64748B)),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
+                                      color: Color(0xFF1E293B)),
+                                ),
+                              ],
+                            ),
+                          ],
                         ),
-                        const Icon(Icons.chevron_right, color: Color(0xFFCBD5E1), size: 22),
-                      ],
-                    ),
+                      ),
+                      const Icon(Icons.chevron_right,
+                          color: Color(0xFFCBD5E1), size: 22),
+                    ],
                   ),
+
                   const SizedBox(height: 20),
                   const Divider(color: Color(0xFFE2E8F0)),
                   const SizedBox(height: 16),
 
-                  // Detalles del viaje
-                  _DetailRow(icon: Icons.access_time_rounded, text: '${trip.date}  ·  ${trip.time}'),
-                  const SizedBox(height: 10),
-                  _DetailRow(icon: Icons.directions_car_rounded, text: trip.car),
-                  if (trip.stops > 0) ...[
+                  // Details
+                  if (trip.formattedTime.isNotEmpty)
+                    _DetailRow(
+                        icon: Icons.access_time_rounded,
+                        text:
+                            '${trip.formattedDate}  ·  ${trip.formattedTime}'),
+                  if (trip.vehicleDisplay.isNotEmpty) ...[
                     const SizedBox(height: 10),
                     _DetailRow(
-                      icon: Icons.place_rounded,
-                      text: '${trip.stops} parada${trip.stops > 1 ? 's' : ''} en el camino',
-                    ),
+                        icon: Icons.directions_car_rounded,
+                        text: trip.vehicleDisplay),
                   ],
-                  if (trip.acceptsPets || trip.acceptsSmokers) ...[
+                  if (trip.via.isNotEmpty) ...[
                     const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        if (trip.acceptsPets)
-                          _Badge(label: 'Mascotas', icon: Icons.pets_rounded, bg: AppColors.greenLight, fg: AppColors.green),
-                        if (trip.acceptsPets && trip.acceptsSmokers) const SizedBox(width: 8),
-                        if (trip.acceptsSmokers)
-                          _Badge(label: 'Fumadores', icon: Icons.smoking_rooms_rounded, bg: AppColors.orangeLight, fg: AppColors.orange),
-                      ],
-                    ),
+                    _DetailRow(
+                        icon: Icons.place_rounded,
+                        text:
+                            '${trip.via.length} parada${trip.via.length > 1 ? 's' : ''}: ${trip.via.join(', ')}'),
                   ],
+
+                  // Badges — siempre visibles, grises si inactivos
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      _Badge(
+                          label: 'Mascotas',
+                          icon: Icons.pets_rounded,
+                          bg: AppColors.greenLight,
+                          fg: AppColors.green,
+                          active: trip.allowsPets),
+                      _Badge(
+                          label: 'Pasa a buscarte',
+                          icon: Icons.home_rounded,
+                          bg: const Color(0xFFEFF6FF),
+                          fg: const Color(0xFF1D4ED8),
+                          active: trip.picksUpAtDoor),
+                      _Badge(
+                          label: 'Te deja en destino',
+                          icon: Icons.where_to_vote_rounded,
+                          bg: const Color(0xFFF5F3FF),
+                          fg: const Color(0xFF6D28D9),
+                          active: trip.dropsOffAtDoor),
+                    ],
+                  ),
+
+                  if (trip.description != null &&
+                      trip.description!.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    const Text('Descripción',
+                        style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF1E293B))),
+                    const SizedBox(height: 6),
+                    Text(trip.description!,
+                        style: const TextStyle(
+                            fontSize: 13,
+                            color: Color(0xFF64748B),
+                            height: 1.5)),
+                  ],
+
                   const SizedBox(height: 16),
 
-                  // Viajeros
-                  const Text(
-                    'Viajeros',
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF1E293B)),
-                  ),
+                  // Seats visualization
+                  const Text('Viajeros',
+                      style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF1E293B))),
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      for (int i = 0; i < (trip.totalSeats - trip.availableSeats); i++)
+                      for (int i = 0; i < trip.seatsTaken; i++)
                         Padding(
-                          padding: const EdgeInsets.only(right: 6),
+                          padding:
+                              const EdgeInsets.only(right: 6),
                           child: CircleAvatar(
                             radius: 14,
                             backgroundColor: AppColors.primary,
-                            child: Text(
-                              i < trip.passengerInitials.length ? trip.passengerInitials[i] : '?',
-                              style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
-                            ),
+                            child: const Icon(Icons.person,
+                                size: 15, color: Colors.white),
                           ),
                         ),
-                      for (int i = 0; i < trip.availableSeats; i++)
+                      for (int i = 0; i < trip.freeSeats; i++)
                         Padding(
-                          padding: const EdgeInsets.only(right: 6),
+                          padding:
+                              const EdgeInsets.only(right: 6),
                           child: CircleAvatar(
                             radius: 14,
-                            backgroundColor: AppColors.inputBackground,
-                            child: const Icon(Icons.person_outline, size: 16, color: AppColors.textSecondary),
+                            backgroundColor:
+                                AppColors.inputBackground,
+                            child: const Icon(
+                                Icons.person_outline,
+                                size: 15,
+                                color: AppColors.textSecondary),
                           ),
                         ),
                       const SizedBox(width: 8),
                       Text(
-                        '${trip.totalSeats - trip.availableSeats}/${trip.totalSeats}',
-                        style: const TextStyle(fontSize: 13, color: AppColors.textSecondary, fontWeight: FontWeight.w600),
+                        '${trip.seatsTaken}/${trip.availableSeats} ocupados',
+                        style: const TextStyle(
+                            fontSize: 13,
+                            color: AppColors.textSecondary,
+                            fontWeight: FontWeight.w600),
                       ),
                     ],
                   ),
                   const SizedBox(height: 20),
 
-                  // Precio
+                  // Price
                   Row(
                     children: [
                       Text(
-                        _formattedPrice,
+                        _formatPrice(trip.pricePerSeat),
                         style: const TextStyle(
-                          fontSize: 26,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.primary,
-                        ),
+                            fontSize: 26,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.primary),
                       ),
                       const SizedBox(width: 6),
-                      const Text(
-                        'por asiento',
-                        style: TextStyle(fontSize: 14, color: Color(0xFF64748B)),
-                      ),
+                      const Text('por asiento',
+                          style: TextStyle(
+                              fontSize: 14,
+                              color: Color(0xFF64748B))),
                     ],
                   ),
                   const SizedBox(height: 24),
@@ -498,33 +668,38 @@ class _TripDetailsSheet extends StatelessWidget {
             ),
           ),
 
-          // Botón fijo
+          // Bottom button
           Container(
-            padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
+            padding:
+                const EdgeInsets.fromLTRB(24, 12, 24, 24),
             decoration: const BoxDecoration(
               color: Colors.white,
-              border: Border(top: BorderSide(color: Color(0xFFE2E8F0))),
+              border: Border(
+                  top: BorderSide(color: Color(0xFFE2E8F0))),
             ),
             child: SizedBox(
               width: double.infinity,
               height: 54,
               child: ElevatedButton(
                 onPressed: () {
-                  // TODO: enviar solicitud
                   Navigator.of(context).pop();
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Solicitud enviada a ${trip.driverName}')),
+                    SnackBar(
+                        content: Text(
+                            'Solicitud enviada a ${trip.driverName}')),
                   );
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF1A73E8),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(27)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(27)),
                   elevation: 0,
                 ),
-                child: const Text(
-                  'Enviar solicitud',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
-                ),
+                child: const Text('Enviar solicitud',
+                    style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white)),
               ),
             ),
           ),
@@ -534,6 +709,8 @@ class _TripDetailsSheet extends StatelessWidget {
   }
 }
 
+// ── Shared small widgets ──────────────────────────────────────────────────────
+
 class _DetailRow extends StatelessWidget {
   const _DetailRow({required this.icon, required this.text});
   final IconData icon;
@@ -542,33 +719,66 @@ class _DetailRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 15, color: AppColors.textSecondary),
+        Icon(icon, size: 16, color: AppColors.textSecondary),
         const SizedBox(width: 8),
-        Text(text, style: const TextStyle(fontSize: 13, color: Color(0xFF475569))),
+        Expanded(
+          child: Text(text,
+              style: const TextStyle(
+                  fontSize: 13, color: Color(0xFF475569))),
+        ),
       ],
     );
   }
 }
 
 class _Badge extends StatelessWidget {
-  const _Badge({required this.label, required this.icon, required this.bg, required this.fg});
+  const _Badge({
+    required this.label,
+    required this.icon,
+    required this.bg,
+    required this.fg,
+    this.active = true,
+    this.large = false,
+  });
   final String label;
   final IconData icon;
   final Color bg;
   final Color fg;
+  final bool active;
+  final bool large;
+
+  static const _inactiveBg = Color(0xFFF1F5F9);
+  static const _inactiveFg = Color(0xFFCBD5E1);
 
   @override
   Widget build(BuildContext context) {
+    final bgColor = active ? bg : _inactiveBg;
+    final fgColor = active ? fg : _inactiveFg;
+    final iconSize = large ? 15.0 : 12.0;
+    final fontSize = large ? 13.0 : 11.0;
+    final hPad = large ? 11.0 : 8.0;
+    final vPad = large ? 6.0 : 4.0;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(20)),
+      padding: EdgeInsets.symmetric(horizontal: hPad, vertical: vPad),
+      decoration: BoxDecoration(
+          color: bgColor, borderRadius: BorderRadius.circular(20)),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 12, color: fg),
-          const SizedBox(width: 3),
-          Text(label, style: TextStyle(fontSize: 11, color: fg, fontWeight: FontWeight.w500)),
+          Icon(icon, size: iconSize, color: fgColor),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: fontSize,
+              color: fgColor,
+              fontWeight: FontWeight.w600,
+              decoration: active ? null : TextDecoration.lineThrough,
+              decorationColor: _inactiveFg,
+            ),
+          ),
         ],
       ),
     );

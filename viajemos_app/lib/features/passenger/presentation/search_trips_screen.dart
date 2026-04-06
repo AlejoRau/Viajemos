@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../shared/formatters/date_formatter.dart';
+import '../../../shared/widgets/city_autocomplete_field.dart';
 
 // ── Modelo de búsqueda reciente ───────────────────────────────────────────────
 
@@ -194,10 +195,31 @@ class _FilterCardState extends State<_FilterCard> {
             width: double.infinity,
             height: 56,
             child: ElevatedButton(
-              onPressed: () => context.push('/passenger/search-results', extra: {
-                'origin': _fromController.text.trim(),
-                'destination': _toController.text.trim().isEmpty ? null : _toController.text.trim(),
-              }),
+              onPressed: () {
+                final origin = _fromController.text.trim();
+                if (origin.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                        content: Text('Ingresá al menos el origen')),
+                  );
+                  return;
+                }
+                context.push('/passenger/search-results', extra: {
+                  'origin': origin,
+                  'destination': _toController.text.trim().isEmpty
+                      ? null
+                      : _toController.text.trim(),
+                  'dateFrom': _fromDateController.text.trim().isEmpty
+                      ? null
+                      : _fromDateController.text.trim(),
+                  'dateTo': _toDateController.text.trim().isEmpty
+                      ? null
+                      : _toDateController.text.trim(),
+                  'maxPrice': _priceController.text.trim().isEmpty
+                      ? null
+                      : _priceController.text.trim(),
+                });
+              },
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF1A73E8),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
@@ -215,26 +237,16 @@ class _FilterCardState extends State<_FilterCard> {
   }
 
   Widget _buildOriginField() {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFFF1F5F9),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: TextField(
-        controller: _fromController,
-        focusNode: _originFocusNode,
-        onTap: () => setState(() => _showHistory = true),
-        decoration: InputDecoration(
-          hintText: '¿Desde dónde salís?',
-          prefixIcon: const Icon(Icons.search, color: Color(0xFF1A73E8), size: 20),
-          suffixIcon: GestureDetector(
-            onTap: _swapOriginDestination,
-            child: const Icon(Icons.swap_vert, color: Color(0xFF94A3B8), size: 20),
-          ),
-          border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-          hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 15),
-        ),
+    return CityAutocompleteField(
+      controller: _fromController,
+      focusNode: _originFocusNode,
+      hint: '¿Desde dónde salís?',
+      icon: Icons.search,
+      iconColor: const Color(0xFF1A73E8),
+      onTap: () => setState(() => _showHistory = true),
+      suffix: GestureDetector(
+        onTap: _swapOriginDestination,
+        child: const Icon(Icons.swap_vert, color: Color(0xFF94A3B8), size: 20),
       ),
     );
   }
@@ -299,21 +311,11 @@ class _FilterCardState extends State<_FilterCard> {
   }
 
   Widget _buildTextField(String hint, IconData icon, TextEditingController controller) {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFFF1F5F9),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: TextField(
-        controller: controller,
-        decoration: InputDecoration(
-          hintText: hint,
-          prefixIcon: Icon(icon, color: const Color(0xFF1A73E8), size: 20),
-          border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-          hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 15),
-        ),
-      ),
+    return CityAutocompleteField(
+      controller: controller,
+      hint: hint,
+      icon: icon,
+      iconColor: const Color(0xFF1A73E8),
     );
   }
 

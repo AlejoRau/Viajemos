@@ -1,79 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/providers/role_provider.dart';
-
-// ── Mock data ─────────────────────────────────────────────────────────────────
-
-const _mockUser = (
-  firstName: 'Juan',
-  lastName: 'Pérez',
-  email: 'juan.perez@email.com',
-  phone: '+54 9 11 1234-5678',
-  birthDate: '15/03/1995',
-  postalAddress: 'Av. Corrientes 1234, CABA',
-  memberSince: 2024,
-  rating: 4.8,
-  tripsDriver: 47,
-  tripsPassenger: 23,
-  verified: true,
-  bioDriver:
-      'Conductor con 5 años de experiencia. Viajo frecuentemente entre Buenos Aires y Córdoba.',
-  bioPassenger:
-      'Me gusta viajar y conocer gente nueva. Siempre puntual y respetuoso.',
-);
-
-// ── Car data ──────────────────────────────────────────────────────────────────
-
-class _CarColor {
-  const _CarColor(this.name, this.hex);
-  final String name;
-  final int hex;
-}
-
-class _Vehicle {
-  const _Vehicle(
-      {required this.brand,
-      required this.model,
-      required this.color,
-      required this.colorHex});
-  final String brand;
-  final String model;
-  final String color;
-  final int colorHex;
-}
-
-const _carBrands = <String, List<String>>{
-  'Toyota': ['Corolla', 'Hilux', 'Etios', 'Yaris', 'SW4', 'RAV4'],
-  'Ford': ['Focus', 'EcoSport', 'Ranger', 'Ka', 'Fiesta', 'Territory'],
-  'Volkswagen': ['Gol', 'Polo', 'Vento', 'Passat', 'Tiguan', 'T-Cross'],
-  'Chevrolet': ['Cruze', 'Onix', 'Tracker', 'S10', 'Montana'],
-  'Renault': ['Kwid', 'Sandero', 'Logan', 'Duster', 'Kangoo'],
-  'Peugeot': ['208', '308', '408', '2008', '3008'],
-  'Fiat': ['Palio', 'Siena', 'Cronos', 'Argo', 'Toro'],
-  'Honda': ['Civic', 'City', 'HR-V', 'CR-V', 'Fit'],
-  'Nissan': ['Versa', 'Sentra', 'Kicks', 'X-Trail', 'Frontier'],
-  'Hyundai': ['i20', 'Tucson', 'Santa Fe', 'Creta', 'HB20'],
-};
-
-const _carColors = [
-  _CarColor('Blanco', 0xFFFFFFFF),
-  _CarColor('Negro', 0xFF1A1A1A),
-  _CarColor('Gris', 0xFF6B7280),
-  _CarColor('Plateado', 0xFFCBD5E1),
-  _CarColor('Rojo', 0xFFDC2626),
-  _CarColor('Azul', 0xFF1A73E8),
-  _CarColor('Verde', 0xFF15803D),
-  _CarColor('Amarillo', 0xFFEAB308),
-  _CarColor('Naranja', 0xFFEA580C),
-  _CarColor('Marrón', 0xFF92400E),
-  _CarColor('Beige', 0xFFD4B896),
-  _CarColor('Bordó', 0xFF881337),
-  _CarColor('Celeste', 0xFF0EA5E9),
-  _CarColor('Dorado', 0xFFD97706),
-  _CarColor('Violeta', 0xFF7C3AED),
-];
+import '../data/profile_provider.dart';
+import '../domain/user_profile.dart';
+import '../../../features/vehicles/data/vehicles_provider.dart';
+import '../../../features/vehicles/domain/vehicle.dart';
+import '../../../shared/widgets/vehicle_selector_sheet.dart';
 
 // ── ProfileScreen ─────────────────────────────────────────────────────────────
 
@@ -89,6 +24,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
   late final TabController _tabController;
   final _instagramController = TextEditingController();
   final _facebookController = TextEditingController();
+  final _bioDriverController = TextEditingController();
+  final _bioPassengerController = TextEditingController();
+  bool _controllersInitialized = false;
 
   @override
   void initState() {
@@ -101,15 +39,17 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     _tabController.dispose();
     _instagramController.dispose();
     _facebookController.dispose();
+    _bioDriverController.dispose();
+    _bioPassengerController.dispose();
     super.dispose();
   }
 
-  void _showEditPersonalData() {
+  void _showEditPersonalData(UserProfile profile) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => const _EditPersonalDataSheet(),
+      builder: (_) => _EditPersonalDataSheet(profile: profile),
     );
   }
 
@@ -126,10 +66,20 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
   Widget build(BuildContext context) {
     final role = ref.watch(roleProvider);
     final isDriver = role == '/driver';
-    final initials =
-        '${_mockUser.firstName[0]}${_mockUser.lastName[0]}';
-    final totalTrips =
-        isDriver ? _mockUser.tripsDriver : _mockUser.tripsPassenger;
+    final profileAsync = ref.watch(profileProvider);
+
+    // Pre-fill text controllers once the profile loads
+    ref.listen<AsyncValue<UserProfile>>(profileProvider, (_, next) {
+      next.whenData((profile) {
+        if (!_controllersInitialized) {
+          _controllersInitialized = true;
+          _bioDriverController.text = profile.bioDriver ?? '';
+          _bioPassengerController.text = profile.bioPassenger ?? '';
+          _instagramController.text = profile.instagram ?? '';
+          _facebookController.text = profile.facebook ?? '';
+        }
+      });
+    });
 
     return Scaffold(
       appBar: AppBar(
@@ -146,22 +96,30 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
           ],
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _InfoPersonalTab(
-            isDriver: isDriver,
-            initials: initials,
-            totalTrips: totalTrips,
-            instagramController: _instagramController,
-            facebookController: _facebookController,
-            onEditPersonalData: _showEditPersonalData,
-          ),
-          _CuentaTab(
-            onOpinionsTap: _showOpinions,
-            onLogout: () => context.go('/'),
-          ),
-        ],
+      body: profileAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => Center(child: Text('Error: $e')),
+        data: (profile) => TabBarView(
+          controller: _tabController,
+          children: [
+            _InfoPersonalTab(
+              isDriver: isDriver,
+              profile: profile,
+              instagramController: _instagramController,
+              facebookController: _facebookController,
+              bioController:
+                  isDriver ? _bioDriverController : _bioPassengerController,
+              onEditPersonalData: () => _showEditPersonalData(profile),
+            ),
+            _CuentaTab(
+              email: profile.email,
+              onOpinionsTap: _showOpinions,
+              onLogout: () async {
+                await Supabase.instance.client.auth.signOut();
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -172,18 +130,18 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
 class _InfoPersonalTab extends StatelessWidget {
   const _InfoPersonalTab({
     required this.isDriver,
-    required this.initials,
-    required this.totalTrips,
+    required this.profile,
     required this.instagramController,
     required this.facebookController,
+    required this.bioController,
     required this.onEditPersonalData,
   });
 
   final bool isDriver;
-  final String initials;
-  final int totalTrips;
+  final UserProfile profile;
   final TextEditingController instagramController;
   final TextEditingController facebookController;
+  final TextEditingController bioController;
   final VoidCallback onEditPersonalData;
 
   @override
@@ -201,7 +159,7 @@ class _InfoPersonalTab extends StatelessWidget {
                   radius: 52,
                   backgroundColor: AppColors.primaryLight,
                   child: Text(
-                    initials,
+                    profile.initials,
                     style: const TextStyle(
                       fontSize: 36,
                       fontWeight: FontWeight.bold,
@@ -211,7 +169,7 @@ class _InfoPersonalTab extends StatelessWidget {
                 ),
                 const SizedBox(height: 14),
                 Text(
-                  '${_mockUser.firstName} ${_mockUser.lastName}',
+                  profile.fullName,
                   style: const TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
@@ -226,7 +184,7 @@ class _InfoPersonalTab extends StatelessWidget {
                         size: 22, color: Color(0xFFFACC15)),
                     const SizedBox(width: 4),
                     Text(
-                      _mockUser.rating.toString(),
+                      profile.avgRating.toStringAsFixed(1),
                       style: const TextStyle(
                           fontSize: 17,
                           fontWeight: FontWeight.w600,
@@ -234,31 +192,12 @@ class _InfoPersonalTab extends StatelessWidget {
                     ),
                     const SizedBox(width: 4),
                     Text(
-                      '($totalTrips viajes)',
+                      '(${isDriver ? profile.tripsDriver : profile.tripsPassenger} viajes)',
                       style: const TextStyle(
                           fontSize: 13, color: AppColors.textSecondary),
                     ),
                   ],
                 ),
-                if (_mockUser.verified) ...[
-                  const SizedBox(height: 10),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: AppColors.greenLight,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: const Text(
-                      '✓ Perfil verificado',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                        color: AppColors.green,
-                      ),
-                    ),
-                  ),
-                ],
               ],
             ),
           ),
@@ -272,7 +211,8 @@ class _InfoPersonalTab extends StatelessWidget {
                   icon: isDriver
                       ? Icons.directions_car_rounded
                       : Icons.airline_seat_recline_normal_rounded,
-                  value: '$totalTrips',
+                  value:
+                      '${isDriver ? profile.tripsDriver : profile.tripsPassenger}',
                   label: isDriver ? 'Viajes conducidos' : 'Viajes realizados',
                 ),
               ),
@@ -280,7 +220,7 @@ class _InfoPersonalTab extends StatelessWidget {
               Expanded(
                 child: _StatCard(
                   icon: Icons.calendar_today_rounded,
-                  value: '${_mockUser.memberSince}',
+                  value: '${profile.memberSince.year}',
                   label: 'Miembro desde',
                 ),
               ),
@@ -326,6 +266,7 @@ class _InfoPersonalTab extends StatelessWidget {
           // ── Sobre mí ──────────────────────────────────────────────────
           Container(
             width: double.infinity,
+            constraints: const BoxConstraints(minHeight: 130),
             padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
               color: AppColors.pageBackground,
@@ -342,15 +283,25 @@ class _InfoPersonalTab extends StatelessWidget {
                     color: AppColors.textPrimary,
                   ),
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  isDriver
-                      ? _mockUser.bioDriver
-                      : _mockUser.bioPassenger,
+                const SizedBox(height: 10),
+                TextField(
+                  controller: bioController,
+                  minLines: 4,
+                  maxLines: null,
+                  cursorColor: AppColors.textPrimary,
                   style: const TextStyle(
                     fontSize: 14,
                     color: AppColors.textPrimary,
-                    height: 1.5,
+                    height: 1.6,
+                  ),
+                  decoration: InputDecoration(
+                    border: InputBorder.none,
+                    isDense: true,
+                    contentPadding: EdgeInsets.zero,
+                    hintText: 'Contá algo sobre vos...',
+                    hintStyle: TextStyle(
+                        color: AppColors.textSecondary.withValues(alpha: 0.6),
+                        fontSize: 14),
                   ),
                 ),
               ],
@@ -376,89 +327,8 @@ class _InfoPersonalTab extends StatelessWidget {
           ),
           const SizedBox(height: 20),
 
-          // ── Mis autos (solo conductor) ────────────────────────────────
-          if (isDriver) ...[
-            const _VehiclesSection(),
-            const SizedBox(height: 20),
-          ],
-
-          // ── Verificación ──────────────────────────────────────────────
-          const _SectionHeading('Verificación'),
-          const SizedBox(height: 10),
-          _mockUser.verified
-              ? Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: AppColors.greenLight,
-                    border: Border.all(
-                        color: const Color(0xFFBBF7D0), width: 1.5),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: const Row(
-                    children: [
-                      Icon(Icons.verified_user_rounded,
-                          color: AppColors.green, size: 28),
-                      SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Identidad verificada',
-                                style: TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w600,
-                                    color: AppColors.green)),
-                            SizedBox(height: 2),
-                            Text('Tu identidad fue confirmada correctamente.',
-                                style: TextStyle(
-                                    fontSize: 13, color: AppColors.green)),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                )
-              : Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFFF1F2),
-                    border: Border.all(
-                        color: const Color(0xFFFECACA), width: 1.5),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.cancel_rounded,
-                          color: Color(0xFFDC2626), size: 28),
-                      const SizedBox(width: 14),
-                      const Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Identidad no verificada',
-                                style: TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w600,
-                                    color: Color(0xFFDC2626))),
-                            SizedBox(height: 2),
-                            Text('Verificá tu identidad para generar confianza.',
-                                style: TextStyle(
-                                    fontSize: 13,
-                                    color: Color(0xFFDC2626))),
-                          ],
-                        ),
-                      ),
-                      GestureDetector(
-                        onTap: () {},
-                        child: const Text('Verificar',
-                            style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: Color(0xFFDC2626))),
-                      ),
-                    ],
-                  ),
-                ),
+          // ── Autos ─────────────────────────────────────────────────────
+          const _VehiclesSection(),
           const SizedBox(height: 32),
         ],
       ),
@@ -470,8 +340,9 @@ class _InfoPersonalTab extends StatelessWidget {
 
 class _CuentaTab extends StatelessWidget {
   const _CuentaTab(
-      {required this.onOpinionsTap, required this.onLogout});
+      {required this.email, required this.onOpinionsTap, required this.onLogout});
 
+  final String email;
   final VoidCallback onOpinionsTap;
   final VoidCallback onLogout;
 
@@ -488,7 +359,7 @@ class _CuentaTab extends StatelessWidget {
           _AccountRow(
             icon: Icons.mail_rounded,
             label: 'Email',
-            value: _mockUser.email,
+            value: email,
             onTap: () {},
           ),
           const SizedBox(height: 8),
@@ -502,7 +373,7 @@ class _CuentaTab extends StatelessWidget {
           _AccountRow(
             icon: Icons.home_outlined,
             label: 'Dirección postal',
-            value: _mockUser.postalAddress,
+            value: '',
             onTap: () {},
           ),
           const SizedBox(height: 24),
@@ -562,26 +433,35 @@ class _CuentaTab extends StatelessWidget {
 
 // ── Sheet: Editar datos personales ────────────────────────────────────────────
 
-class _EditPersonalDataSheet extends StatefulWidget {
-  const _EditPersonalDataSheet();
+class _EditPersonalDataSheet extends ConsumerStatefulWidget {
+  const _EditPersonalDataSheet({required this.profile});
+  final UserProfile profile;
 
   @override
-  State<_EditPersonalDataSheet> createState() =>
+  ConsumerState<_EditPersonalDataSheet> createState() =>
       _EditPersonalDataSheetState();
 }
 
-class _EditPersonalDataSheetState extends State<_EditPersonalDataSheet> {
-  final _firstNameController =
-      TextEditingController(text: _mockUser.firstName);
-  final _lastNameController =
-      TextEditingController(text: _mockUser.lastName);
-  final _emailController =
-      TextEditingController(text: _mockUser.email);
-  final _phoneController =
-      TextEditingController(text: _mockUser.phone);
-  final _bioController =
-      TextEditingController(text: _mockUser.bioDriver);
-  String _birthDate = _mockUser.birthDate;
+class _EditPersonalDataSheetState
+    extends ConsumerState<_EditPersonalDataSheet> {
+  late final _firstNameController = TextEditingController(
+      text: widget.profile.fullName.split(' ').first);
+  late final _lastNameController = TextEditingController(
+      text: widget.profile.fullName.contains(' ')
+          ? widget.profile.fullName.split(' ').skip(1).join(' ')
+          : '');
+  late final _emailController =
+      TextEditingController(text: widget.profile.email);
+  late final _phoneController =
+      TextEditingController(text: widget.profile.phone ?? '');
+  final _bioController = TextEditingController();
+  late String _birthDate = _formatDate(widget.profile.birthDate);
+  DateTime? _selectedBirthDate = null;
+
+  static String _formatDate(DateTime? d) {
+    if (d == null) return '';
+    return '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+  }
 
   @override
   void dispose() {
@@ -609,8 +489,8 @@ class _EditPersonalDataSheetState extends State<_EditPersonalDataSheet> {
     );
     if (picked != null) {
       setState(() {
-        _birthDate =
-            '${picked.day.toString().padLeft(2, '0')}/${picked.month.toString().padLeft(2, '0')}/${picked.year}';
+        _selectedBirthDate = picked;
+        _birthDate = _formatDate(picked);
       });
     }
   }
@@ -727,7 +607,21 @@ class _EditPersonalDataSheetState extends State<_EditPersonalDataSheet> {
                     width: double.infinity,
                     height: 52,
                     child: ElevatedButton(
-                      onPressed: () => Navigator.pop(context),
+                      onPressed: () async {
+                        final repo =
+                            ref.read(profileRepositoryProvider);
+                        await repo.updatePersonalData(
+                          firstName:
+                              _firstNameController.text.trim(),
+                          lastName:
+                              _lastNameController.text.trim(),
+                          phone: _phoneController.text.trim(),
+                          birthDate: _selectedBirthDate ??
+                              widget.profile.birthDate,
+                        );
+                        ref.invalidate(profileProvider);
+                        if (mounted) Navigator.pop(context);
+                      },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.primary,
                         shape: RoundedRectangleBorder(
@@ -1001,34 +895,38 @@ class _SocialRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
-        color: AppColors.background,
-        border: Border.all(color: AppColors.border, width: 1.5),
-        borderRadius: BorderRadius.circular(14),
+        color: Colors.white,
+        border: Border.all(color: const Color(0xFFE2E8F0), width: 1.2),
+        borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
         children: [
           icon,
-          const SizedBox(width: 12),
+          const SizedBox(width: 14),
           const Text('@',
               style: TextStyle(
                   fontSize: 16,
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.w500,
                   color: AppColors.textSecondary)),
-          const SizedBox(width: 4),
+          const SizedBox(width: 2),
           Expanded(
             child: TextField(
               controller: controller,
+              cursorColor: AppColors.textPrimary,
               style: const TextStyle(
-                  fontSize: 14, color: AppColors.textPrimary),
+                  fontSize: 15, color: AppColors.textPrimary),
               decoration: InputDecoration(
                 hintText: hint,
                 hintStyle: const TextStyle(
-                    color: AppColors.textSecondary, fontSize: 14),
+                    color: AppColors.textSecondary, fontSize: 15),
                 border: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                enabledBorder: InputBorder.none,
                 isDense: true,
-                contentPadding: EdgeInsets.zero,
+                contentPadding: const EdgeInsets.only(top: 2),
+                filled: false,
               ),
             ),
           ),
@@ -1092,18 +990,29 @@ class _InstagramIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 36,
-      height: 36,
+      width: 42,
+      height: 42,
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color(0xFFF58529), Color(0xFFDD2A7B), Color(0xFF8134AF)],
+          colors: [
+            Color(0xFFFEDA77),
+            Color(0xFFF58529),
+            Color(0xFFDD2A7B),
+            Color(0xFF8134AF),
+            Color(0xFF515BD4),
+          ],
           begin: Alignment.bottomLeft,
           end: Alignment.topRight,
         ),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(12),
       ),
-      child: const Icon(Icons.camera_alt_outlined,
-          color: Colors.white, size: 20),
+      child: const Center(
+        child: FaIcon(
+          FontAwesomeIcons.instagram,
+          color: Colors.white,
+          size: 22,
+        ),
+      ),
     );
   }
 }
@@ -1112,21 +1021,17 @@ class _FacebookIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 36,
-      height: 36,
+      width: 42,
+      height: 42,
       decoration: BoxDecoration(
         color: const Color(0xFF1877F2),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: const Center(
-        child: Text(
-          'f',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 22,
-            fontWeight: FontWeight.bold,
-            fontFamily: 'serif',
-          ),
+        child: FaIcon(
+          FontAwesomeIcons.facebookF,
+          color: Colors.white,
+          size: 20,
         ),
       ),
     );
@@ -1135,89 +1040,73 @@ class _FacebookIcon extends StatelessWidget {
 
 // ── Sección vehículos ─────────────────────────────────────────────────────────
 
-class _VehiclesSection extends StatefulWidget {
+class _VehiclesSection extends ConsumerWidget {
   const _VehiclesSection();
 
-  @override
-  State<_VehiclesSection> createState() => _VehiclesSectionState();
-}
-
-class _VehiclesSectionState extends State<_VehiclesSection> {
-  final List<_Vehicle> _vehicles = [];
-
-  Future<void> _openSelector() async {
-    final vehicle = await showModalBottomSheet<_Vehicle>(
+  Future<void> _openSelector(BuildContext context, WidgetRef ref) async {
+    final input = await showModalBottomSheet<VehicleInput>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => const _VehicleSelectorSheet(),
+      builder: (_) => const VehicleSelectorSheet(),
     );
-    if (vehicle != null) setState(() => _vehicles.add(vehicle));
+    if (input == null || !context.mounted) return;
+    try {
+      await ref.read(vehiclesRepositoryProvider).addVehicle(
+            brand: input.brand,
+            model: input.model,
+            color: input.color,
+            colorHex: input.colorHex,
+          );
+      ref.invalidate(vehiclesProvider);
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al guardar el vehículo: $e')),
+        );
+      }
+    }
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final vehiclesAsync = ref.watch(vehiclesProvider);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const _SectionHeading('Mis autos'),
         const SizedBox(height: 10),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: AppColors.background,
-            border: Border.all(color: AppColors.border, width: 1.5),
-            borderRadius: BorderRadius.circular(16),
+        vehiclesAsync.when(
+          loading: () => const Padding(
+            padding: EdgeInsets.symmetric(vertical: 12),
+            child: Center(child: CircularProgressIndicator()),
           ),
-          child: Column(
+          error: (e, _) =>
+              Text('Error: $e', style: const TextStyle(color: Colors.red)),
+          data: (vehicles) => Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              for (final v in _vehicles) ...[
-                Row(
-                  children: [
-                    Container(
-                      width: 34,
-                      height: 34,
-                      decoration: BoxDecoration(
-                        color: Color(v.colorHex),
-                        shape: BoxShape.circle,
-                        border:
-                            Border.all(color: AppColors.border),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text('${v.brand} ${v.model}',
-                          style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.textPrimary)),
-                    ),
-                    Text(v.color,
-                        style: const TextStyle(
-                            fontSize: 13,
-                            color: AppColors.textSecondary)),
-                  ],
-                ),
-                const SizedBox(height: 8),
+              for (final v in vehicles) ...[
+                _VehicleRow(vehicle: v),
                 const Divider(height: 1, color: AppColors.border),
-                const SizedBox(height: 8),
               ],
+              const SizedBox(height: 20),
               GestureDetector(
-                onTap: _openSelector,
+                onTap: () => _openSelector(context, ref),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Container(
-                      width: 32,
-                      height: 32,
-                      decoration: const BoxDecoration(
-                        color: AppColors.primary,
+                      width: 28,
+                      height: 28,
+                      decoration: BoxDecoration(
+                        color: Colors.transparent,
                         shape: BoxShape.circle,
+                        border: Border.all(
+                            color: AppColors.primary, width: 2),
                       ),
                       child: const Icon(Icons.add,
-                          size: 18, color: Colors.white),
+                          size: 16, color: AppColors.primary),
                     ),
                     const SizedBox(width: 10),
                     const Text('Agregar vehículo',
@@ -1236,236 +1125,122 @@ class _VehiclesSectionState extends State<_VehiclesSection> {
   }
 }
 
-// ── Vehicle selector sheet ────────────────────────────────────────────────────
+class _VehicleRow extends ConsumerWidget {
+  const _VehicleRow({required this.vehicle});
+  final Vehicle vehicle;
 
-enum _VehicleStep { brand, model, color }
-
-class _VehicleSelectorSheet extends StatefulWidget {
-  const _VehicleSelectorSheet();
-
-  @override
-  State<_VehicleSelectorSheet> createState() =>
-      _VehicleSelectorSheetState();
-}
-
-class _VehicleSelectorSheetState extends State<_VehicleSelectorSheet> {
-  _VehicleStep _step = _VehicleStep.brand;
-  String _selectedBrand = '';
-  String _selectedModel = '';
-  final _searchController = TextEditingController();
-  String _query = '';
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
+  Future<void> _edit(BuildContext context, WidgetRef ref) async {
+    final current = VehicleInput(
+      brand: vehicle.brand,
+      model: vehicle.model,
+      color: vehicle.color,
+      colorHex: vehicle.colorHex,
+    );
+    final input = await showModalBottomSheet<VehicleInput>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => VehicleSelectorSheet(current: current),
+    );
+    if (input == null || !context.mounted) return;
+    try {
+      await ref.read(vehiclesRepositoryProvider).updateVehicle(
+            id: vehicle.id,
+            brand: input.brand,
+            model: input.model,
+            color: input.color,
+            colorHex: input.colorHex,
+          );
+      ref.invalidate(vehiclesProvider);
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al actualizar: $e')),
+        );
+      }
+    }
   }
 
-  List<String> get _filteredBrands {
-    final brands = _carBrands.keys.toList();
-    if (_query.isEmpty) return brands;
-    return brands
-        .where((b) => b.toLowerCase().contains(_query.toLowerCase()))
-        .toList();
-  }
-
-  List<String> get _filteredModels {
-    final models = _carBrands[_selectedBrand] ?? [];
-    if (_query.isEmpty) return models;
-    return models
-        .where((m) => m.toLowerCase().contains(_query.toLowerCase()))
-        .toList();
-  }
-
-  void _selectBrand(String brand) => setState(() {
-        _selectedBrand = brand;
-        _step = _VehicleStep.model;
-        _query = '';
-        _searchController.clear();
-      });
-
-  void _selectModel(String model) => setState(() {
-        _selectedModel = model;
-        _step = _VehicleStep.color;
-        _query = '';
-        _searchController.clear();
-      });
-
-  void _selectColor(_CarColor color) => Navigator.of(context).pop(
-        _Vehicle(
-            brand: _selectedBrand,
-            model: _selectedModel,
-            color: color.name,
-            colorHex: color.hex),
-      );
-
-  void _goBack() => setState(() {
-        if (_step == _VehicleStep.color) {
-          _step = _VehicleStep.model;
-        } else {
-          _step = _VehicleStep.brand;
-          _selectedBrand = '';
-        }
-        _query = '';
-        _searchController.clear();
-      });
-
-  String get _title => switch (_step) {
-        _VehicleStep.brand => 'Seleccioná la marca',
-        _VehicleStep.model => _selectedBrand,
-        _VehicleStep.color => '$_selectedBrand $_selectedModel',
-      };
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: MediaQuery.of(context).size.height * 0.80,
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      child: Column(
-        children: [
-          const SizedBox(height: 12),
-          Center(
-            child: Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                  color: const Color(0xFFE2E8F0),
-                  borderRadius: BorderRadius.circular(2)),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Row(
-              children: [
-                if (_step != _VehicleStep.brand) ...[
-                  GestureDetector(
-                    onTap: _goBack,
-                    child: const Icon(Icons.arrow_back_ios_new,
-                        size: 18, color: Color(0xFF1E293B)),
-                  ),
-                  const SizedBox(width: 10),
-                ],
-                Text(_title,
-                    style: const TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF1E293B))),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          if (_step != _VehicleStep.color) ...[
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Container(
-                decoration: BoxDecoration(
-                    color: const Color(0xFFF1F5F9),
-                    borderRadius: BorderRadius.circular(12)),
-                child: TextField(
-                  controller: _searchController,
-                  onChanged: (v) => setState(() => _query = v),
-                  decoration: const InputDecoration(
-                    hintText: 'Buscar...',
-                    prefixIcon: Icon(Icons.search,
-                        size: 20, color: Color(0xFF94A3B8)),
-                    border: InputBorder.none,
-                    contentPadding: EdgeInsets.symmetric(
-                        vertical: 12, horizontal: 16),
-                    hintStyle:
-                        TextStyle(color: Color(0xFF94A3B8)),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-          ],
-          const Divider(height: 1, color: Color(0xFFE2E8F0)),
-          Expanded(
-            child: _step == _VehicleStep.color
-                ? _buildColorGrid()
-                : _buildList(),
-          ),
+  Future<void> _delete(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Eliminar vehículo'),
+        content: Text(
+            '¿Eliminás ${vehicle.brand} ${vehicle.model}?'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancelar')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Eliminar',
+                  style: TextStyle(color: Colors.red))),
         ],
       ),
     );
-  }
-
-  Widget _buildList() {
-    final items = _step == _VehicleStep.brand
-        ? _filteredBrands
-        : _filteredModels;
-    if (items.isEmpty) {
-      return const Center(
-          child: Text('Sin resultados',
-              style:
-                  TextStyle(color: AppColors.textSecondary)));
-    }
-    return ListView.separated(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      itemCount: items.length,
-      separatorBuilder: (_, __) => const Divider(
-          height: 1,
-          indent: 20,
-          endIndent: 20,
-          color: Color(0xFFF1F5F9)),
-      itemBuilder: (_, i) => ListTile(
-        title: Text(items[i],
-            style: const TextStyle(
-                fontSize: 15, color: Color(0xFF1E293B))),
-        trailing: const Icon(Icons.chevron_right,
-            color: Color(0xFFCBD5E1)),
-        onTap: () => _step == _VehicleStep.brand
-            ? _selectBrand(items[i])
-            : _selectModel(items[i]),
-      ),
-    );
-  }
-
-  Widget _buildColorGrid() {
-    return GridView.builder(
-      padding: const EdgeInsets.all(24),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 4,
-        mainAxisSpacing: 20,
-        crossAxisSpacing: 12,
-        childAspectRatio: 0.75,
-      ),
-      itemCount: _carColors.length,
-      itemBuilder: (_, i) {
-        final c = _carColors[i];
-        return GestureDetector(
-          onTap: () => _selectColor(c),
-          child: Column(
-            children: [
-              Container(
-                width: 56,
-                height: 56,
-                decoration: BoxDecoration(
-                  color: Color(c.hex),
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                      color: const Color(0xFFE2E8F0), width: 2),
-                  boxShadow: [
-                    BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.08),
-                        blurRadius: 4,
-                        offset: const Offset(0, 2))
-                  ],
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(c.name,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                      fontSize: 11, color: Color(0xFF475569))),
-            ],
-          ),
+    if (confirmed != true || !context.mounted) return;
+    try {
+      await ref
+          .read(vehiclesRepositoryProvider)
+          .deleteVehicle(vehicle.id);
+      ref.invalidate(vehiclesProvider);
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al eliminar: $e')),
         );
-      },
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return InkWell(
+      onTap: () => _edit(context, ref),
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+        child: Row(
+          children: [
+            Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                color: Color(vehicle.colorHex),
+                shape: BoxShape.circle,
+                border: Border.all(color: AppColors.border),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('${vehicle.brand} ${vehicle.model}',
+                      style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textPrimary)),
+                  Text(vehicle.color,
+                      style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textSecondary)),
+                ],
+              ),
+            ),
+            IconButton(
+              onPressed: () => _delete(context, ref),
+              icon: const Icon(Icons.delete_outline,
+                  size: 18, color: Color(0xFFEF4444)),
+              visualDensity: VisualDensity.compact,
+              tooltip: 'Eliminar',
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
+
+// (Vehicle selector sheet moved to lib/shared/widgets/vehicle_selector_sheet.dart)

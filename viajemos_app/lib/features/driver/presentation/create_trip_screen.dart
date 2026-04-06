@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/widgets/suggestion_chip_input.dart';
 import '../../../shared/formatters/date_formatter.dart';
+import '../../../features/vehicles/data/vehicles_provider.dart';
+import '../../../features/vehicles/domain/vehicle.dart';
+import '../../../shared/widgets/vehicle_selector_sheet.dart';
+import '../../../shared/widgets/city_autocomplete_field.dart';
+import '../data/trip_repository.dart';
 import 'trip_map_screen.dart';
-
-final _placeInputFormatter = FilteringTextInputFormatter.allow(
-  RegExp(r'[a-zA-ZáéíóúÁÉÍÓÚüÜñÑ\s,.\-]'),
-);
 
 const _routeSuggestions = [
   'Ruta Nacional 9',
@@ -53,45 +55,153 @@ const _citySuggestions = [
   'Rafaela',
 ];
 
-class CreateTripScreen extends StatefulWidget {
+class CreateTripScreen extends ConsumerStatefulWidget {
   const CreateTripScreen({super.key});
 
   @override
-  State<CreateTripScreen> createState() => _CreateTripScreenState();
+  ConsumerState<CreateTripScreen> createState() => _CreateTripScreenState();
 }
 
-class _CreateTripScreenState extends State<CreateTripScreen> {
+class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
   final _originController = TextEditingController();
   final _destinationController = TextEditingController();
-  final _dateController = TextEditingController();
   final _timeFromController = TextEditingController();
   final _timeToController = TextEditingController();
   final _descriptionController = TextEditingController();
+
   bool _acceptsPets = false;
-  bool _picksUpPassengers = false;   // Paso a buscar a cada pasajero
-  bool _dropsOffPassengers = false;  // Dejo a cada pasajero en su destino
+  bool _picksUpPassengers = false;
+  bool _dropsOffPassengers = false;
   final List<String> _routes = [];
   final List<String> _stops = [];
+
+  int _seats = 3;
+  int _price = 4500;
+
+  DateTime? _departureDate;
+  MapResult? _originResult;
+  MapResult? _destResult;
+
+  Vehicle? _selectedVehicle;
+  bool _publishing = false;
 
   @override
   void dispose() {
     _originController.dispose();
     _destinationController.dispose();
-    _dateController.dispose();
     _timeFromController.dispose();
     _timeToController.dispose();
     _descriptionController.dispose();
     super.dispose();
   }
 
-  Future<void> _onNext(BuildContext context) async {
-    // If driver picks up AND drops off at door, no maps needed
-    if (_picksUpPassengers && _dropsOffPassengers) {
-      _publish(context);
+  String get _dateDisplayText {
+    if (_departureDate == null) return '';
+    final d = _departureDate!;
+    return '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+  }
+
+  Future<void> _openVehicleSelector(List<Vehicle> existing) async {
+    // Show bottom sheet with existing vehicles + add option
+    final selected = await showModalBottomSheet<Vehicle?>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _VehiclePickerSheet(
+        vehicles: existing,
+        onAddNew: () async {
+          Navigator.pop(context); // close picker
+          final input = await showModalBottomSheet<VehicleInput>(
+            context: context,
+            isScrollControlled: true,
+            backgroundColor: Colors.transparent,
+            builder: (_) => const VehicleSelectorSheet(),
+          );
+          if (input == null || !mounted) return;
+          try {
+            final newVehicle = await ref
+                .read(vehiclesRepositoryProvider)
+                .addVehicle(
+                  brand: input.brand,
+                  model: input.model,
+                  color: input.color,
+                  colorHex: input.colorHex,
+                );
+            ref.invalidate(vehiclesProvider);
+            setState(() => _selectedVehicle = newVehicle);
+          } catch (e) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Error al guardar el vehículo: $e')),
+              );
+            }
+          }
+        },
+      ),
+    );
+    if (selected != null) setState(() => _selectedVehicle = selected);
+  }
+
+  /// Parses "HH:mm" → minutes from midnight, or null if invalid.
+  int? _parseMinutes(String text) {
+    final parts = text.trim().split(':');
+    if (parts.length != 2) return null;
+    final h = int.tryParse(parts[0]);
+    final m = int.tryParse(parts[1]);
+    if (h == null || m == null) return null;
+    if (h < 0 || h > 23 || m < 0 || m > 59) return null;
+    return h * 60 + m;
+  }
+
+  Future<void> _onNext() async {
+    if (_originController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Completá el origen del viaje')),
+      );
+      return;
+    }
+    if (_destinationController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Completá el destino del viaje')),
+      );
+      return;
+    }
+    if (_departureDate == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Seleccioná la fecha de salida')),
+      );
       return;
     }
 
-    // Step 1: origin map (only if driver does NOT pick up at door)
+    // Validate time window
+    final fromText = _timeFromController.text.trim();
+    final toText = _timeToController.text.trim();
+    if (fromText.isEmpty || toText.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Completá la ventana horaria de salida')),
+      );
+      return;
+    }
+    final fromMin = _parseMinutes(fromText);
+    final toMin = _parseMinutes(toText);
+    if (fromMin == null || toMin == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Formato de hora inválido (usá HH:mm)')),
+      );
+      return;
+    }
+    if (toMin <= fromMin) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text(
+                'La hora de fin debe ser mayor que la hora de inicio')),
+      );
+      return;
+    }
+
+    // Origin map (only if driver does NOT pick up at door)
     if (!_picksUpPassengers) {
       final origin = await Navigator.push<MapResult>(
         context,
@@ -99,60 +209,76 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
           builder: (_) => const TripMapScreen(title: 'Punto de salida'),
         ),
       );
-      if (origin == null) return; // user cancelled
+      if (origin == null) return;
+      _originResult = origin;
     }
 
-    // Step 2: destination map (only if driver does NOT drop off at door)
-    if (!_dropsOffPassengers && context.mounted) {
+    // Destination map (only if driver does NOT drop off at door)
+    if (!_dropsOffPassengers && mounted) {
       final dest = await Navigator.push<MapResult>(
         context,
         MaterialPageRoute(
           builder: (_) => const TripMapScreen(title: 'Punto de llegada'),
         ),
       );
-      if (dest == null) return; // user cancelled
+      if (dest == null) return;
+      _destResult = dest;
     }
 
-    if (context.mounted) _publish(context);
+    if (mounted) await _publish();
   }
 
-  void _publish(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('¡Viaje publicado con éxito!'),
-        backgroundColor: Color(0xFF16A34A),
-      ),
-    );
-    context.go('/driver');
+  Future<void> _publish() async {
+    setState(() => _publishing = true);
+    try {
+      final repo = TripRepository();
+      await repo.createTrip(
+        originAddress: _picksUpPassengers
+            ? _originController.text.trim()
+            : (_originResult?.address ?? _originController.text.trim()),
+        destinationAddress: _dropsOffPassengers
+            ? _destinationController.text.trim()
+            : (_destResult?.address ?? _destinationController.text.trim()),
+        originLat: _originResult?.lat,
+        originLng: _originResult?.lng,
+        destLat: _destResult?.lat,
+        destLng: _destResult?.lng,
+        availableSeats: _seats,
+        pricePerSeat: _price,
+        departureDate: _departureDate!,
+        departureTimeFrom: _timeFromController.text.trim(),
+        allowsPets: _acceptsPets,
+        picksUpAtDoor: _picksUpPassengers,
+        dropsOffAtDoor: _dropsOffPassengers,
+        via: _routes,
+        description: _descriptionController.text.trim(),
+        vehicleId: _selectedVehicle?.id,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('¡Viaje publicado con éxito!'),
+            backgroundColor: Color(0xFF16A34A),
+          ),
+        );
+        context.go('/driver');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al publicar: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _publishing = false);
+    }
   }
 
-  Widget _buildLocationInput({
-    required TextEditingController controller,
-    required String placeholder,
-    required IconData icon,
-  }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFFF1F5F9),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: TextField(
-        controller: controller,
-        inputFormatters: [_placeInputFormatter],
-        textCapitalization: TextCapitalization.words,
-        decoration: InputDecoration(
-          hintText: placeholder,
-          prefixIcon: Icon(icon, color: const Color(0xFF94A3B8), size: 20),
-          border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-          hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 15),
-        ),
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
+    final vehiclesAsync = ref.watch(vehiclesProvider);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Crear viaje'),
@@ -167,35 +293,41 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // ── RUTA ──────────────────────────────────────────────────────
-            const _SectionHeader(icon: Icons.alt_route_rounded, title: 'Ruta'),
+            const _SectionHeader(
+                icon: Icons.alt_route_rounded, title: 'Ruta'),
             const SizedBox(height: 16),
             IntrinsicHeight(
               child: Row(
                 children: [
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12.0, vertical: 8.0),
                     child: Column(
                       children: [
-                        const Icon(Icons.circle, size: 12, color: Color(0xFF94A3B8)),
+                        const Icon(Icons.circle,
+                            size: 12, color: Color(0xFF94A3B8)),
                         Expanded(
-                          child: Container(width: 2, color: const Color(0xFFE2E8F0)),
+                          child: Container(
+                              width: 2,
+                              color: const Color(0xFFE2E8F0)),
                         ),
-                        const Icon(Icons.location_on, size: 16, color: AppColors.primary),
+                        const Icon(Icons.location_on,
+                            size: 16, color: AppColors.primary),
                       ],
                     ),
                   ),
                   Expanded(
                     child: Column(
                       children: [
-                        _buildLocationInput(
+                        CityAutocompleteField(
                           controller: _originController,
-                          placeholder: 'Origen',
+                          hint: 'Origen',
                           icon: Icons.search,
                         ),
                         const SizedBox(height: 12),
-                        _buildLocationInput(
+                        CityAutocompleteField(
                           controller: _destinationController,
-                          placeholder: 'Destino',
+                          hint: 'Destino',
                           icon: Icons.near_me_rounded,
                         ),
                       ],
@@ -219,8 +351,28 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
 
             const SizedBox(height: 32),
 
+            // ── VEHÍCULO ───────────────────────────────────────────────────
+            const _SectionHeader(
+                icon: Icons.directions_car_rounded, title: 'Vehículo'),
+            const SizedBox(height: 16),
+            vehiclesAsync.when(
+              loading: () => const Center(
+                  child: CircularProgressIndicator()),
+              error: (e, _) => Text('Error: $e',
+                  style: const TextStyle(color: Colors.red)),
+              data: (vehicles) => _VehicleSelector(
+                vehicles: vehicles,
+                selected: _selectedVehicle,
+                onTap: () => _openVehicleSelector(vehicles),
+              ),
+            ),
+
+            const SizedBox(height: 32),
+
             // ── VÍAS / RUTAS ───────────────────────────────────────────────
-            const _SectionHeader(icon: Icons.directions_rounded, title: 'Vías / Rutas'),
+            const _SectionHeader(
+                icon: Icons.directions_rounded,
+                title: 'Vías / Rutas'),
             const SizedBox(height: 16),
             SuggestionChipInput(
               label: 'Rutas que va a usar',
@@ -235,7 +387,9 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
             const SizedBox(height: 32),
 
             // ── FECHA Y HORA ───────────────────────────────────────────────
-            const _SectionHeader(icon: Icons.calendar_today_rounded, title: 'Fecha y hora'),
+            const _SectionHeader(
+                icon: Icons.calendar_today_rounded,
+                title: 'Fecha y hora'),
             const SizedBox(height: 16),
             const _SubLabel('FECHA DE SALIDA'),
             const SizedBox(height: 8),
@@ -245,34 +399,37 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
                   context: context,
                   initialDate: DateTime.now(),
                   firstDate: DateTime.now(),
-                  lastDate: DateTime.now().add(const Duration(days: 365)),
+                  lastDate:
+                      DateTime.now().add(const Duration(days: 365)),
                 );
                 if (picked != null) {
-                  setState(() {
-                    _dateController.text =
-                        '${picked.day.toString().padLeft(2, '0')}/${picked.month.toString().padLeft(2, '0')}';
-                  });
+                  setState(() => _departureDate = picked);
                 }
               },
-              child: AbsorbPointer(
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF1F5F9),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: TextField(
-                    controller: _dateController,
-                    decoration: const InputDecoration(
-                      hintText: 'Seleccionar fecha',
-                      hintStyle:
-                          TextStyle(color: Color(0xFF94A3B8), fontSize: 14),
-                      border: InputBorder.none,
-                      contentPadding:
-                          EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                      suffixIcon: Icon(Icons.calendar_month_rounded,
-                          color: Color(0xFF64748B), size: 18),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 12, vertical: 14),
+                child: Row(
+                  children: [
+                    const Icon(Icons.calendar_month_rounded,
+                        color: Color(0xFF64748B), size: 18),
+                    const SizedBox(width: 8),
+                    Text(
+                      _departureDate == null
+                          ? 'Seleccionar fecha'
+                          : _dateDisplayText,
+                      style: TextStyle(
+                        color: _departureDate == null
+                            ? const Color(0xFF94A3B8)
+                            : const Color(0xFF1E293B),
+                        fontSize: 14,
+                      ),
                     ),
-                  ),
+                  ],
                 ),
               ),
             ),
@@ -293,14 +450,23 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
             const SizedBox(height: 32),
 
             // ── ASIENTOS Y PRECIO ─────────────────────────────────────────
-            const _SectionHeader(icon: Icons.payments_outlined, title: 'Asientos y precio'),
+            const _SectionHeader(
+                icon: Icons.payments_outlined,
+                title: 'Asientos y precio'),
             const SizedBox(height: 16),
-            const _SeatsAndPriceCard(),
+            _SeatsAndPriceCard(
+              seats: _seats,
+              price: _price,
+              onSeatsChanged: (v) => setState(() => _seats = v),
+              onPriceChanged: (v) => setState(() => _price = v),
+            ),
 
             const SizedBox(height: 32),
 
             // ── PREFERENCIAS ──────────────────────────────────────────────
-            const _SectionHeader(icon: Icons.tune_rounded, title: 'Preferencias del conductor'),
+            const _SectionHeader(
+                icon: Icons.tune_rounded,
+                title: 'Preferencias del conductor'),
             const SizedBox(height: 12),
             _PreferenceToggle(
               icon: Icons.pets_rounded,
@@ -313,14 +479,16 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
               icon: Icons.house_rounded,
               title: 'Paso a buscar a cada pasajero',
               value: _picksUpPassengers,
-              onChanged: (v) => setState(() => _picksUpPassengers = v),
+              onChanged: (v) =>
+                  setState(() => _picksUpPassengers = v),
             ),
             const SizedBox(height: 8),
             _PreferenceToggle(
               icon: Icons.door_front_door_rounded,
               title: 'Dejo a cada pasajero en su destino',
               value: _dropsOffPassengers,
-              onChanged: (v) => setState(() => _dropsOffPassengers = v),
+              onChanged: (v) =>
+                  setState(() => _dropsOffPassengers = v),
             ),
 
             const SizedBox(height: 32),
@@ -332,28 +500,204 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
 
             const SizedBox(height: 40),
 
-            // ── BOTÓN SIGUIENTE ───────────────────────────────────────────
+            // ── BOTÓN PUBLICAR ────────────────────────────────────────────
             SizedBox(
               width: double.infinity,
               height: 56,
               child: ElevatedButton(
-                onPressed: () => _onNext(context),
+                onPressed: _publishing ? null : _onNext,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(28)),
                   elevation: 0,
                 ),
-                child: Text(
-                  _picksUpPassengers && _dropsOffPassengers
-                      ? 'Publicar viaje'
-                      : 'Siguiente',
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
-                ),
+                child: _publishing
+                    ? const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                            color: Colors.white, strokeWidth: 2.5),
+                      )
+                    : Text(
+                        _picksUpPassengers && _dropsOffPassengers
+                            ? 'Publicar viaje'
+                            : 'Siguiente',
+                        style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white),
+                      ),
               ),
             ),
             const SizedBox(height: 40),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ── Vehicle selector UI ───────────────────────────────────────────────────────
+
+class _VehicleSelector extends StatelessWidget {
+  const _VehicleSelector({
+    required this.vehicles,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final List<Vehicle> vehicles;
+  final Vehicle? selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF1F5F9),
+          borderRadius: BorderRadius.circular(12),
+          border: selected != null
+              ? Border.all(color: AppColors.primary, width: 1.5)
+              : null,
+        ),
+        child: Row(
+          children: [
+            if (selected != null)
+              Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: Color(selected!.colorHex),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                      color: const Color(0xFFE2E8F0), width: 1),
+                ),
+              )
+            else
+              const Icon(Icons.directions_car_outlined,
+                  color: Color(0xFF94A3B8), size: 22),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                selected != null
+                    ? '${selected!.brand} ${selected!.model} · ${selected!.color}'
+                    : vehicles.isEmpty
+                        ? 'Agregar vehículo'
+                        : 'Seleccionar vehículo',
+                style: TextStyle(
+                  fontSize: 15,
+                  color: selected != null
+                      ? const Color(0xFF1E293B)
+                      : const Color(0xFF94A3B8),
+                ),
+              ),
+            ),
+            const Icon(Icons.chevron_right,
+                color: Color(0xFF94A3B8), size: 20),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Bottom sheet showing the user's existing vehicles + an "Add car" option.
+class _VehiclePickerSheet extends StatelessWidget {
+  const _VehiclePickerSheet({
+    required this.vehicles,
+    required this.onAddNew,
+  });
+
+  final List<Vehicle> vehicles;
+  final VoidCallback onAddNew;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      padding: const EdgeInsets.only(top: 12, bottom: 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: const Color(0xFFE2E8F0),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 20),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Seleccioná tu vehículo',
+                style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1E293B)),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          for (final v in vehicles)
+            ListTile(
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 20),
+              leading: Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: Color(v.colorHex),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                      color: const Color(0xFFE2E8F0), width: 1.5),
+                ),
+              ),
+              title: Text('${v.brand} ${v.model}',
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF1E293B))),
+              subtitle: Text(v.color,
+                  style: const TextStyle(
+                      fontSize: 13, color: Color(0xFF64748B))),
+              onTap: () => Navigator.of(context).pop(v),
+            ),
+          const Divider(height: 1, color: Color(0xFFF1F5F9)),
+          ListTile(
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 20),
+            leading: Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: Colors.transparent,
+                shape: BoxShape.circle,
+                border:
+                    Border.all(color: AppColors.primary, width: 2),
+              ),
+              child: const Icon(Icons.add,
+                  size: 18, color: AppColors.primary),
+            ),
+            title: const Text('Agregar vehículo',
+                style: TextStyle(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w600)),
+            onTap: onAddNew,
+          ),
+        ],
       ),
     );
   }
@@ -424,11 +768,14 @@ class _RangeInputRow extends StatelessWidget {
   final String hint1;
   final String hint2;
 
-  Widget _buildBox(String label, TextEditingController controller, String hint) {
+  Widget _buildBox(
+      String label, TextEditingController controller, String hint) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(fontSize: 10, color: Color(0xFF94A3B8))),
+        Text(label,
+            style: const TextStyle(
+                fontSize: 10, color: Color(0xFF94A3B8))),
         const SizedBox(height: 4),
         Container(
           decoration: BoxDecoration(
@@ -441,10 +788,13 @@ class _RangeInputRow extends StatelessWidget {
             inputFormatters: [formatter],
             decoration: InputDecoration(
               hintText: hint,
-              hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 14),
+              hintStyle: const TextStyle(
+                  color: Color(0xFF94A3B8), fontSize: 14),
               border: InputBorder.none,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-              suffixIcon: Icon(icon, color: const Color(0xFF64748B), size: 18),
+              contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12, vertical: 12),
+              suffixIcon: Icon(icon,
+                  color: const Color(0xFF64748B), size: 18),
             ),
           ),
         ),
@@ -459,7 +809,8 @@ class _RangeInputRow extends StatelessWidget {
         Expanded(child: _buildBox(label1, controller1, hint1)),
         const Padding(
           padding: EdgeInsets.only(top: 14, left: 8, right: 8),
-          child: Text('y', style: TextStyle(color: Color(0xFF64748B))),
+          child:
+              Text('y', style: TextStyle(color: Color(0xFF64748B))),
         ),
         Expanded(child: _buildBox(label2, controller2, hint2)),
       ],
@@ -467,25 +818,23 @@ class _RangeInputRow extends StatelessWidget {
   }
 }
 
-class _SeatsAndPriceCard extends StatefulWidget {
-  const _SeatsAndPriceCard();
+class _SeatsAndPriceCard extends StatelessWidget {
+  const _SeatsAndPriceCard({
+    required this.seats,
+    required this.price,
+    required this.onSeatsChanged,
+    required this.onPriceChanged,
+  });
 
-  @override
-  State<_SeatsAndPriceCard> createState() => _SeatsAndPriceCardState();
-}
-
-class _SeatsAndPriceCardState extends State<_SeatsAndPriceCard> {
-  int _seats = 3;
-  final _priceController = TextEditingController(text: '4500');
-
-  @override
-  void dispose() {
-    _priceController.dispose();
-    super.dispose();
-  }
+  final int seats;
+  final int price;
+  final ValueChanged<int> onSeatsChanged;
+  final ValueChanged<int> onPriceChanged;
 
   @override
   Widget build(BuildContext context) {
+    final priceController =
+        TextEditingController(text: price.toString());
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -503,11 +852,15 @@ class _SeatsAndPriceCardState extends State<_SeatsAndPriceCard> {
                 children: [
                   Text(
                     'Asientos disponibles',
-                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15, color: Color(0xFF1E293B)),
+                    style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 15,
+                        color: Color(0xFF1E293B)),
                   ),
                   Text(
                     'Excluyéndote a ti',
-                    style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                    style: TextStyle(
+                        fontSize: 12, color: Color(0xFF64748B)),
                   ),
                 ],
               ),
@@ -519,16 +872,27 @@ class _SeatsAndPriceCardState extends State<_SeatsAndPriceCard> {
                 child: Row(
                   children: [
                     IconButton(
-                      onPressed: () => setState(() { if (_seats > 1) _seats--; }),
-                      icon: const Icon(Icons.remove, color: AppColors.primary),
+                      onPressed: () {
+                        if (seats > 1) onSeatsChanged(seats - 1);
+                      },
+                      icon: const Icon(Icons.remove,
+                          color: AppColors.primary),
                     ),
                     Text(
-                      '$_seats',
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
+                      '$seats',
+                      style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF1E293B)),
                     ),
                     IconButton(
-                      onPressed: () => setState(() => _seats++),
-                      icon: const Icon(Icons.add, color: AppColors.primary),
+                      onPressed: seats < 5
+                          ? () => onSeatsChanged(seats + 1)
+                          : null,
+                      icon: Icon(Icons.add,
+                          color: seats < 5
+                              ? AppColors.primary
+                              : const Color(0xFFCBD5E1)),
                     ),
                   ],
                 ),
@@ -549,11 +913,15 @@ class _SeatsAndPriceCardState extends State<_SeatsAndPriceCard> {
                 children: [
                   Text(
                     'Precio por asiento',
-                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15, color: Color(0xFF1E293B)),
+                    style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 15,
+                        color: Color(0xFF1E293B)),
                   ),
                   Text(
                     r'Recomendado: $4.500',
-                    style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                    style: TextStyle(
+                        fontSize: 12, color: Color(0xFF64748B)),
                   ),
                 ],
               ),
@@ -564,21 +932,30 @@ class _SeatsAndPriceCardState extends State<_SeatsAndPriceCard> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: TextField(
-                  controller: _priceController,
+                  controller: priceController,
                   keyboardType: TextInputType.number,
                   textAlign: TextAlign.right,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly
+                  ],
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 16),
+                  onChanged: (v) =>
+                      onPriceChanged(int.tryParse(v) ?? 0),
                   decoration: const InputDecoration(
                     prefixIcon: Padding(
                       padding: EdgeInsets.only(left: 12, top: 12),
                       child: Text(
                         'ARS',
-                        style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 13),
+                        style: TextStyle(
+                            color: AppColors.primary,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13),
                       ),
                     ),
                     border: InputBorder.none,
-                    contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    contentPadding: EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 12),
                   ),
                 ),
               ),
@@ -606,26 +983,36 @@ class _PreferenceToggle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding:
+          const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: const Color(0xFFF8FAFC),
         borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
       ),
       child: Row(
         children: [
-          Icon(icon, color: const Color(0xFF64748B), size: 22),
+          Icon(icon,
+              color: value
+                  ? AppColors.primary
+                  : const Color(0xFF94A3B8),
+              size: 22),
           const SizedBox(width: 12),
           Expanded(
-            child: Text(
-              title,
-              style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 15, color: Color(0xFF1E293B)),
-            ),
+            child: Text(title,
+                style: TextStyle(
+                    fontSize: 14,
+                    color: value
+                        ? const Color(0xFF1E293B)
+                        : const Color(0xFF64748B),
+                    fontWeight: value
+                        ? FontWeight.w600
+                        : FontWeight.normal)),
           ),
-          Switch.adaptive(
+          Switch(
             value: value,
             onChanged: onChanged,
-            activeThumbColor: Colors.white,
-            activeTrackColor: AppColors.primary,
+            activeColor: AppColors.primary,
           ),
         ],
       ),
@@ -640,20 +1027,23 @@ class _DescriptionField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: const Color(0xFFF1F5F9),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: TextField(
         controller: controller,
         maxLines: 4,
-        maxLength: 300,
+        maxLength: 500,
+        textCapitalization: TextCapitalization.sentences,
         decoration: const InputDecoration(
-          hintText: 'Detalles sobre el punto de encuentro, equipaje, etc.',
+          hintText:
+              'Contá algo sobre el viaje, condiciones, paradas, etc.',
+          hintStyle:
+              TextStyle(color: Color(0xFF94A3B8), fontSize: 14),
           border: InputBorder.none,
-          hintStyle: TextStyle(color: Color(0xFF94A3B8), fontSize: 14),
-          counterText: '',
+          contentPadding:
+              EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         ),
       ),
     );

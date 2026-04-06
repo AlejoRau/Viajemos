@@ -1,53 +1,258 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../shared/widgets/radius_slider.dart';
+import '../../../shared/formatters/date_formatter.dart';
+import '../../../shared/widgets/city_autocomplete_field.dart';
+import '../../passenger/data/passenger_request_repository.dart';
 
-class _PassengerRequest {
-  const _PassengerRequest({
-    required this.name,
-    required this.origin,
-    required this.destination,
-    required this.date,
-    required this.seats,
-    required this.hasPet,
-    required this.isSmoker,
-    this.price,
-  });
-  final String name;
-  final String origin;
-  final String destination;
-  final String date;
-  final int seats;
-  final bool hasPet;
-  final bool isSmoker;
-  final double? price;
-}
+// ── Pantalla de filtro ────────────────────────────────────────────────────────
 
-const _mockRequests = [
-  _PassengerRequest(name: 'María González', origin: 'Rosario', destination: 'Buenos Aires', date: '05/04/2026', seats: 2, hasPet: true, isSmoker: false, price: 5500),
-  _PassengerRequest(name: 'Juan Pérez', origin: 'Mendoza', destination: 'San Juan', date: '10/04/2026', seats: 1, hasPet: false, isSmoker: false),
-  _PassengerRequest(name: 'Sofía Martínez', origin: 'Córdoba', destination: 'Buenos Aires', date: '08/04/2026', seats: 3, hasPet: false, isSmoker: true, price: 4200),
-];
-
-class PassengerRequestsScreen extends StatefulWidget {
-  const PassengerRequestsScreen({super.key});
+class PassengerRequestsFilterScreen extends StatefulWidget {
+  const PassengerRequestsFilterScreen({super.key});
 
   @override
-  State<PassengerRequestsScreen> createState() => _PassengerRequestsScreenState();
+  State<PassengerRequestsFilterScreen> createState() =>
+      _PassengerRequestsFilterScreenState();
+}
+
+class _PassengerRequestsFilterScreenState
+    extends State<PassengerRequestsFilterScreen> {
+  final _originController = TextEditingController();
+  final _destController = TextEditingController();
+  final _fromDateController = TextEditingController();
+  final _toDateController = TextEditingController();
+
+  @override
+  void dispose() {
+    _originController.dispose();
+    _destController.dispose();
+    _fromDateController.dispose();
+    _toDateController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        leading: BackButton(
+          color: const Color(0xFF1E293B),
+          onPressed: () => context.go('/driver'),
+        ),
+        title: const Text(
+          'Pedidos de pasajeros',
+          style: TextStyle(
+              color: Color(0xFF1E293B), fontWeight: FontWeight.bold),
+        ),
+        bottom: const PreferredSize(
+          preferredSize: Size.fromHeight(1.0),
+          child: Divider(height: 1, color: Color(0xFFE2E8F0)),
+        ),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.05),
+                blurRadius: 20,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // ORIGEN
+              _label('ORIGEN'),
+              _inputField(
+                controller: _originController,
+                hint: 'Ciudad de origen (Opcional)',
+                icon: Icons.trip_origin_rounded,
+              ),
+              const SizedBox(height: 16),
+
+              // DESTINO
+              _label('DESTINO'),
+              _inputField(
+                controller: _destController,
+                hint: 'Destino (Opcional)',
+                icon: Icons.location_on_rounded,
+              ),
+              const SizedBox(height: 20),
+
+              // Fechas
+              _label('FECHA'),
+              Row(
+                children: [
+                  Expanded(child: _dateField('DESDE', _fromDateController)),
+                  const SizedBox(width: 12),
+                  Expanded(child: _dateField('HASTA', _toDateController)),
+                ],
+              ),
+              const SizedBox(height: 28),
+
+              // Botón
+              SizedBox(
+                width: double.infinity,
+                height: 56,
+                child: ElevatedButton(
+                  onPressed: () => context.go(
+                    '/driver/passenger-requests',
+                    extra: {
+                      'origin': _originController.text.trim(),
+                      'destination': _destController.text.trim(),
+                      'dateFrom': _fromDateController.text.trim(),
+                      'dateTo': _toDateController.text.trim(),
+                    },
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1A73E8),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(28)),
+                    elevation: 0,
+                  ),
+                  child: const Text(
+                    'Buscar pedidos',
+                    style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _label(String text) => Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Text(text,
+            style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF64748B))),
+      );
+
+  Widget _inputField({
+    required TextEditingController controller,
+    required String hint,
+    required IconData icon,
+  }) =>
+      CityAutocompleteField(
+        controller: controller,
+        hint: hint,
+        icon: icon,
+        iconColor: const Color(0xFF1A73E8),
+      );
+
+  Widget _dateField(String label, TextEditingController controller) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(label,
+                style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF64748B))),
+          ),
+          Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: TextField(
+              controller: controller,
+              keyboardType: TextInputType.number,
+              inputFormatters: [DayMonthFormatter()],
+              decoration: const InputDecoration(
+                hintText: 'DD/MM',
+                suffixIcon: Icon(Icons.calendar_month,
+                    color: Color(0xFF64748B), size: 18),
+                border: InputBorder.none,
+                contentPadding:
+                    EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                hintStyle: TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
+              ),
+            ),
+          ),
+        ],
+      );
+}
+
+// ── Pantalla de resultados ────────────────────────────────────────────────────
+
+class PassengerRequestsScreen extends StatefulWidget {
+  const PassengerRequestsScreen({
+    super.key,
+    this.origin = '',
+    this.destination = '',
+    this.dateFrom = '',
+    this.dateTo = '',
+  });
+
+  final String origin;
+  final String destination;
+  final String dateFrom;
+  final String dateTo;
+
+  @override
+  State<PassengerRequestsScreen> createState() =>
+      _PassengerRequestsScreenState();
 }
 
 class _PassengerRequestsScreenState extends State<PassengerRequestsScreen> {
-  double _radiusOri = 100;
-  double _radiusDest = 100;
+  late Future<List<PassengerRequest>> _requestsFuture;
   DateTime? _filterDate;
-  final String _originActive = 'Tandil';
-  final String _destActive = '-';
 
   final List<DateTime> _nextDays = List.generate(
     14,
     (index) => DateTime.now().add(Duration(days: index)),
   );
+
+  @override
+  void initState() {
+    super.initState();
+    _requestsFuture = _fetchRequests();
+  }
+
+  Future<List<PassengerRequest>> _fetchRequests() {
+    DateTime? from;
+    DateTime? to;
+    final now = DateTime.now();
+    final year = now.year;
+
+    if (widget.dateFrom.isNotEmpty) {
+      final parts = widget.dateFrom.split('/');
+      if (parts.length == 2) {
+        from = DateTime(year, int.parse(parts[1]), int.parse(parts[0]));
+      }
+    }
+    if (widget.dateTo.isNotEmpty) {
+      final parts = widget.dateTo.split('/');
+      if (parts.length == 2) {
+        to = DateTime(year, int.parse(parts[1]), int.parse(parts[0]));
+      }
+    }
+
+    return PassengerRequestRepository().fetchRequests(
+      origin: widget.origin.isEmpty ? null : widget.origin,
+      destination: widget.destination.isEmpty ? null : widget.destination,
+      dateFrom: from,
+      dateTo: to,
+    );
+  }
 
   String _formatDateShort(DateTime date) {
     final days = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
@@ -55,9 +260,11 @@ class _PassengerRequestsScreenState extends State<PassengerRequestsScreen> {
     return '$dayName ${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}';
   }
 
-  void _showOfferSheet(_PassengerRequest request) {
-    final priceController = TextEditingController(text: request.price?.toInt().toString() ?? '');
-    final cityController = TextEditingController(text: request.destination);
+  void _showOfferSheet(PassengerRequest request) {
+    final priceController = TextEditingController(
+        text: request.maxPrice?.toString() ?? '');
+    final cityController =
+        TextEditingController(text: request.destinationAddress);
     final messageController = TextEditingController();
 
     showModalBottomSheet(
@@ -83,12 +290,17 @@ class _PassengerRequestsScreenState extends State<PassengerRequestsScreen> {
               child: Container(
                 width: 40,
                 height: 4,
-                decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(2)),
+                decoration: BoxDecoration(
+                    color: AppColors.border,
+                    borderRadius: BorderRadius.circular(2)),
               ),
             ),
             const SizedBox(height: 20),
-            Text('Ofrecer viaje a ${request.name}',
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primary)),
+            Text('Ofrecer viaje a ${request.passengerName}',
+                style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.primary)),
             const SizedBox(height: 16),
             TextField(
               controller: priceController,
@@ -122,7 +334,9 @@ class _PassengerRequestsScreenState extends State<PassengerRequestsScreen> {
               onPressed: () {
                 Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Oferta enviada a ${request.name}')),
+                  SnackBar(
+                      content:
+                          Text('Oferta enviada a ${request.passengerName}')),
                 );
               },
               child: const Text('Confirmar oferta'),
@@ -133,11 +347,21 @@ class _PassengerRequestsScreenState extends State<PassengerRequestsScreen> {
     );
   }
 
+  String get _appBarTitle {
+    final origin =
+        widget.origin.isNotEmpty ? widget.origin : 'Pedidos';
+    final dest = widget.destination;
+    return dest.isEmpty ? '$origin  →' : '$origin  →  $dest';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Pedidos de pasajeros'),
+        title: Text(
+          _appBarTitle,
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.go('/driver'),
@@ -145,107 +369,113 @@ class _PassengerRequestsScreenState extends State<PassengerRequestsScreen> {
       ),
       body: Column(
         children: [
-          // Filtros
+          // Filtro de fecha
           Container(
-            padding: const EdgeInsets.all(20),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
             color: AppColors.pageBackground,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('📍 Saliendo desde',
-                              style: TextStyle(fontSize: 11, color: AppColors.textSecondary, fontWeight: FontWeight.w600)),
-                          Text(_originActive,
-                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.primary)),
-                        ],
-                      ),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                color: AppColors.inputBackground,
+                border: Border.all(color: AppColors.border, width: 2),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<DateTime>(
+                  value: _filterDate,
+                  alignment: AlignmentDirectional.centerStart,
+                  hint: const Row(
+                    children: [
+                      Icon(Icons.calendar_today_rounded,
+                          size: 18, color: AppColors.textSecondary),
+                      SizedBox(width: 8),
+                      Text('Filtrar por fecha',
+                          style: TextStyle(
+                              color: AppColors.textSecondary, fontSize: 14)),
+                    ],
+                  ),
+                  isExpanded: true,
+                  icon: const Icon(Icons.keyboard_arrow_down_rounded,
+                      color: AppColors.textSecondary),
+                  items: [
+                    DropdownMenuItem<DateTime>(
+                      value: null,
+                      child: Text('Todas las fechas',
+                          style: TextStyle(
+                              color: AppColors.textPrimary.withOpacity(0.7),
+                              fontSize: 14)),
                     ),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          const Text('🏁 Hacia',
-                              style: TextStyle(fontSize: 11, color: AppColors.textSecondary, fontWeight: FontWeight.w600)),
-                          Text(_destActive,
-                              style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                  color: _destActive == '-' ? AppColors.textSecondary : AppColors.primary)),
-                        ],
-                      ),
-                    ),
+                    ..._nextDays.map((date) => DropdownMenuItem(
+                          value: date,
+                          child: Text(_formatDateShort(date),
+                              style: const TextStyle(
+                                  color: AppColors.textPrimary,
+                                  fontSize: 14)),
+                        )),
                   ],
+                  onChanged: (v) => setState(() => _filterDate = v),
                 ),
-                const SizedBox(height: 16),
-                RadiusSlider(
-                  label: 'Rango máximo salida',
-                  value: _radiusOri,
-                  onChanged: (v) => setState(() => _radiusOri = v),
-                ),
-                const SizedBox(height: 8),
-                RadiusSlider(
-                  label: 'Rango máximo destino',
-                  value: _radiusDest,
-                  onChanged: (v) => setState(() => _radiusDest = v),
-                ),
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  decoration: BoxDecoration(
-                    color: AppColors.inputBackground,
-                    border: Border.all(color: AppColors.border, width: 2),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<DateTime>(
-                      value: _filterDate,
-                      alignment: AlignmentDirectional.centerStart,
-                      hint: const Row(
-                        children: [
-                          Icon(Icons.calendar_today_rounded, size: 18, color: AppColors.textSecondary),
-                          SizedBox(width: 8),
-                          Text('Filtrar por fecha', style: TextStyle(color: AppColors.textSecondary, fontSize: 14)),
-                        ],
-                      ),
-                      isExpanded: true,
-                      icon: const Icon(Icons.keyboard_arrow_down_rounded, color: AppColors.textSecondary),
-                      items: [
-                        DropdownMenuItem<DateTime>(
-                          value: null,
-                          child: Text('Todas las fechas',
-                              style: TextStyle(color: AppColors.textPrimary.withOpacity(0.7), fontSize: 14)),
-                        ),
-                        ..._nextDays.map((date) => DropdownMenuItem(
-                              value: date,
-                              child: Text(_formatDateShort(date),
-                                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 14)),
-                            )),
-                      ],
-                      onChanged: (v) => setState(() => _filterDate = v),
-                    ),
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
 
           // Lista
           Expanded(
-            child: ListView.separated(
-              padding: const EdgeInsets.all(20),
-              itemCount: _mockRequests.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 16),
-              itemBuilder: (_, i) => _RequestCard(
-                request: _mockRequests[i],
-                destFilter: _destActive,
-                onOffer: () => _showOfferSheet(_mockRequests[i]),
-              ),
+            child: FutureBuilder<List<PassengerRequest>>(
+              future: _requestsFuture,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (snapshot.hasError) {
+                  return Center(
+                    child: Text('Error: ${snapshot.error}',
+                        style: const TextStyle(color: Colors.red)),
+                  );
+                }
+                var requests = snapshot.data ?? [];
+
+                // Client-side date filter from dropdown
+                if (_filterDate != null) {
+                  final fd = _filterDate!;
+                  requests = requests.where((r) {
+                    return !r.dateFrom.isAfter(
+                            DateTime(fd.year, fd.month, fd.day, 23, 59)) &&
+                        !r.dateTo.isBefore(
+                            DateTime(fd.year, fd.month, fd.day));
+                  }).toList();
+                }
+
+                if (requests.isEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.search_off_rounded,
+                            size: 64,
+                            color: AppColors.textSecondary
+                                .withValues(alpha: 0.4)),
+                        const SizedBox(height: 16),
+                        const Text('No hay pedidos por ahora',
+                            style: TextStyle(
+                                fontSize: 16,
+                                color: AppColors.textSecondary)),
+                      ],
+                    ),
+                  );
+                }
+
+                return ListView.separated(
+                  padding: const EdgeInsets.all(20),
+                  itemCount: requests.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 16),
+                  itemBuilder: (_, i) => _RequestCard(
+                    request: requests[i],
+                    onOffer: () => _showOfferSheet(requests[i]),
+                  ),
+                );
+              },
             ),
           ),
         ],
@@ -254,35 +484,29 @@ class _PassengerRequestsScreenState extends State<PassengerRequestsScreen> {
   }
 }
 
-class _RequestCard extends StatelessWidget {
-  const _RequestCard({required this.request, required this.onOffer, required this.destFilter});
-  final _PassengerRequest request;
-  final String destFilter;
-  final VoidCallback onOffer;
+// ── Card ──────────────────────────────────────────────────────────────────────
 
-  String _getDist(String city) {
-    // Mock de distancias desde Tandil o entre ciudades
-    final dists = {
-      'Rosario': 450,
-      'Buenos Aires': 350,
-      'Ayacucho': 72,
-      'Rauch': 70,
-      'Mendoza': 1100,
-      'San Juan': 1200,
-      'Córdoba': 800,
-    };
-    return '${dists[city] ?? 100} kms';
-  }
+class _RequestCard extends StatelessWidget {
+  const _RequestCard({required this.request, required this.onOffer});
+  final PassengerRequest request;
+  final VoidCallback onOffer;
 
   @override
   Widget build(BuildContext context) {
+    final initials = request.passengerName.isNotEmpty
+        ? request.passengerName[0].toUpperCase()
+        : '?';
+
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: AppColors.background,
         border: Border.all(color: AppColors.border, width: 2),
         borderRadius: BorderRadius.circular(20),
-        boxShadow: const [BoxShadow(color: Color(0x0A000000), blurRadius: 8, offset: Offset(0, 2))],
+        boxShadow: const [
+          BoxShadow(
+              color: Color(0x0A000000), blurRadius: 8, offset: Offset(0, 2))
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -296,23 +520,53 @@ class _RequestCard extends StatelessWidget {
                   CircleAvatar(
                     radius: 20,
                     backgroundColor: AppColors.primaryLight,
-                    child: Text(request.name[0],
-                        style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
+                    child: Text(initials,
+                        style: const TextStyle(
+                            color: AppColors.primary,
+                            fontWeight: FontWeight.bold)),
                   ),
                   const SizedBox(width: 10),
-                  Text(request.name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(request.passengerName,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w600, fontSize: 15)),
+                      if (request.avgRating != null)
+                        Row(
+                          children: [
+                            const Icon(Icons.star_rounded,
+                                size: 13, color: Color(0xFFF59E0B)),
+                            const SizedBox(width: 3),
+                            Text(
+                              request.avgRating!.toStringAsFixed(1),
+                              style: const TextStyle(
+                                  fontSize: 12,
+                                  color: AppColors.textSecondary),
+                            ),
+                          ],
+                        ),
+                    ],
+                  ),
                 ],
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: request.price != null ? AppColors.greenLight : AppColors.primaryLight,
+                  color: request.maxPrice != null
+                      ? AppColors.greenLight
+                      : AppColors.primaryLight,
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
-                  request.price != null ? '\$${request.price!.toInt()}' : 'A convenir',
+                  request.maxPrice != null
+                      ? '\$${request.maxPrice}'
+                      : 'A convenir',
                   style: TextStyle(
-                    color: request.price != null ? AppColors.green : AppColors.primary,
+                    color: request.maxPrice != null
+                        ? AppColors.green
+                        : AppColors.primary,
                     fontWeight: FontWeight.bold,
                     fontSize: 13,
                   ),
@@ -325,16 +579,20 @@ class _RequestCard extends StatelessWidget {
           // Ruta
           Row(
             children: [
-              Text('${request.origin} (${_getDist(request.origin)})', style: const TextStyle(fontWeight: FontWeight.w500)),
+              Flexible(
+                child: Text(request.originAddress,
+                    style: const TextStyle(fontWeight: FontWeight.w500),
+                    overflow: TextOverflow.ellipsis),
+              ),
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 6),
-                child: Icon(Icons.arrow_forward, size: 16, color: AppColors.primary),
+                child: Icon(Icons.arrow_forward,
+                    size: 16, color: AppColors.primary),
               ),
-              Text(
-                destFilter == '-'
-                    ? request.destination
-                    : '${request.destination} (${_getDist(request.destination)})',
-                style: const TextStyle(fontWeight: FontWeight.w500),
+              Flexible(
+                child: Text(request.destinationAddress,
+                    style: const TextStyle(fontWeight: FontWeight.w500),
+                    overflow: TextOverflow.ellipsis),
               ),
             ],
           ),
@@ -343,14 +601,29 @@ class _RequestCard extends StatelessWidget {
           // Fecha y asientos
           Row(
             children: [
-              const Icon(Icons.calendar_today_rounded, size: 13, color: AppColors.textSecondary),
+              const Icon(Icons.calendar_today_rounded,
+                  size: 13, color: AppColors.textSecondary),
               const SizedBox(width: 4),
-              Text(request.date, style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
-              const SizedBox(width: 16),
-              const Icon(Icons.people_rounded, size: 14, color: AppColors.textSecondary),
+              Text(request.formattedDateRange,
+                  style: const TextStyle(
+                      fontSize: 13, color: AppColors.textSecondary)),
+              if (request.timeWindow.isNotEmpty) ...[
+                const SizedBox(width: 12),
+                const Icon(Icons.access_time_rounded,
+                    size: 13, color: AppColors.textSecondary),
+                const SizedBox(width: 4),
+                Text(request.timeWindow,
+                    style: const TextStyle(
+                        fontSize: 13, color: AppColors.textSecondary)),
+              ],
+              const SizedBox(width: 12),
+              const Icon(Icons.people_rounded,
+                  size: 14, color: AppColors.textSecondary),
               const SizedBox(width: 4),
-              Text('${request.seats} asiento${request.seats > 1 ? 's' : ''}',
-                  style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+              Text(
+                  '${request.seatsNeeded} asiento${request.seatsNeeded > 1 ? 's' : ''}',
+                  style: const TextStyle(
+                      fontSize: 13, color: AppColors.textSecondary)),
             ],
           ),
 
@@ -360,13 +633,35 @@ class _RequestCard extends StatelessWidget {
             Row(
               children: [
                 if (request.hasPet)
-                  _Badge(label: 'Mascota', icon: Icons.pets_rounded, bg: AppColors.greenLight, fg: AppColors.green),
-                if (request.hasPet && request.isSmoker) const SizedBox(width: 8),
+                  _Badge(
+                      label: 'Mascota',
+                      icon: Icons.pets_rounded,
+                      bg: AppColors.greenLight,
+                      fg: AppColors.green),
+                if (request.hasPet && request.isSmoker)
+                  const SizedBox(width: 8),
                 if (request.isSmoker)
-                  _Badge(label: 'Fumador', icon: Icons.smoking_rooms_rounded, bg: AppColors.orangeLight, fg: AppColors.orange),
+                  _Badge(
+                      label: 'Fumador',
+                      icon: Icons.smoking_rooms_rounded,
+                      bg: AppColors.orangeLight,
+                      fg: AppColors.orange),
               ],
             ),
           ],
+
+          if (request.description != null &&
+              request.description!.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              request.description!,
+              style: const TextStyle(
+                  fontSize: 13, color: AppColors.textSecondary),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+
           const SizedBox(height: 12),
 
           // Botón
@@ -374,7 +669,8 @@ class _RequestCard extends StatelessWidget {
             width: double.infinity,
             child: ElevatedButton(
               onPressed: onOffer,
-              style: ElevatedButton.styleFrom(minimumSize: const Size(double.infinity, 44)),
+              style: ElevatedButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 44)),
               child: const Text('Ofrecer viaje'),
             ),
           ),
@@ -385,7 +681,11 @@ class _RequestCard extends StatelessWidget {
 }
 
 class _Badge extends StatelessWidget {
-  const _Badge({required this.label, required this.icon, required this.bg, required this.fg});
+  const _Badge(
+      {required this.label,
+      required this.icon,
+      required this.bg,
+      required this.fg});
   final String label;
   final IconData icon;
   final Color bg;
@@ -395,13 +695,16 @@ class _Badge extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(20)),
+      decoration:
+          BoxDecoration(color: bg, borderRadius: BorderRadius.circular(20)),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon, size: 13, color: fg),
           const SizedBox(width: 4),
-          Text(label, style: TextStyle(fontSize: 12, color: fg, fontWeight: FontWeight.w500)),
+          Text(label,
+              style: TextStyle(
+                  fontSize: 12, color: fg, fontWeight: FontWeight.w500)),
         ],
       ),
     );
