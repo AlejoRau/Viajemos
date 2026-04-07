@@ -1,0 +1,27 @@
+# Flutter/Dart generated files
+.dart_tool/
+build/
+*.g.dart
+*.freezed.dart
+
+# pub
+.packages
+.pub-cache/
+.pub/
+
+# Android
+android/local.properties
+android/.gradle/
+
+# iOS
+ios/Pods/
+ios/.symlinks/
+
+# macOS
+macos/Pods/
+macos/.symlinks/
+
+# IDE
+.idea/
+.vscode/
+*.iml

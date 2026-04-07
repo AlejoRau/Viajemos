@@ -1,3 +1,7 @@
+# ==============================================================================
+# PROYECTO VIAJEMOS - .gitignore
+# ==============================================================================
+
 # Claude Code local settings (may contain secrets)
 .claude/settings.local.json
 
@@ -5,3 +9,55 @@
 .env
 .env.local
 .env.*.local
+
+# ------------------------------------------------------------------------------
+# FLUTTER / DART
+# ------------------------------------------------------------------------------
+viajemos_app/.dart_tool/
+viajemos_app/build/
+viajemos_app/.packages
+viajemos_app/.pub-cache/
+viajemos_app/.flutter-plugins
+viajemos_app/.flutter-plugins-dependencies
+viajemos_app/ios/Flutter/Generated.xcconfig
+viajemos_app/ios/Flutter/flutter_export_environment.sh
+viajemos_app/ios/Flutter/Flutter.podspec
+viajemos_app/ios/Flutter/Flutter.framework
+viajemos_app/ios/Flutter/App.framework
+viajemos_app/ios/Runner/GeneratedPluginRegistrant.h
+viajemos_app/ios/Runner/GeneratedPluginRegistrant.m
+viajemos_app/android/.gradle/
+viajemos_app/android/app/key.properties
+viajemos_app/android/local.properties
+
+# ------------------------------------------------------------------------------
+# SUPABASE
+# ------------------------------------------------------------------------------
+supabase/.temp/
+
+# ------------------------------------------------------------------------------
+# IDE / EDITORS (VS Code, IntelliJ, etc)
+# ------------------------------------------------------------------------------
+.vscode/
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# ------------------------------------------------------------------------------
+# SYSTEM JUNK (Windows, macOS)
+# ------------------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# ------------------------------------------------------------------------------
+# LOGS & TEMP
+# ------------------------------------------------------------------------------
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+tmp/
+temp/
