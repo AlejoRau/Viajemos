@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../shared/widgets/public_profile_sheet.dart';
 import '../data/trip_search_repository.dart';
 import '../domain/trip_search_result.dart';
 
@@ -434,6 +435,13 @@ class _TripDetailsSheet extends StatefulWidget {
 
 class _TripDetailsSheetState extends State<_TripDetailsSheet> {
   bool _sending = false;
+  final _messageController = TextEditingController();
+
+  @override
+  void dispose() {
+    _messageController.dispose();
+    super.dispose();
+  }
 
   TripSearchResult get trip => widget.trip;
 
@@ -448,6 +456,9 @@ class _TripDetailsSheetState extends State<_TripDetailsSheet> {
       await TripSearchRepository().createTripRequest(
         tripId: trip.id,
         seatsRequested: 1,
+        message: _messageController.text.trim().isEmpty
+            ? null
+            : _messageController.text.trim(),
       );
       if (mounted) {
         final messenger = ScaffoldMessenger.of(context);
@@ -553,54 +564,57 @@ class _TripDetailsSheetState extends State<_TripDetailsSheet> {
                   const Divider(color: Color(0xFFE2E8F0)),
                   const SizedBox(height: 20),
 
-                  // Driver
-                  Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 28,
-                        backgroundColor: AppColors.primaryLight,
-                        child: Text(trip.driverInitials,
-                            style: const TextStyle(
-                                color: AppColors.primary,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16)),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment:
-                              CrossAxisAlignment.start,
-                          children: [
-                            Text(trip.driverName,
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 15,
-                                    color: Color(0xFF1E293B))),
-                            const SizedBox(height: 3),
-                            Row(
-                              children: [
-                                const Icon(Icons.star_rounded,
-                                    size: 15,
-                                    color: Color(0xFFFACC15)),
-                                const SizedBox(width: 3),
-                                Text(
-                                  trip.driverRating > 0
-                                      ? trip.driverRating
-                                          .toStringAsFixed(1)
-                                      : 'Sin calificación',
-                                  style: const TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                      color: Color(0xFF1E293B)),
-                                ),
-                              ],
-                            ),
-                          ],
+                  // Driver — tap to see public profile
+                  GestureDetector(
+                    onTap: () => showPublicProfile(context, trip.driverId),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 28,
+                          backgroundColor: AppColors.primaryLight,
+                          child: Text(trip.driverInitials,
+                              style: const TextStyle(
+                                  color: AppColors.primary,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16)),
                         ),
-                      ),
-                      const Icon(Icons.chevron_right,
-                          color: Color(0xFFCBD5E1), size: 22),
-                    ],
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment:
+                                CrossAxisAlignment.start,
+                            children: [
+                              Text(trip.driverName,
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 15,
+                                      color: Color(0xFF1E293B))),
+                              const SizedBox(height: 3),
+                              Row(
+                                children: [
+                                  const Icon(Icons.star_rounded,
+                                      size: 15,
+                                      color: Color(0xFFFACC15)),
+                                  const SizedBox(width: 3),
+                                  Text(
+                                    trip.driverRating > 0
+                                        ? trip.driverRating
+                                            .toStringAsFixed(1)
+                                        : 'Sin calificación',
+                                    style: const TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                        color: Color(0xFF1E293B)),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Icon(Icons.chevron_right,
+                            color: AppColors.primary, size: 22),
+                      ],
+                    ),
                   ),
 
                   const SizedBox(height: 20),
@@ -747,7 +761,7 @@ class _TripDetailsSheetState extends State<_TripDetailsSheet> {
             ),
           ),
 
-          // Bottom button
+          // Message + send button
           Container(
             padding:
                 const EdgeInsets.fromLTRB(24, 12, 24, 24),
@@ -756,7 +770,30 @@ class _TripDetailsSheetState extends State<_TripDetailsSheet> {
               border: Border(
                   top: BorderSide(color: Color(0xFFE2E8F0))),
             ),
-            child: SizedBox(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: _messageController,
+                  maxLines: 2,
+                  minLines: 1,
+                  textCapitalization: TextCapitalization.sentences,
+                  decoration: InputDecoration(
+                    hintText: 'Mensaje para el conductor (opcional)',
+                    hintStyle: const TextStyle(
+                        fontSize: 13, color: Color(0xFF94A3B8)),
+                    filled: true,
+                    fillColor: const Color(0xFFF1F5F9),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 10),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
               width: double.infinity,
               height: 54,
               child: ElevatedButton(
@@ -780,6 +817,8 @@ class _TripDetailsSheetState extends State<_TripDetailsSheet> {
                             fontWeight: FontWeight.bold,
                             color: Colors.white)),
               ),
+            ),
+              ],
             ),
           ),
         ],

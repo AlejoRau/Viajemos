@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/providers/role_provider.dart';
+import '../../../shared/widgets/public_profile_sheet.dart';
 import '../data/history_repository.dart';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -414,20 +415,20 @@ class _ActiveTripCardState extends ConsumerState<_ActiveTripCard> {
             ),
           ),
 
-          // Pending requests badge (top-right)
+          // Pending requests badge (bottom-left inside card, above card margin)
           if (hasPending)
             Positioned(
-              top: -6,
-              right: 10,
+              bottom: 22,
+              left: 16,
               child: Container(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: Colors.red.shade600,
+                  color: Colors.green.shade600,
                   borderRadius: BorderRadius.circular(12),
                   boxShadow: [
                     BoxShadow(
-                        color: Colors.red.withValues(alpha: 0.3),
+                        color: Colors.green.withValues(alpha: 0.3),
                         blurRadius: 6,
                         offset: const Offset(0, 2)),
                   ],
@@ -1141,18 +1142,21 @@ class _RequestEntry extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Passenger info row
+          // Passenger info row — tap avatar/name to see public profile
           Row(
             children: [
-              CircleAvatar(
-                radius: 22,
-                backgroundColor: AppColors.primaryLight,
-                child: Text(
-                  _initials(entry.passengerName),
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.primary,
+              GestureDetector(
+                onTap: () => showPublicProfile(context, entry.passengerId),
+                child: CircleAvatar(
+                  radius: 22,
+                  backgroundColor: AppColors.primaryLight,
+                  child: Text(
+                    _initials(entry.passengerName),
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.primary,
+                    ),
                   ),
                 ),
               ),
@@ -1161,12 +1165,23 @@ class _RequestEntry extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      entry.passengerName,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textPrimary,
+                    GestureDetector(
+                      onTap: () => showPublicProfile(context, entry.passengerId),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            entry.passengerName,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(width: 2),
+                          const Icon(Icons.chevron_right_rounded,
+                              size: 18, color: AppColors.primary),
+                        ],
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -1259,6 +1274,7 @@ class _RequestEntry extends StatelessWidget {
                     style: OutlinedButton.styleFrom(
                       foregroundColor: Colors.red,
                       side: const BorderSide(color: Colors.red),
+                      minimumSize: const Size(0, 44),
                       padding: const EdgeInsets.symmetric(vertical: 10),
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10)),
@@ -1276,6 +1292,7 @@ class _RequestEntry extends StatelessWidget {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.green,
                       foregroundColor: Colors.white,
+                      minimumSize: const Size(0, 44),
                       padding: const EdgeInsets.symmetric(vertical: 10),
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10)),

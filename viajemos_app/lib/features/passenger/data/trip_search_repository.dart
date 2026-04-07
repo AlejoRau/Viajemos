@@ -13,6 +13,7 @@ class TripSearchRepository {
   }) async {
     var query = _client.from('trips').select('''
       id,
+      owner_id,
       origin_address,
       destination_address,
       departure_date,

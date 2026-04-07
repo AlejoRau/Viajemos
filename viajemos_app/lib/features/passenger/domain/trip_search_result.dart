@@ -1,6 +1,7 @@
 class TripSearchResult {
   const TripSearchResult({
     required this.id,
+    required this.driverId,
     required this.driverName,
     required this.driverRating,
     required this.originAddress,
@@ -22,6 +23,7 @@ class TripSearchResult {
   });
 
   final String id;
+  final String driverId;
   final String driverName;
   final double driverRating;
   final String originAddress;
@@ -105,6 +107,7 @@ class TripSearchResult {
     final vehicle = json['vehicles'] as Map<String, dynamic>?;
     return TripSearchResult(
       id: json['id'] as String,
+      driverId: json['owner_id'] as String,
       driverName: (profile['full_name'] as String?) ?? 'Conductor',
       driverRating:
           (profile['avg_rating'] as num?)?.toDouble() ?? 0.0,

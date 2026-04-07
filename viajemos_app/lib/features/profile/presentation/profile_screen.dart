@@ -407,6 +407,14 @@ class _InfoPersonalTab extends StatelessWidget {
           const SizedBox(height: 20),
 
           // ── Sobre mí ──────────────────────────────────────────────────
+          Row(
+            children: [
+              const _SectionHeading('Sobre mí'),
+              const SizedBox(width: 8),
+              _AutoSaveIndicator(bioSaveStatus),
+            ],
+          ),
+          const SizedBox(height: 12),
           Container(
             width: double.infinity,
             constraints: const BoxConstraints(minHeight: 130),
@@ -415,45 +423,25 @@ class _InfoPersonalTab extends StatelessWidget {
               color: AppColors.pageBackground,
               borderRadius: BorderRadius.circular(16),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    const Text(
-                      'Sobre mí',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    _AutoSaveIndicator(bioSaveStatus),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: bioController,
-                  minLines: 4,
-                  maxLines: null,
-                  cursorColor: AppColors.textPrimary,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    color: AppColors.textPrimary,
-                    height: 1.6,
-                  ),
-                  decoration: InputDecoration(
-                    border: InputBorder.none,
-                    isDense: true,
-                    contentPadding: EdgeInsets.zero,
-                    hintText: 'Contá algo sobre vos...',
-                    hintStyle: TextStyle(
-                        color: AppColors.textSecondary.withValues(alpha: 0.6),
-                        fontSize: 14),
-                  ),
-                ),
-              ],
+            child: TextField(
+              controller: bioController,
+              minLines: 4,
+              maxLines: null,
+              cursorColor: AppColors.textPrimary,
+              style: const TextStyle(
+                fontSize: 14,
+                color: AppColors.textPrimary,
+                height: 1.6,
+              ),
+              decoration: InputDecoration(
+                border: InputBorder.none,
+                isDense: true,
+                contentPadding: EdgeInsets.zero,
+                hintText: 'Contá algo sobre vos...',
+                hintStyle: TextStyle(
+                    color: AppColors.textSecondary.withValues(alpha: 0.6),
+                    fontSize: 14),
+              ),
             ),
           ),
           const SizedBox(height: 20),
