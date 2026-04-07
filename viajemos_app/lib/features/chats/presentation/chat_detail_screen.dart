@@ -119,7 +119,32 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
     final text = _textController.text.trim();
     if (text.isEmpty) return;
     _textController.clear();
-    await _chatRepo.sendMessage(widget.chatId, text);
+
+    // Optimistic update: show message immediately
+    final tempId = 'temp-${DateTime.now().millisecondsSinceEpoch}';
+    final myId = Supabase.instance.client.auth.currentUser!.id;
+    final optimistic = ChatMessage(
+      id: tempId,
+      conversationId: widget.chatId,
+      senderId: myId,
+      content: text,
+      createdAt: DateTime.now(),
+      isMine: true,
+    );
+    setState(() => _messages.add(optimistic));
+    _scrollToBottom();
+
+    try {
+      await _chatRepo.sendMessage(widget.chatId, text);
+    } catch (_) {
+      // Revert optimistic update on failure
+      if (mounted) {
+        setState(() => _messages.removeWhere((m) => m.id == tempId));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No se pudo enviar el mensaje')),
+        );
+      }
+    }
   }
 
   Future<void> _handleRequest(bool accept) async {

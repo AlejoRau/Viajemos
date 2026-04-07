@@ -71,6 +71,7 @@ class ActiveDriverTrip {
     required this.status,
     required this.pendingRequestsCount,
     required this.acceptedPassengerNames,
+    required this.acceptedPassengerIds,
     required this.via,
     required this.stops,
     required this.allowsPets,
@@ -93,6 +94,7 @@ class ActiveDriverTrip {
   final String status;
   final int pendingRequestsCount;
   final List<String> acceptedPassengerNames;
+  final List<String> acceptedPassengerIds;
   final List<String> via;
   final List<String> stops;
   final bool allowsPets;
@@ -160,6 +162,8 @@ class HistoryRepository {
         pendingRequestsCount: (row['pending_requests_count'] as num?)?.toInt() ?? 0,
         acceptedPassengerNames:
             (row['accepted_passenger_names'] as List?)?.cast<String>() ?? [],
+        acceptedPassengerIds:
+            (row['accepted_passenger_ids'] as List?)?.cast<String>() ?? [],
         via: (row['via'] as List?)?.cast<String>() ?? [],
         stops: (row['stops'] as List?)?.cast<String>() ?? [],
         allowsPets: row['allows_pets'] as bool? ?? false,

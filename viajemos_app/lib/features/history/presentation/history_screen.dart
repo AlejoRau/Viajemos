@@ -167,6 +167,16 @@ class _ActiveTripCard extends ConsumerStatefulWidget {
 class _ActiveTripCardState extends ConsumerState<_ActiveTripCard> {
   bool _deleting = false;
 
+  void _showPassengerList(
+      BuildContext context, List<String> names, List<String> ids) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _PassengerListSheet(names: names, ids: ids),
+    );
+  }
+
   Future<void> _confirmDelete() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -293,10 +303,17 @@ class _ActiveTripCardState extends ConsumerState<_ActiveTripCard> {
                         ),
                       ),
                       const Spacer(),
-                      // Accepted passenger avatars
+                      // Accepted passenger avatars (clickable)
                       if (trip.acceptedPassengerNames.isNotEmpty)
-                        _OverlappingAvatars(
-                            names: trip.acceptedPassengerNames),
+                        GestureDetector(
+                          onTap: () => _showPassengerList(
+                            context,
+                            trip.acceptedPassengerNames,
+                            trip.acceptedPassengerIds,
+                          ),
+                          child: _OverlappingAvatars(
+                              names: trip.acceptedPassengerNames),
+                        ),
                       const SizedBox(width: 4),
                       // Delete button
                       SizedBox(
@@ -614,46 +631,117 @@ class _DriverTripDetailsSheet extends StatelessWidget {
                   const Divider(color: Color(0xFFE2E8F0)),
                   const SizedBox(height: 16),
 
-                  // Seats
-                  const Text('Viajeros',
-                      style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF1E293B))),
-                  const SizedBox(height: 8),
+                  // Seats / Passengers
                   Row(
                     children: [
-                      for (int i = 0; i < trip.seatsTaken; i++)
-                        Padding(
-                          padding: const EdgeInsets.only(right: 6),
-                          child: CircleAvatar(
-                            radius: 14,
-                            backgroundColor: AppColors.primary,
-                            child: const Icon(Icons.person,
-                                size: 15, color: Colors.white),
-                          ),
-                        ),
-                      for (int i = 0; i < trip.freeSeats; i++)
-                        Padding(
-                          padding: const EdgeInsets.only(right: 6),
-                          child: CircleAvatar(
-                            radius: 14,
-                            backgroundColor: AppColors.inputBackground,
-                            child: const Icon(Icons.person_outline,
-                                size: 15,
-                                color: AppColors.textSecondary),
-                          ),
-                        ),
-                      const SizedBox(width: 8),
+                      const Text('Viajeros',
+                          style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF1E293B))),
+                      const Spacer(),
                       Text(
                         '${trip.seatsTaken}/${trip.availableSeats} ocupados',
                         style: const TextStyle(
-                            fontSize: 13,
+                            fontSize: 12,
                             color: AppColors.textSecondary,
-                            fontWeight: FontWeight.w600),
+                            fontWeight: FontWeight.w500),
                       ),
                     ],
                   ),
+                  const SizedBox(height: 10),
+                  if (trip.acceptedPassengerNames.isNotEmpty)
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.pop(context);
+                        showModalBottomSheet(
+                          context: context,
+                          isScrollControlled: true,
+                          backgroundColor: Colors.transparent,
+                          builder: (_) => _PassengerListSheet(
+                            names: trip.acceptedPassengerNames,
+                            ids: trip.acceptedPassengerIds,
+                          ),
+                        );
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: AppColors.inputBackground,
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Row(
+                          children: [
+                            // Overlapping big avatars
+                            SizedBox(
+                              height: 44,
+                              width: trip.acceptedPassengerNames.length == 1
+                                  ? 44
+                                  : 44 +
+                                      (trip.acceptedPassengerNames
+                                                  .take(4)
+                                                  .length -
+                                              1) *
+                                          28.0,
+                              child: Stack(
+                                children: [
+                                  for (int i = 0;
+                                      i <
+                                          trip.acceptedPassengerNames
+                                              .take(4)
+                                              .length;
+                                      i++)
+                                    Positioned(
+                                      left: i * 28.0,
+                                      child: _MiniAvatar(
+                                        name: trip.acceptedPassengerNames[i],
+                                        index: i,
+                                        size: 44,
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                trip.acceptedPassengerNames.length == 1
+                                    ? trip.acceptedPassengerNames.first
+                                    : '${trip.acceptedPassengerNames.length} pasajeros aceptados',
+                                style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF1E293B)),
+                              ),
+                            ),
+                            const Icon(Icons.chevron_right_rounded,
+                                color: AppColors.textSecondary, size: 20),
+                          ],
+                        ),
+                      ),
+                    )
+                  else
+                    Row(
+                      children: [
+                        for (int i = 0; i < trip.freeSeats; i++)
+                          Padding(
+                            padding: const EdgeInsets.only(right: 6),
+                            child: CircleAvatar(
+                              radius: 18,
+                              backgroundColor: AppColors.inputBackground,
+                              child: const Icon(Icons.person_outline,
+                                  size: 18,
+                                  color: AppColors.textSecondary),
+                            ),
+                          ),
+                        const SizedBox(width: 8),
+                        const Text('Sin pasajeros aún',
+                            style: TextStyle(
+                                fontSize: 13,
+                                color: AppColors.textSecondary)),
+                      ],
+                    ),
                   const SizedBox(height: 16),
 
                   // Price
@@ -859,9 +947,10 @@ class _OverlappingAvatars extends StatelessWidget {
 }
 
 class _MiniAvatar extends StatelessWidget {
-  const _MiniAvatar({required this.name, required this.index});
+  const _MiniAvatar({required this.name, required this.index, this.size = 28});
   final String name;
   final int index;
+  final double size;
 
   static const _colors = [
     AppColors.primary,
@@ -873,8 +962,8 @@ class _MiniAvatar extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = _colors[index % _colors.length];
     return Container(
-      width: 28,
-      height: 28,
+      width: size,
+      height: size,
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.15),
         shape: BoxShape.circle,
@@ -884,10 +973,85 @@ class _MiniAvatar extends StatelessWidget {
       child: Text(
         _initials(name),
         style: TextStyle(
-          fontSize: 9,
+          fontSize: size * 0.32,
           fontWeight: FontWeight.w700,
           color: color,
         ),
+      ),
+    );
+  }
+}
+
+// ── Passenger list bottom sheet ───────────────────────────────────────────
+
+class _PassengerListSheet extends StatelessWidget {
+  const _PassengerListSheet({required this.names, required this.ids});
+  final List<String> names;
+  final List<String> ids;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      padding: const EdgeInsets.only(top: 12, bottom: 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Center(
+            child: Container(
+              width: 40, height: 4,
+              decoration: BoxDecoration(
+                  color: const Color(0xFFE2E8F0),
+                  borderRadius: BorderRadius.circular(2)),
+            ),
+          ),
+          const SizedBox(height: 16),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 20),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Pasajeros aceptados',
+                style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1E293B)),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          for (int i = 0; i < names.length; i++)
+            InkWell(
+              onTap: () {
+                Navigator.pop(context);
+                showPublicProfile(context, ids[i]);
+              },
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 20, vertical: 12),
+                child: Row(
+                  children: [
+                    _MiniAvatar(name: names[i], index: i, size: 44),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Text(
+                        names[i],
+                        style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF1E293B)),
+                      ),
+                    ),
+                    const Icon(Icons.chevron_right_rounded,
+                        color: AppColors.textSecondary, size: 22),
+                  ],
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

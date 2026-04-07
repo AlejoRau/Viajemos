@@ -168,13 +168,15 @@ class ChatRepository {
           callback: (payload) {
             final row = payload.newRecord;
             if (row['conversation_id'] != conversationId) return;
+            // Skip own messages — they're added optimistically in the UI
+            if (row['sender_id'] == myId) return;
             onNewMessage(ChatMessage(
               id: row['id'] as String,
               conversationId: row['conversation_id'] as String,
               senderId: row['sender_id'] as String,
               content: row['content'] as String,
               createdAt: DateTime.parse(row['created_at'] as String),
-              isMine: row['sender_id'] == myId,
+              isMine: false,
             ));
           },
         )
