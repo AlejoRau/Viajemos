@@ -230,11 +230,11 @@ class _TripCard extends StatelessWidget {
             ),
             const SizedBox(height: 12),
 
-            // Route
+            // Route — show city names only
             Row(
               children: [
                 Flexible(
-                  child: Text(trip.originAddress,
+                  child: Text(trip.originCity,
                       style: const TextStyle(
                           fontWeight: FontWeight.w600,
                           fontSize: 15),
@@ -246,7 +246,7 @@ class _TripCard extends StatelessWidget {
                       size: 15, color: AppColors.primary),
                 ),
                 Flexible(
-                  child: Text(trip.destinationAddress,
+                  child: Text(trip.destinationCity,
                       style: const TextStyle(
                           fontWeight: FontWeight.w600,
                           fontSize: 15),
@@ -454,11 +454,11 @@ class _TripDetailsSheet extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
 
-                  // Route
+                  // Route — cities
                   Row(
                     children: [
                       Flexible(
-                        child: Text(trip.originAddress,
+                        child: Text(trip.originCity,
                             style: const TextStyle(
                                 fontSize: 15,
                                 fontWeight: FontWeight.w500,
@@ -471,7 +471,7 @@ class _TripDetailsSheet extends StatelessWidget {
                             size: 15, color: AppColors.primary),
                       ),
                       Flexible(
-                        child: Text(trip.destinationAddress,
+                        child: Text(trip.destinationCity,
                             style: const TextStyle(
                                 fontSize: 15,
                                 fontWeight: FontWeight.w500,
@@ -479,6 +479,21 @@ class _TripDetailsSheet extends StatelessWidget {
                       ),
                     ],
                   ),
+                  // Specific addresses (only shown when there's address detail)
+                  if (trip.originDetailAddress != null ||
+                      trip.destinationDetailAddress != null) ...[
+                    const SizedBox(height: 10),
+                    if (trip.originDetailAddress != null)
+                      _DetailRow(
+                          icon: Icons.trip_origin_rounded,
+                          text: 'Salida: ${trip.originDetailAddress!}'),
+                    if (trip.destinationDetailAddress != null) ...[
+                      const SizedBox(height: 6),
+                      _DetailRow(
+                          icon: Icons.place_rounded,
+                          text: 'Llegada: ${trip.destinationDetailAddress!}'),
+                    ],
+                  ],
                   const SizedBox(height: 24),
                   const Divider(color: Color(0xFFE2E8F0)),
                   const SizedBox(height: 20),

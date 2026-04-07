@@ -8,51 +8,55 @@ import '../../../shared/formatters/date_formatter.dart';
 import '../../../features/vehicles/data/vehicles_provider.dart';
 import '../../../features/vehicles/domain/vehicle.dart';
 import '../../../shared/widgets/vehicle_selector_sheet.dart';
+import '../../../shared/services/city_search_service.dart';
 import '../../../shared/widgets/city_autocomplete_field.dart';
 import '../data/trip_repository.dart';
 import 'trip_map_screen.dart';
 
 const _routeSuggestions = [
-  'Ruta Nacional 9',
+  // Nacionales principales
+  'Ruta Nacional 2',
   'Ruta Nacional 3',
   'Ruta Nacional 7',
-  'Ruta Nacional 14',
-  'Ruta Nacional 40',
-  'Ruta Nacional 11',
-  'Ruta Nacional 34',
   'Ruta Nacional 8',
+  'Ruta Nacional 9',
+  'Ruta Nacional 11',
+  'Ruta Nacional 12',
+  'Ruta Nacional 14',
+  'Ruta Nacional 19',
+  'Ruta Nacional 20',
+  'Ruta Nacional 22',
+  'Ruta Nacional 33',
+  'Ruta Nacional 34',
+  'Ruta Nacional 36',
+  'Ruta Nacional 38',
+  'Ruta Nacional 40',
+  'Ruta Nacional 42',
+  'Ruta Nacional 51',
+  'Ruta Nacional 60',
+  'Ruta Nacional 68',
+  'Ruta Nacional 74',
+  'Ruta Nacional 76',
+  'Ruta Nacional 158',
+  'Ruta Nacional 188',
+  // Autopistas
   'Autopista del Sol (RN9)',
-  'Autopista Rosario–Córdoba',
-  'Autopista Buenos Aires–La Plata',
-  'Ruta Provincial 2',
-  'Ruta Provincial 6',
-];
-
-const _citySuggestions = [
-  'Rosario',
-  'Córdoba',
-  'Mendoza',
-  'Tucumán',
-  'Mar del Plata',
-  'Bahía Blanca',
-  'Santa Fe',
-  'San Luis',
-  'La Plata',
-  'Neuquén',
-  'Salta',
-  'Jujuy',
-  'Paraná',
-  'Posadas',
-  'Las Flores',
-  'Pergamino',
-  'Venado Tuerto',
-  'Villa María',
-  'San Pedro',
-  'Azul',
-  'Olavarría',
-  'Tandil',
-  'Junín',
-  'Rafaela',
+  'Autopista Rosario–Córdoba (RN9)',
+  'Autopista Buenos Aires–La Plata (RN1)',
+  'Autopista Riccheri (RN1)',
+  'Autopista Ezeiza–Cañuelas (RN205)',
+  'Autopista Córdoba–Villa Carlos Paz',
+  'Autopista Rosario–Santa Fe',
+  'Autopista Illia (Bs. As.)',
+  // Provinciales frecuentes
+  'Ruta Provincial 2 (Buenos Aires)',
+  'Ruta Provincial 6 (Buenos Aires)',
+  'Ruta Provincial 11 (Santa Fe)',
+  'Ruta Provincial 20 (Córdoba)',
+  'Ruta Provincial 38 (Córdoba)',
+  'Ruta Provincial 45 (Córdoba)',
+  'Ruta Provincial 55 (Córdoba)',
+  'Ruta Provincial 74 (Buenos Aires)',
 ];
 
 class CreateTripScreen extends ConsumerStatefulWidget {
@@ -74,6 +78,7 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
   bool _dropsOffPassengers = false;
   final List<String> _routes = [];
   final List<String> _stops = [];
+  String? _timeError;
 
   int _seats = 3;
   int _price = 4500;
@@ -86,6 +91,13 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
   bool _publishing = false;
 
   @override
+  void initState() {
+    super.initState();
+    _timeFromController.addListener(_onTimeChanged);
+    _timeToController.addListener(_onTimeChanged);
+  }
+
+  @override
   void dispose() {
     _originController.dispose();
     _destinationController.dispose();
@@ -93,6 +105,16 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
     _timeToController.dispose();
     _descriptionController.dispose();
     super.dispose();
+  }
+
+  void _onTimeChanged() {
+    final from = _parseMinutes(_timeFromController.text.trim());
+    final to = _parseMinutes(_timeToController.text.trim());
+    String? error;
+    if (from != null && to != null && to <= from) {
+      error = 'La hora de fin debe ser mayor que la de inicio';
+    }
+    if (error != _timeError) setState(() => _timeError = error);
   }
 
   String get _dateDisplayText {
@@ -323,12 +345,16 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
                           controller: _originController,
                           hint: 'Origen',
                           icon: Icons.search,
+                          defaultSuggestions: popularArgentineCities,
+                          citySearchSource: CitySearchSource.georef,
                         ),
                         const SizedBox(height: 12),
                         CityAutocompleteField(
                           controller: _destinationController,
                           hint: 'Destino',
                           icon: Icons.near_me_rounded,
+                          defaultSuggestions: popularArgentineCities,
+                          citySearchSource: CitySearchSource.georef,
                         ),
                       ],
                     ),
@@ -337,16 +363,59 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            const _SubLabel('PARADAS INTERMEDIAS'),
+            Row(
+              children: [
+                const _SubLabel('PARADAS INTERMEDIAS'),
+                const SizedBox(width: 6),
+                GestureDetector(
+                  onTap: () => showDialog<void>(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20)),
+                      icon: const Icon(Icons.lightbulb_rounded,
+                          color: Color(0xFFF59E0B), size: 32),
+                      title: const Text(
+                        '¿Por qué agregar paradas?',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.bold),
+                      ),
+                      content: const Text(
+                        'Agregar paradas va a aumentar la exposición de tu viaje y hará que más gente pueda unirse a él!',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                            fontSize: 14, color: Color(0xFF64748B), height: 1.5),
+                      ),
+                      actionsAlignment: MainAxisAlignment.center,
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          child: const Text('Entendido'),
+                        ),
+                      ],
+                    ),
+                  ),
+                  child: const Icon(Icons.info_outline_rounded,
+                      size: 15, color: Color(0xFF94A3B8)),
+                ),
+              ],
+            ),
             const SizedBox(height: 8),
             SuggestionChipInput(
               label: 'Paradas intermedias',
-              hint: 'Añadir parada...',
-              suggestions: _citySuggestions,
+              hint: 'Buscar ciudad...',
               chips: _stops,
               onAdd: (v) => setState(() => _stops.add(v)),
               onRemove: (i) => setState(() => _stops.removeAt(i)),
               prefixIcon: Icons.add_location_alt_outlined,
+              asyncSearch: (query) async {
+                final results = await CitySearchService.instance.search(
+                  query,
+                  overrideSource: CitySearchSource.georef,
+                );
+                return results.map((s) => s.name).toList();
+              },
             ),
 
             const SizedBox(height: 32),
@@ -446,6 +515,21 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
               hint2: 'ej: 13:00',
               icon: Icons.access_time_rounded,
             ),
+            if (_timeError != null) ...[
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  const Icon(Icons.error_outline_rounded,
+                      size: 14, color: Color(0xFFEF4444)),
+                  const SizedBox(width: 6),
+                  Text(
+                    _timeError!,
+                    style: const TextStyle(
+                        fontSize: 12, color: Color(0xFFEF4444)),
+                  ),
+                ],
+              ),
+            ],
 
             const SizedBox(height: 32),
 

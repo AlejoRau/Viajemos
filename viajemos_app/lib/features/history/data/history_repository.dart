@@ -177,6 +177,10 @@ class HistoryRepository {
         .eq('id', requestId);
   }
 
+  Future<void> deleteTrip(String tripId) async {
+    await _client.from('trips').delete().eq('id', tripId);
+  }
+
   Future<List<DriverTripHistory>> fetchDriverHistory() async {
     final data = await _client.rpc('get_driver_history') as List;
     return data.map((row) {

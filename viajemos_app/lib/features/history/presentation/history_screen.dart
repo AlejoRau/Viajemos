@@ -155,12 +155,60 @@ class _ActiveTripsBody extends ConsumerWidget {
 
 // ── Active trip card ───────────────────────────────────────────────────────
 
-class _ActiveTripCard extends StatelessWidget {
+class _ActiveTripCard extends ConsumerStatefulWidget {
   const _ActiveTripCard({required this.trip});
   final ActiveDriverTrip trip;
 
   @override
+  ConsumerState<_ActiveTripCard> createState() => _ActiveTripCardState();
+}
+
+class _ActiveTripCardState extends ConsumerState<_ActiveTripCard> {
+  bool _deleting = false;
+
+  Future<void> _confirmDelete() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Borrar viaje'),
+        content: Text(
+          '¿Seguro que querés borrar el viaje '
+          '${widget.trip.originAddress} → ${widget.trip.destinationAddress}?\n\n'
+          'Esta acción no se puede deshacer.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Borrar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _deleting = true);
+    try {
+      await ref.read(historyRepositoryProvider).deleteTrip(widget.trip.id);
+      ref.refresh(activeDriverTripsProvider);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Error al borrar el viaje')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _deleting = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final trip = widget.trip;
     final hasPending = trip.pendingRequestsCount > 0;
 
     return GestureDetector(
@@ -243,6 +291,26 @@ class _ActiveTripCard extends StatelessWidget {
                       if (trip.acceptedPassengerNames.isNotEmpty)
                         _OverlappingAvatars(
                             names: trip.acceptedPassengerNames),
+                      const SizedBox(width: 4),
+                      // Delete button
+                      SizedBox(
+                        width: 32,
+                        height: 32,
+                        child: _deleting
+                            ? const Padding(
+                                padding: EdgeInsets.all(6),
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.red),
+                              )
+                            : IconButton(
+                                padding: EdgeInsets.zero,
+                                icon: const Icon(Icons.delete_outline_rounded,
+                                    size: 20, color: Colors.red),
+                                onPressed: _confirmDelete,
+                                tooltip: 'Borrar viaje',
+                              ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 12),

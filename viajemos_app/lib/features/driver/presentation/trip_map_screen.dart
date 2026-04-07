@@ -34,6 +34,7 @@ class _TripMapScreenState extends State<TripMapScreen> {
   List<_Place> _suggestions = [];
   Timer? _debounce;
   bool _loading = false;
+  bool _reversing = false; // true while reverse-geocoding a tapped point
 
   @override
   void dispose() {
@@ -96,6 +97,38 @@ class _TripMapScreenState extends State<TripMapScreen> {
     _mapController.move(point, 15);
   }
 
+  Future<void> _reverseGeocode(LatLng point) async {
+    setState(() => _reversing = true);
+    try {
+      final uri = Uri.parse(
+        'https://nominatim.openstreetmap.org/reverse'
+        '?lat=${point.latitude}&lon=${point.longitude}'
+        '&format=json',
+      );
+      final res = await http.get(uri, headers: {
+        'Accept-Language': 'es',
+        'User-Agent': 'Viajemos/1.0',
+      });
+      if (res.statusCode == 200 && mounted) {
+        final data = jsonDecode(res.body) as Map<String, dynamic>;
+        final addr = data['address'] as Map<String, dynamic>? ?? {};
+        final city = (addr['city']
+                ?? addr['town']
+                ?? addr['village']
+                ?? addr['municipality']
+                ?? addr['county']
+                ?? data['display_name']) as String?;
+        if (city != null && mounted) {
+          setState(() => _address = city);
+        }
+      }
+    } catch (_) {
+      // On error leave _address empty so the confirm button stays disabled.
+    } finally {
+      if (mounted) setState(() => _reversing = false);
+    }
+  }
+
   /// Shows only the first 3 segments of the Nominatim display_name.
   String _short(String full) =>
       full.split(', ').take(3).join(', ');
@@ -126,9 +159,9 @@ class _TripMapScreenState extends State<TripMapScreen> {
                   _pin = point;
                   _suggestions = [];
                   _searchController.clear();
-                  _address =
-                      '${point.latitude.toStringAsFixed(5)}, ${point.longitude.toStringAsFixed(5)}';
+                  _address = ''; // cleared until reverse geocode completes
                 });
+                _reverseGeocode(point);
               },
             ),
             children: [
@@ -273,16 +306,16 @@ class _TripMapScreenState extends State<TripMapScreen> {
               child: SafeArea(
                 top: false,
                 child: ElevatedButton(
-                  onPressed: () => Navigator.pop(
-                    context,
-                    MapResult(
-                      lat: _pin.latitude,
-                      lng: _pin.longitude,
-                      address: _address.isNotEmpty
-                          ? _short(_address)
-                          : '${_pin.latitude.toStringAsFixed(4)}, ${_pin.longitude.toStringAsFixed(4)}',
-                    ),
-                  ),
+                  onPressed: (_address.isEmpty || _reversing)
+                      ? null
+                      : () => Navigator.pop(
+                            context,
+                            MapResult(
+                              lat: _pin.latitude,
+                              lng: _pin.longitude,
+                              address: _short(_address),
+                            ),
+                          ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
                     minimumSize: const Size(double.infinity, 54),
@@ -290,13 +323,20 @@ class _TripMapScreenState extends State<TripMapScreen> {
                         borderRadius: BorderRadius.circular(27)),
                     elevation: 0,
                   ),
-                  child: const Text(
-                    'Confirmar ubicación',
-                    style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white),
-                  ),
+                  child: _reversing
+                      ? const SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2.5, color: Colors.white),
+                        )
+                      : const Text(
+                          'Confirmar ubicación',
+                          style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white),
+                        ),
                 ),
               ),
             ),

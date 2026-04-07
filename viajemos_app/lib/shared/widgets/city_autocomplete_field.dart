@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../services/city_search_service.dart';
 
 class CityAutocompleteField extends StatefulWidget {
@@ -12,6 +13,9 @@ class CityAutocompleteField extends StatefulWidget {
     this.onSelected,
     this.focusNode,
     this.onTap,
+    this.defaultSuggestions = const [],
+    this.citySearchSource,
+    this.inputFormatters = const [],
   });
 
   final TextEditingController controller;
@@ -22,6 +26,12 @@ class CityAutocompleteField extends StatefulWidget {
   final ValueChanged<String>? onSelected;
   final FocusNode? focusNode;
   final VoidCallback? onTap;
+  /// Suggestions shown when the field is focused but the text is empty.
+  final List<CitySuggestion> defaultSuggestions;
+  /// Override the global [CitySearchSource] for this field only.
+  final CitySearchSource? citySearchSource;
+  /// Extra input formatters applied to the underlying TextField.
+  final List<TextInputFormatter> inputFormatters;
 
   @override
   State<CityAutocompleteField> createState() => _CityAutocompleteFieldState();
@@ -35,6 +45,7 @@ class _CityAutocompleteFieldState extends State<CityAutocompleteField>
   OverlayEntry? _overlay;
   List<CitySuggestion> _suggestions = [];
   bool _loading = false;
+  bool _showingDefaults = false;
 
   final _fieldKey = GlobalKey();
 
@@ -75,7 +86,13 @@ class _CityAutocompleteFieldState extends State<CityAutocompleteField>
   }
 
   void _onFocusChange() {
-    if (!_focusNode.hasFocus) {
+    if (_focusNode.hasFocus) {
+      // Show default suggestions immediately when the field gains focus and is empty.
+      if (widget.controller.text.isEmpty &&
+          widget.defaultSuggestions.isNotEmpty) {
+        _setSuggestions(widget.defaultSuggestions, isDefault: true);
+      }
+    } else {
       Future.delayed(const Duration(milliseconds: 200), () {
         if (mounted) _removeOverlay();
       });
@@ -86,23 +103,29 @@ class _CityAutocompleteFieldState extends State<CityAutocompleteField>
     final query = widget.controller.text;
     if (query.isEmpty) {
       CitySearchService.instance.cancel();
-      _setSuggestions([]);
       if (mounted) setState(() => _loading = false);
+      // Fall back to default suggestions when the field is cleared.
+      _setSuggestions(
+        _focusNode.hasFocus ? widget.defaultSuggestions : [],
+        isDefault: _focusNode.hasFocus,
+      );
       return;
     }
     if (mounted) setState(() => _loading = true);
     CitySearchService.instance.debounce(const Duration(milliseconds: 350),
         () async {
       if (!mounted) return;
-      final results = await CitySearchService.instance.search(query);
+      final results = await CitySearchService.instance.search(query,
+          overrideSource: widget.citySearchSource);
       if (!mounted) return;
       setState(() => _loading = false);
       _setSuggestions(results);
     });
   }
 
-  void _setSuggestions(List<CitySuggestion> suggestions) {
+  void _setSuggestions(List<CitySuggestion> suggestions, {bool isDefault = false}) {
     _suggestions = suggestions;
+    _showingDefaults = isDefault;
     if (suggestions.isEmpty) {
       _removeOverlay();
     } else if (_focusNode.hasFocus) {
@@ -130,11 +153,13 @@ class _CityAutocompleteFieldState extends State<CityAutocompleteField>
 
   void _select(CitySuggestion s) {
     widget.controller.removeListener(_onTextChanged);
-    widget.controller.text = s.displayName;
+    // Store the short city name so DB searches match exactly on city,
+    // not on province/country that appear in the full display name.
+    widget.controller.text = s.name;
     widget.controller.selection =
-        TextSelection.collapsed(offset: s.displayName.length);
+        TextSelection.collapsed(offset: s.name.length);
     widget.controller.addListener(_onTextChanged);
-    widget.onSelected?.call(s.displayName);
+    widget.onSelected?.call(s.name);
     _suggestions = [];
     _removeOverlay();
     _focusNode.unfocus();
@@ -174,62 +199,91 @@ class _CityAutocompleteFieldState extends State<CityAutocompleteField>
                     ),
                   ),
                 )
-              : ListView.separated(
-                  padding: EdgeInsets.zero,
-                  shrinkWrap: true,
-                  itemCount: _suggestions.length,
-                  separatorBuilder: (_, __) => const Divider(
-                      height: 1,
-                      indent: 16,
-                      endIndent: 16,
-                      color: Color(0xFFF1F5F9)),
-                  itemBuilder: (_, i) {
-                    final s = _suggestions[i];
-                    return InkWell(
-                      onTap: () => _select(s),
-                      borderRadius: BorderRadius.vertical(
-                        top: i == 0
-                            ? const Radius.circular(14)
-                            : Radius.zero,
-                        bottom: i == _suggestions.length - 1
-                            ? const Radius.circular(14)
-                            : Radius.zero,
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (_showingDefaults)
+                      const Padding(
+                        padding: EdgeInsets.fromLTRB(16, 10, 16, 4),
+                        child: Text(
+                          'Ciudades populares',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF94A3B8),
+                            letterSpacing: 0.5,
+                          ),
+                        ),
                       ),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 11),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.location_city_rounded,
-                                size: 16, color: Color(0xFF94A3B8)),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                    Flexible(
+                      child: ListView.separated(
+                        padding: EdgeInsets.zero,
+                        shrinkWrap: true,
+                        itemCount: _suggestions.length,
+                        separatorBuilder: (_, __) => const Divider(
+                            height: 1,
+                            indent: 16,
+                            endIndent: 16,
+                            color: Color(0xFFF1F5F9)),
+                        itemBuilder: (_, i) {
+                          final s = _suggestions[i];
+                          return InkWell(
+                            onTap: () => _select(s),
+                            borderRadius: BorderRadius.vertical(
+                              top: i == 0 && !_showingDefaults
+                                  ? const Radius.circular(14)
+                                  : Radius.zero,
+                              bottom: i == _suggestions.length - 1
+                                  ? const Radius.circular(14)
+                                  : Radius.zero,
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 11),
+                              child: Row(
                                 children: [
-                                  Text(
-                                    s.name,
-                                    style: const TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w600,
-                                        color: Color(0xFF1E293B)),
+                                  Icon(
+                                    _showingDefaults
+                                        ? Icons.star_rounded
+                                        : Icons.location_city_rounded,
+                                    size: 16,
+                                    color: _showingDefaults
+                                        ? const Color(0xFFF59E0B)
+                                        : const Color(0xFF94A3B8),
                                   ),
-                                  if (s.displayName != s.name)
-                                    Text(
-                                      s.displayName,
-                                      style: const TextStyle(
-                                          fontSize: 11,
-                                          color: Color(0xFF94A3B8)),
-                                      overflow: TextOverflow.ellipsis,
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          s.name,
+                                          style: const TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w600,
+                                              color: Color(0xFF1E293B)),
+                                        ),
+                                        if (s.displayName != s.name)
+                                          Text(
+                                            s.displayName,
+                                            style: const TextStyle(
+                                                fontSize: 11,
+                                                color: Color(0xFF94A3B8)),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                      ],
                                     ),
+                                  ),
                                 ],
                               ),
                             ),
-                          ],
-                        ),
+                          );
+                        },
                       ),
-                    );
-                  },
+                    ),
+                  ],
                 ),
         ),
       ),
@@ -248,6 +302,7 @@ class _CityAutocompleteFieldState extends State<CityAutocompleteField>
         controller: widget.controller,
         focusNode: _focusNode,
         textCapitalization: TextCapitalization.words,
+        inputFormatters: widget.inputFormatters,
         onTap: widget.onTap,
         decoration: InputDecoration(
           hintText: widget.hint,

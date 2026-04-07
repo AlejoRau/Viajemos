@@ -66,6 +66,32 @@ class TripSearchResult {
     return departureTime!.substring(0, 5);
   }
 
+  /// Extracts the city name from a stored address string.
+  /// Handles two formats:
+  ///   "City, Province, Country"  → first segment  (from Nominatim place search)
+  ///   "Number, Neighborhood, City" → last segment  (from map pin drop)
+  static String _cityFromAddress(String address) {
+    final parts = address
+        .split(',')
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toList();
+    if (parts.length <= 1) return address.trim();
+    // If the first segment is a street number, the city is the last segment.
+    if (RegExp(r'^\d').hasMatch(parts.first)) return parts.last;
+    return parts.first;
+  }
+
+  String get originCity => _cityFromAddress(originAddress);
+  String get destinationCity => _cityFromAddress(destinationAddress);
+
+  /// Returns the full address only when it contains more detail than just a city
+  /// (i.e. has a comma — street number or neighborhood info).
+  String? get originDetailAddress =>
+      originAddress.contains(',') ? originAddress : null;
+  String? get destinationDetailAddress =>
+      destinationAddress.contains(',') ? destinationAddress : null;
+
   String get driverInitials {
     final parts = driverName.trim().split(' ');
     if (parts.length >= 2) return '${parts[0][0]}${parts[1][0]}'.toUpperCase();

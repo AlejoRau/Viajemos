@@ -1,33 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import '../../../shared/formatters/date_formatter.dart';
+import '../../../shared/services/city_search_service.dart';
 import '../../../shared/widgets/city_autocomplete_field.dart';
 
-// ── Modelo de búsqueda reciente ───────────────────────────────────────────────
+// ── Sanitización de inputs ────────────────────────────────────────────────────
 
-class _RecentSearch {
-  const _RecentSearch({
-    required this.origin,
-    this.destination,
-    this.dateFrom,
-    this.dateTo,
-    this.maxPrice,
-  });
-  final String origin;
-  final String? destination;
-  final String? dateFrom;
-  final String? dateTo;
-  final String? maxPrice;
+// Permite letras (incluyendo acentos y ñ), espacios y guiones.
+// Bloquea cualquier carácter que no tenga sentido en un nombre de ciudad.
+final _cityInputFormatter = FilteringTextInputFormatter.allow(
+  RegExp(r"[a-zA-ZáéíóúÁÉÍÓÚäëïöüÄËÏÖÜñÑüÜ ',\-\.]"),
+);
 
-  String get label => destination != null ? '$origin → $destination' : origin;
-}
-
-// Mock — reemplazar con datos reales de search_history en Supabase
-final _mockRecentSearches = [
-  const _RecentSearch(origin: 'Palermo', destination: 'La Plata', dateFrom: '15/04', dateTo: '16/04', maxPrice: '8000'),
-  const _RecentSearch(origin: 'Rosario', destination: 'San Nicolás', dateFrom: '20/04', maxPrice: '5000'),
-  const _RecentSearch(origin: 'Córdoba', destination: 'Buenos Aires'),
-];
+String _sanitizeCity(String raw) =>
+    raw.trim().replaceAll(RegExp(r'\s{2,}'), ' ').substring(
+        0, raw.trim().length.clamp(0, 80));
 
 // ── Pantalla ──────────────────────────────────────────────────────────────────
 
@@ -77,20 +65,6 @@ class _FilterCardState extends State<_FilterCard> {
   final _fromDateController = TextEditingController();
   final _toDateController = TextEditingController();
   final _priceController = TextEditingController();
-  final _originFocusNode = FocusNode();
-  bool _showHistory = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _originFocusNode.addListener(() {
-      if (!_originFocusNode.hasFocus) {
-        Future.delayed(const Duration(milliseconds: 150), () {
-          if (mounted) setState(() => _showHistory = false);
-        });
-      }
-    });
-  }
 
   @override
   void dispose() {
@@ -99,20 +73,7 @@ class _FilterCardState extends State<_FilterCard> {
     _fromDateController.dispose();
     _toDateController.dispose();
     _priceController.dispose();
-    _originFocusNode.dispose();
     super.dispose();
-  }
-
-  void _applyRecentSearch(_RecentSearch s) {
-    setState(() {
-      _fromController.text = s.origin;
-      _toController.text = s.destination ?? '';
-      _fromDateController.text = s.dateFrom ?? '';
-      _toDateController.text = s.dateTo ?? '';
-      _priceController.text = s.maxPrice ?? '';
-      _showHistory = false;
-    });
-    _originFocusNode.unfocus();
   }
 
   void _swapOriginDestination() {
@@ -120,6 +81,31 @@ class _FilterCardState extends State<_FilterCard> {
       final tmp = _fromController.text;
       _fromController.text = _toController.text;
       _toController.text = tmp;
+    });
+  }
+
+  void _onSearch() {
+    final origin = _sanitizeCity(_fromController.text);
+    if (origin.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Ingresá al menos el origen')),
+      );
+      return;
+    }
+
+    final destination = _sanitizeCity(_toController.text);
+    final dateFrom = _fromDateController.text.trim();
+    final dateTo = _toDateController.text.trim();
+    // Price is digits-only by formatter, still clamp to avoid absurd values.
+    final rawPrice = int.tryParse(_priceController.text.trim()) ?? 0;
+    final maxPrice = rawPrice.clamp(0, 9999999);
+
+    context.push('/passenger/search-results', extra: {
+      'origin': origin,
+      'destination': destination.isEmpty ? null : destination,
+      'dateFrom': dateFrom.isEmpty ? null : dateFrom,
+      'dateTo': dateTo.isEmpty ? null : dateTo,
+      'maxPrice': maxPrice == 0 ? null : maxPrice.toString(),
     });
   }
 
@@ -144,19 +130,12 @@ class _FilterCardState extends State<_FilterCard> {
           // ORIGEN
           _buildInputLabel('ORIGEN'),
           _buildOriginField(),
-          if (_showHistory && _mockRecentSearches.isNotEmpty) _buildHistoryDropdown(),
 
           const SizedBox(height: 12),
 
           // DESTINO
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _buildInputLabel('DESTINO'),
-              const Text('(Opcional)', style: TextStyle(fontSize: 10, color: Color(0xFF94A3B8))),
-            ],
-          ),
-          _buildTextField('¿A dónde vas?', Icons.location_on, _toController),
+          _buildInputLabel('DESTINO'),
+          _buildDestinationField(),
           const SizedBox(height: 20),
 
           // Fechas
@@ -179,8 +158,12 @@ class _FilterCardState extends State<_FilterCard> {
             child: TextField(
               controller: _priceController,
               keyboardType: TextInputType.number,
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(7),
+              ],
               decoration: const InputDecoration(
-                hintText: 'Ej: 15000',
+                hintText: 'Ej: 15000  (opcional)',
                 prefixIcon: Icon(Icons.attach_money, color: Color(0xFF1A73E8), size: 20),
                 border: InputBorder.none,
                 contentPadding: EdgeInsets.symmetric(vertical: 14, horizontal: 16),
@@ -195,31 +178,7 @@ class _FilterCardState extends State<_FilterCard> {
             width: double.infinity,
             height: 56,
             child: ElevatedButton(
-              onPressed: () {
-                final origin = _fromController.text.trim();
-                if (origin.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                        content: Text('Ingresá al menos el origen')),
-                  );
-                  return;
-                }
-                context.push('/passenger/search-results', extra: {
-                  'origin': origin,
-                  'destination': _toController.text.trim().isEmpty
-                      ? null
-                      : _toController.text.trim(),
-                  'dateFrom': _fromDateController.text.trim().isEmpty
-                      ? null
-                      : _fromDateController.text.trim(),
-                  'dateTo': _toDateController.text.trim().isEmpty
-                      ? null
-                      : _toDateController.text.trim(),
-                  'maxPrice': _priceController.text.trim().isEmpty
-                      ? null
-                      : _priceController.text.trim(),
-                });
-              },
+              onPressed: _onSearch,
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF1A73E8),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
@@ -239,11 +198,12 @@ class _FilterCardState extends State<_FilterCard> {
   Widget _buildOriginField() {
     return CityAutocompleteField(
       controller: _fromController,
-      focusNode: _originFocusNode,
       hint: '¿Desde dónde salís?',
       icon: Icons.search,
       iconColor: const Color(0xFF1A73E8),
-      onTap: () => setState(() => _showHistory = true),
+      defaultSuggestions: popularArgentineCities,
+      citySearchSource: CitySearchSource.georef,
+      inputFormatters: [_cityInputFormatter, LengthLimitingTextInputFormatter(80)],
       suffix: GestureDetector(
         onTap: _swapOriginDestination,
         child: const Icon(Icons.swap_vert, color: Color(0xFF94A3B8), size: 20),
@@ -251,52 +211,15 @@ class _FilterCardState extends State<_FilterCard> {
     );
   }
 
-  Widget _buildHistoryDropdown() {
-    return Container(
-      margin: const EdgeInsets.only(top: 4),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.06),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          for (int i = 0; i < _mockRecentSearches.length; i++) ...[
-            if (i > 0) const Divider(height: 1, indent: 16, endIndent: 16, color: Color(0xFFF1F5F9)),
-            InkWell(
-              onTap: () => _applyRecentSearch(_mockRecentSearches[i]),
-              borderRadius: BorderRadius.circular(12),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                child: Row(
-                  children: [
-                    const Icon(Icons.history, size: 16, color: Color(0xFF94A3B8)),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        _mockRecentSearches[i].label,
-                        style: const TextStyle(fontSize: 14, color: Color(0xFF1E293B), fontWeight: FontWeight.w500),
-                      ),
-                    ),
-                    if (_mockRecentSearches[i].dateFrom != null)
-                      Text(
-                        _mockRecentSearches[i].dateFrom!,
-                        style: const TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ],
-      ),
+  Widget _buildDestinationField() {
+    return CityAutocompleteField(
+      controller: _toController,
+      hint: '¿A dónde vas?  (opcional)',
+      icon: Icons.location_on,
+      iconColor: const Color(0xFF1A73E8),
+      defaultSuggestions: popularArgentineCities,
+      citySearchSource: CitySearchSource.georef,
+      inputFormatters: [_cityInputFormatter, LengthLimitingTextInputFormatter(80)],
     );
   }
 
@@ -310,16 +233,8 @@ class _FilterCardState extends State<_FilterCard> {
     );
   }
 
-  Widget _buildTextField(String hint, IconData icon, TextEditingController controller) {
-    return CityAutocompleteField(
-      controller: controller,
-      hint: hint,
-      icon: icon,
-      iconColor: const Color(0xFF1A73E8),
-    );
-  }
-
   Widget _buildDateInput(String label, TextEditingController controller) {
+    final isOptional = label == 'HASTA' || label == 'DESDE';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -333,12 +248,12 @@ class _FilterCardState extends State<_FilterCard> {
             controller: controller,
             keyboardType: TextInputType.number,
             inputFormatters: [DayMonthFormatter()],
-            decoration: const InputDecoration(
-              hintText: 'DD/MM',
-              suffixIcon: Icon(Icons.calendar_month, color: Color(0xFF64748B), size: 18),
+            decoration: InputDecoration(
+              hintText: isOptional ? 'DD/MM  (opcional)' : 'DD/MM',
+              suffixIcon: const Icon(Icons.calendar_month, color: Color(0xFF64748B), size: 18),
               border: InputBorder.none,
-              contentPadding: EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-              hintStyle: TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
+              contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+              hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
             ),
           ),
         ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/formatters/date_formatter.dart';
+import '../../../shared/services/city_search_service.dart';
 import '../../../shared/widgets/city_autocomplete_field.dart';
 import '../../passenger/data/passenger_request_repository.dart';
 
@@ -154,6 +155,8 @@ class _PassengerRequestsFilterScreenState
         hint: hint,
         icon: icon,
         iconColor: const Color(0xFF1A73E8),
+        defaultSuggestions: popularArgentineCities,
+        citySearchSource: CitySearchSource.georef,
       );
 
   Widget _dateField(String label, TextEditingController controller) => Column(

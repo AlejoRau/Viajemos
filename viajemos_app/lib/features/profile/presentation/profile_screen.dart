@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -9,6 +10,33 @@ import '../domain/user_profile.dart';
 import '../../../features/vehicles/data/vehicles_provider.dart';
 import '../../../features/vehicles/domain/vehicle.dart';
 import '../../../shared/widgets/vehicle_selector_sheet.dart';
+
+// ── Auto-save ─────────────────────────────────────────────────────────────────
+
+enum _SaveStatus { idle, saving, saved }
+
+class _AutoSaveIndicator extends StatelessWidget {
+  const _AutoSaveIndicator(this.status);
+  final _SaveStatus status;
+
+  @override
+  Widget build(BuildContext context) {
+    return switch (status) {
+      _SaveStatus.idle => const SizedBox.shrink(),
+      _SaveStatus.saving => const SizedBox(
+          width: 14,
+          height: 14,
+          child: CircularProgressIndicator(
+              strokeWidth: 2, color: Color(0xFF94A3B8)),
+        ),
+      _SaveStatus.saved => const Icon(
+          Icons.check_circle_rounded,
+          size: 16,
+          color: Color(0xFF16A34A),
+        ),
+    };
+  }
+}
 
 // ── ProfileScreen ─────────────────────────────────────────────────────────────
 
@@ -28,20 +56,135 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
   final _bioPassengerController = TextEditingController();
   bool _controllersInitialized = false;
 
+  _SaveStatus _bioSaveStatus = _SaveStatus.idle;
+  _SaveStatus _socialSaveStatus = _SaveStatus.idle;
+  Timer? _bioDebounce;
+  Timer? _socialDebounce;
+
+  // Last saved text — listeners compare against these to ignore pure cursor moves.
+  String _lastBioDriver = '';
+  String _lastBioPassenger = '';
+  String _lastInstagram = '';
+  String _lastFacebook = '';
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    // If the provider already has data when this widget is created (e.g. after
+    // navigating away and back), ref.listen won't fire because the value didn't
+    // change. Read it once after the first frame as a fallback.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _controllersInitialized) return;
+      ref.read(profileProvider).whenData(_initControllers);
+    });
   }
 
   @override
   void dispose() {
+    _bioDebounce?.cancel();
+    _socialDebounce?.cancel();
+    _bioDriverController.removeListener(_onBioChanged);
+    _bioPassengerController.removeListener(_onBioChanged);
+    _instagramController.removeListener(_onSocialChanged);
+    _facebookController.removeListener(_onSocialChanged);
     _tabController.dispose();
     _instagramController.dispose();
     _facebookController.dispose();
     _bioDriverController.dispose();
     _bioPassengerController.dispose();
     super.dispose();
+  }
+
+  void _initControllers(UserProfile profile) {
+    if (_controllersInitialized) return;
+    _controllersInitialized = true;
+    _bioDriverController.text = profile.bioDriver ?? '';
+    _bioPassengerController.text = profile.bioPassenger ?? '';
+    _instagramController.text = profile.instagram ?? '';
+    _facebookController.text = profile.facebook ?? '';
+    // Mirror initial values so listeners can detect real edits vs cursor moves.
+    _lastBioDriver = _bioDriverController.text;
+    _lastBioPassenger = _bioPassengerController.text;
+    _lastInstagram = _instagramController.text;
+    _lastFacebook = _facebookController.text;
+    // Add listeners AFTER setting initial values.
+    _bioDriverController.addListener(_onBioChanged);
+    _bioPassengerController.addListener(_onBioChanged);
+    _instagramController.addListener(_onSocialChanged);
+    _facebookController.addListener(_onSocialChanged);
+  }
+
+  void _onBioChanged() {
+    // Ignore cursor/selection changes — only act on actual text edits.
+    if (_bioDriverController.text == _lastBioDriver &&
+        _bioPassengerController.text == _lastBioPassenger) return;
+    _lastBioDriver = _bioDriverController.text;
+    _lastBioPassenger = _bioPassengerController.text;
+
+    _bioDebounce?.cancel();
+    if (_bioSaveStatus != _SaveStatus.saving) {
+      setState(() => _bioSaveStatus = _SaveStatus.saving);
+    }
+    _bioDebounce = Timer(const Duration(milliseconds: 800), _saveBio);
+  }
+
+  void _onSocialChanged() {
+    // Ignore cursor/selection changes — only act on actual text edits.
+    if (_instagramController.text == _lastInstagram &&
+        _facebookController.text == _lastFacebook) return;
+    _lastInstagram = _instagramController.text;
+    _lastFacebook = _facebookController.text;
+
+    _socialDebounce?.cancel();
+    if (_socialSaveStatus != _SaveStatus.saving) {
+      setState(() => _socialSaveStatus = _SaveStatus.saving);
+    }
+    _socialDebounce = Timer(const Duration(milliseconds: 800), _saveSocial);
+  }
+
+  Future<void> _saveBio() async {
+    try {
+      await ref.read(profileRepositoryProvider).updateBio(
+            bioDriver: _bioDriverController.text.trim().isEmpty
+                ? null
+                : _bioDriverController.text.trim(),
+            bioPassenger: _bioPassengerController.text.trim().isEmpty
+                ? null
+                : _bioPassengerController.text.trim(),
+          );
+      if (!mounted) return;
+      // Refresh the provider so navigating back shows up-to-date data.
+      ref.invalidate(profileProvider);
+      setState(() => _bioSaveStatus = _SaveStatus.saved);
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) setState(() => _bioSaveStatus = _SaveStatus.idle);
+      });
+    } catch (e) {
+      if (mounted) setState(() => _bioSaveStatus = _SaveStatus.idle);
+    }
+  }
+
+  Future<void> _saveSocial() async {
+    try {
+      await ref.read(profileRepositoryProvider).updateSocial(
+            instagram: _instagramController.text.trim().isEmpty
+                ? null
+                : _instagramController.text.trim(),
+            facebook: _facebookController.text.trim().isEmpty
+                ? null
+                : _facebookController.text.trim(),
+          );
+      if (!mounted) return;
+      // Refresh the provider so navigating back shows up-to-date data.
+      ref.invalidate(profileProvider);
+      setState(() => _socialSaveStatus = _SaveStatus.saved);
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) setState(() => _socialSaveStatus = _SaveStatus.idle);
+      });
+    } catch (e) {
+      if (mounted) setState(() => _socialSaveStatus = _SaveStatus.idle);
+    }
   }
 
   void _showEditPersonalData(UserProfile profile) {
@@ -68,17 +211,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     final isDriver = role == '/driver';
     final profileAsync = ref.watch(profileProvider);
 
-    // Pre-fill text controllers once the profile loads
+    // Pre-fill controllers when the profile loads for the first time.
+    // The postFrameCallback in initState covers the case where the provider
+    // already had data (navigating back), so this only fires on a fresh load.
     ref.listen<AsyncValue<UserProfile>>(profileProvider, (_, next) {
-      next.whenData((profile) {
-        if (!_controllersInitialized) {
-          _controllersInitialized = true;
-          _bioDriverController.text = profile.bioDriver ?? '';
-          _bioPassengerController.text = profile.bioPassenger ?? '';
-          _instagramController.text = profile.instagram ?? '';
-          _facebookController.text = profile.facebook ?? '';
-        }
-      });
+      next.whenData(_initControllers);
     });
 
     return Scaffold(
@@ -110,6 +247,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
               bioController:
                   isDriver ? _bioDriverController : _bioPassengerController,
               onEditPersonalData: () => _showEditPersonalData(profile),
+              bioSaveStatus: _bioSaveStatus,
+              socialSaveStatus: _socialSaveStatus,
             ),
             _CuentaTab(
               email: profile.email,
@@ -135,6 +274,8 @@ class _InfoPersonalTab extends StatelessWidget {
     required this.facebookController,
     required this.bioController,
     required this.onEditPersonalData,
+    required this.bioSaveStatus,
+    required this.socialSaveStatus,
   });
 
   final bool isDriver;
@@ -143,6 +284,8 @@ class _InfoPersonalTab extends StatelessWidget {
   final TextEditingController facebookController;
   final TextEditingController bioController;
   final VoidCallback onEditPersonalData;
+  final _SaveStatus bioSaveStatus;
+  final _SaveStatus socialSaveStatus;
 
   @override
   Widget build(BuildContext context) {
@@ -275,13 +418,19 @@ class _InfoPersonalTab extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Sobre mí',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary,
-                  ),
+                Row(
+                  children: [
+                    const Text(
+                      'Sobre mí',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    _AutoSaveIndicator(bioSaveStatus),
+                  ],
                 ),
                 const SizedBox(height: 10),
                 TextField(
@@ -310,7 +459,13 @@ class _InfoPersonalTab extends StatelessWidget {
           const SizedBox(height: 20),
 
           // ── Redes sociales ────────────────────────────────────────────
-          const _SectionHeading('Redes sociales'),
+          Row(
+            children: [
+              const _SectionHeading('Redes sociales'),
+              const SizedBox(width: 8),
+              _AutoSaveIndicator(socialSaveStatus),
+            ],
+          ),
           const SizedBox(height: 12),
           _SocialRow(
             controller: instagramController,

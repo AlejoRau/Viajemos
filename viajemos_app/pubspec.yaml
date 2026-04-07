@@ -19,6 +19,7 @@ dependencies:
   supabase_flutter: ^2.5.0
   shared_preferences: ^2.5.5
   font_awesome_flutter: ^10.7.0
+  flutter_native_splash: ^2.4.7
 
 dev_dependencies:
   flutter_test:
@@ -26,6 +27,20 @@ dev_dependencies:
   flutter_lints: ^4.0.0
   build_runner: ^2.4.9
   riverpod_generator: ^2.4.0
+
+flutter_native_splash:
+  color: "#1A73E8"
+  # image: assets/splash/logo.png   # ← descomentar cuando llegue el logo
+  color_dark: "#1A73E8"
+  # image_dark: assets/splash/logo.png
+  android_12:
+    color: "#1A73E8"
+    # image: assets/splash/logo.png
+    color_dark: "#1A73E8"
+    # image_dark: assets/splash/logo.png
+  fullscreen: false
+  android: true
+  ios: true
 
 flutter:
   uses-material-design: true

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/formatters/date_formatter.dart';
+import '../../../shared/services/city_search_service.dart';
 import '../../../shared/widgets/city_autocomplete_field.dart';
 import '../data/passenger_request_repository.dart';
 
@@ -124,6 +125,8 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
       controller: controller,
       hint: placeholder,
       icon: icon,
+      defaultSuggestions: popularArgentineCities,
+      citySearchSource: CitySearchSource.georef,
     );
   }
 
