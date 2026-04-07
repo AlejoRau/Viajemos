@@ -40,7 +40,9 @@ class _LoginScreenState extends State<LoginScreen> {
       );
       // El router redirige automáticamente al detectar sesión activa.
     } on AuthException catch (e) {
-      setState(() => _error = _mapError(e.message));
+      if (mounted) setState(() => _error = _mapError(e.message));
+    } catch (e) {
+      if (mounted) setState(() => _error = 'Error de red. Verificá tu conexión.');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -51,7 +53,7 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       await Supabase.instance.client.auth.signInWithOAuth(
         OAuthProvider.google,
-        redirectTo: Uri.base.origin,
+        redirectTo: 'com.example.viajemos_app://login-callback/',
         authScreenLaunchMode: LaunchMode.externalApplication,
       );
       // La página redirige a Google → cuando vuelve, Supabase detecta la sesión.

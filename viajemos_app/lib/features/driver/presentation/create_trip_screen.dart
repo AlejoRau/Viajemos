@@ -109,7 +109,8 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
 
   void _onTimeChanged() {
     final from = _parseMinutes(_timeFromController.text.trim());
-    final to = _parseMinutes(_timeToController.text.trim());
+    final toText = _timeToController.text.trim();
+    final to = toText.isEmpty ? null : _parseMinutes(toText);
     String? error;
     if (from != null && to != null && to <= from) {
       error = 'La hora de fin debe ser mayor que la de inicio';
@@ -195,32 +196,41 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
       return;
     }
 
-    // Validate time window
+    // Validate time
     final fromText = _timeFromController.text.trim();
     final toText = _timeToController.text.trim();
-    if (fromText.isEmpty || toText.isEmpty) {
+    if (fromText.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-            content: Text('Completá la ventana horaria de salida')),
+            content: Text('Completá la hora de salida')),
       );
       return;
     }
     final fromMin = _parseMinutes(fromText);
-    final toMin = _parseMinutes(toText);
-    if (fromMin == null || toMin == null) {
+    if (fromMin == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
             content: Text('Formato de hora inválido (usá HH:mm)')),
       );
       return;
     }
-    if (toMin <= fromMin) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text(
-                'La hora de fin debe ser mayor que la hora de inicio')),
-      );
-      return;
+    if (toText.isNotEmpty) {
+      final toMin = _parseMinutes(toText);
+      if (toMin == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Formato de hora de fin inválido (usá HH:mm)')),
+        );
+        return;
+      }
+      if (toMin <= fromMin) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text(
+                  'La hora de fin debe ser mayor que la hora de inicio')),
+        );
+        return;
+      }
     }
 
     // Origin map (only if driver does NOT pick up at door)
@@ -366,8 +376,10 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
             const SizedBox(height: 16),
             Row(
               children: [
-                const _SubLabel('PARADAS INTERMEDIAS'),
-                const SizedBox(width: 6),
+                const _SectionHeader(
+                    icon: Icons.add_location_alt_rounded,
+                    title: 'Paradas'),
+                const SizedBox(width: 8),
                 GestureDetector(
                   onTap: () => showDialog<void>(
                     context: context,
@@ -402,9 +414,9 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 16),
             SuggestionChipInput(
-              label: 'Paradas intermedias',
+              label: 'Ciudades (Opcional)',
               hint: 'Buscar ciudad...',
               chips: _stops,
               onAdd: (v) => setState(() => _stops.add(v)),
@@ -445,7 +457,7 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
                 title: 'Vías / Rutas'),
             const SizedBox(height: 16),
             SuggestionChipInput(
-              label: 'Rutas que va a usar',
+              label: 'Rutas (Opcional)',
               hint: 'Añadir vía o número de ruta...',
               suggestions: _routeSuggestions,
               chips: _routes,
@@ -461,7 +473,7 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
                 icon: Icons.calendar_today_rounded,
                 title: 'Fecha y hora'),
             const SizedBox(height: 16),
-            const _SubLabel('FECHA DE SALIDA'),
+            const _MedLabel('FECHA DE SALIDA'),
             const SizedBox(height: 8),
             GestureDetector(
               onTap: () async {
@@ -504,11 +516,11 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            const _SubLabel('VENTANA DE SALIDA'),
+            const _MedLabel('HORA DE SALIDA'),
             const SizedBox(height: 8),
             _RangeInputRow(
-              label1: 'Entre las',
-              label2: 'Y las',
+              label1: 'Salgo a las',
+              label2: 'Hasta las (opcional)',
               controller1: _timeFromController,
               controller2: _timeToController,
               formatter: TimeFormatter(),
@@ -832,6 +844,25 @@ class _SubLabel extends StatelessWidget {
   }
 }
 
+/// Slightly larger sublabel — used for date/time fields.
+class _MedLabel extends StatelessWidget {
+  const _MedLabel(this.text);
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text,
+      style: const TextStyle(
+        fontSize: 13,
+        fontWeight: FontWeight.bold,
+        color: Color(0xFF475569),
+        letterSpacing: 0.4,
+      ),
+    );
+  }
+}
+
 class _RangeInputRow extends StatelessWidget {
   const _RangeInputRow({
     required this.label1,
@@ -860,7 +891,7 @@ class _RangeInputRow extends StatelessWidget {
       children: [
         Text(label,
             style: const TextStyle(
-                fontSize: 10, color: Color(0xFF94A3B8))),
+                fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF475569))),
         const SizedBox(height: 4),
         Container(
           decoration: BoxDecoration(

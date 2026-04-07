@@ -128,11 +128,13 @@ class _SuggestionChipInputState extends State<SuggestionChipInput> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          widget.label,
-          style: const TextStyle(fontSize: 14, color: AppColors.textSecondary),
-        ),
-        const SizedBox(height: 8),
+        if (widget.label.isNotEmpty) ...[
+          Text(
+            widget.label,
+            style: const TextStyle(fontSize: 14, color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 8),
+        ],
         TextFormField(
           controller: _controller,
           focusNode: _focusNode,
