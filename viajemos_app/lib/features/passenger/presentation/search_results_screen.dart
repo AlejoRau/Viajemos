@@ -450,8 +450,9 @@ class _TripDetailsSheetState extends State<_TripDetailsSheet> {
         seatsRequested: 1,
       );
       if (mounted) {
+        final messenger = ScaffoldMessenger.of(context);
         Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           SnackBar(content: Text('Solicitud enviada a ${trip.driverName}')),
         );
       }
