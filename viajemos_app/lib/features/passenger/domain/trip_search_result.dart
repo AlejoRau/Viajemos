@@ -14,6 +14,7 @@ class TripSearchResult {
     required this.picksUpAtDoor,
     required this.dropsOffAtDoor,
     required this.via,
+    required this.stops,
     this.description,
     this.vehicleBrand,
     this.vehicleModel,
@@ -33,7 +34,8 @@ class TripSearchResult {
   final bool allowsPets;
   final bool picksUpAtDoor;
   final bool dropsOffAtDoor;
-  final List<String> via;
+  final List<String> via;   // route names, e.g. "Ruta Nacional 9"
+  final List<String> stops; // intermediate cities
   final String? description;
   final String? vehicleBrand;
   final String? vehicleModel;
@@ -117,6 +119,10 @@ class TripSearchResult {
       picksUpAtDoor: json['picks_up_at_door'] as bool? ?? false,
       dropsOffAtDoor: json['drops_off_at_door'] as bool? ?? false,
       via: (json['via'] as List<dynamic>?)
+              ?.map((e) => e as String)
+              .toList() ??
+          [],
+      stops: (json['stops'] as List<dynamic>?)
               ?.map((e) => e as String)
               .toList() ??
           [],

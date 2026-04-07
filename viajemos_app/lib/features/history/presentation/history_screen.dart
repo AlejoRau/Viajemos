@@ -195,6 +195,11 @@ class _ActiveTripCardState extends ConsumerState<_ActiveTripCard> {
     try {
       await ref.read(historyRepositoryProvider).deleteTrip(widget.trip.id);
       ref.refresh(activeDriverTripsProvider);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Viaje eliminado con éxito')),
+        );
+      }
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -216,7 +221,7 @@ class _ActiveTripCardState extends ConsumerState<_ActiveTripCard> {
         context: context,
         isScrollControlled: true,
         backgroundColor: Colors.transparent,
-        builder: (_) => _TripRequestsSheet(trip: trip),
+        builder: (_) => _DriverTripDetailsSheet(trip: trip),
       ),
       child: Stack(
         clipBehavior: Clip.none,
@@ -385,7 +390,7 @@ class _ActiveTripCardState extends ConsumerState<_ActiveTripCard> {
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
                       Text(
-                        'Ver solicitudes',
+                        'Ver detalles',
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
@@ -442,6 +447,344 @@ class _ActiveTripCardState extends ConsumerState<_ActiveTripCard> {
     );
   }
 }
+
+// ── Driver Trip Details Sheet ──────────────────────────────────────────────
+
+class _DriverTripDetailsSheet extends StatelessWidget {
+  const _DriverTripDetailsSheet({required this.trip});
+  final ActiveDriverTrip trip;
+
+  String _formatPrice(int p) => '\$${p.toString().replaceAllMapped(
+        RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.')}';
+
+  void _openRequests(BuildContext context) {
+    Navigator.pop(context);
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _TripRequestsSheet(trip: trip),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.88,
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      child: Column(
+        children: [
+          const SizedBox(height: 12),
+          Center(
+            child: Container(
+              width: 40, height: 4,
+              decoration: BoxDecoration(
+                  color: const Color(0xFFE2E8F0),
+                  borderRadius: BorderRadius.circular(2)),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Date
+                  Text(
+                    _formatDate(trip.departureDate),
+                    style: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF1E293B)),
+                  ),
+                  const SizedBox(height: 4),
+
+                  // Route cities
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(trip.originAddress,
+                            style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w500,
+                                color: Color(0xFF64748B))),
+                      ),
+                      const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 6),
+                        child: Icon(Icons.arrow_forward,
+                            size: 15, color: AppColors.primary),
+                      ),
+                      Flexible(
+                        child: Text(trip.destinationAddress,
+                            style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w500,
+                                color: Color(0xFF64748B))),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  const Divider(color: Color(0xFFE2E8F0)),
+                  const SizedBox(height: 16),
+
+                  // Date & time
+                  _SheetDetailRow(
+                    icon: Icons.access_time_rounded,
+                    text: trip.departureTime != null
+                        ? '${_formatDate(trip.departureDate)}  ·  ${trip.departureTime}'
+                        : _formatDate(trip.departureDate),
+                  ),
+
+                  // Vehicle
+                  if (trip.vehicleDisplay.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    _SheetDetailRow(
+                        icon: Icons.directions_car_rounded,
+                        text: trip.vehicleDisplay),
+                  ],
+
+                  // Stops
+                  if (trip.stops.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    _SheetDetailRow(
+                      icon: Icons.add_location_alt_outlined,
+                      text:
+                          '${trip.stops.length} parada${trip.stops.length > 1 ? 's' : ''}: ${trip.stops.join(', ')}',
+                    ),
+                  ],
+
+                  // Routes (via)
+                  if (trip.via.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    _SheetDetailRow(
+                        icon: Icons.add_road_rounded,
+                        text: 'Rutas: ${trip.via.join(', ')}'),
+                  ],
+
+                  // Badges
+                  const SizedBox(height: 14),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      _DetailBadge(
+                          label: 'Mascotas',
+                          icon: Icons.pets_rounded,
+                          bg: AppColors.greenLight,
+                          fg: AppColors.green,
+                          active: trip.allowsPets),
+                      _DetailBadge(
+                          label: 'Pasa a buscar',
+                          icon: Icons.home_rounded,
+                          bg: const Color(0xFFEFF6FF),
+                          fg: const Color(0xFF1D4ED8),
+                          active: trip.picksUpAtDoor),
+                      _DetailBadge(
+                          label: 'Deja en destino',
+                          icon: Icons.where_to_vote_rounded,
+                          bg: const Color(0xFFF5F3FF),
+                          fg: const Color(0xFF6D28D9),
+                          active: trip.dropsOffAtDoor),
+                    ],
+                  ),
+
+                  // Description
+                  if (trip.description != null &&
+                      trip.description!.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    const Text('Descripción',
+                        style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF1E293B))),
+                    const SizedBox(height: 6),
+                    Text(trip.description!,
+                        style: const TextStyle(
+                            fontSize: 13,
+                            color: Color(0xFF64748B),
+                            height: 1.5)),
+                  ],
+
+                  const SizedBox(height: 16),
+                  const Divider(color: Color(0xFFE2E8F0)),
+                  const SizedBox(height: 16),
+
+                  // Seats
+                  const Text('Viajeros',
+                      style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF1E293B))),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      for (int i = 0; i < trip.seatsTaken; i++)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: CircleAvatar(
+                            radius: 14,
+                            backgroundColor: AppColors.primary,
+                            child: const Icon(Icons.person,
+                                size: 15, color: Colors.white),
+                          ),
+                        ),
+                      for (int i = 0; i < trip.freeSeats; i++)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: CircleAvatar(
+                            radius: 14,
+                            backgroundColor: AppColors.inputBackground,
+                            child: const Icon(Icons.person_outline,
+                                size: 15,
+                                color: AppColors.textSecondary),
+                          ),
+                        ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '${trip.seatsTaken}/${trip.availableSeats} ocupados',
+                        style: const TextStyle(
+                            fontSize: 13,
+                            color: AppColors.textSecondary,
+                            fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Price
+                  Row(
+                    children: [
+                      Text(
+                        _formatPrice(trip.pricePerSeat),
+                        style: const TextStyle(
+                            fontSize: 26,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.primary),
+                      ),
+                      const SizedBox(width: 6),
+                      const Text('por asiento',
+                          style: TextStyle(
+                              fontSize: 14, color: Color(0xFF64748B))),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                ],
+              ),
+            ),
+          ),
+
+          // Bottom button
+          Container(
+            padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              border: Border(top: BorderSide(color: Color(0xFFE2E8F0))),
+            ),
+            child: SizedBox(
+              width: double.infinity,
+              height: 54,
+              child: ElevatedButton.icon(
+                onPressed: () => _openRequests(context),
+                icon: trip.pendingRequestsCount > 0
+                    ? Badge(
+                        label: Text('${trip.pendingRequestsCount}'),
+                        child: const Icon(Icons.people_rounded,
+                            color: Colors.white),
+                      )
+                    : const Icon(Icons.people_rounded, color: Colors.white),
+                label: const Text('Ver solicitudes',
+                    style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: trip.pendingRequestsCount > 0
+                      ? Colors.orange.shade600
+                      : AppColors.primary,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(27)),
+                  elevation: 0,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SheetDetailRow extends StatelessWidget {
+  const _SheetDetailRow({required this.icon, required this.text});
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 16, color: AppColors.textSecondary),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(text,
+              style: const TextStyle(
+                  fontSize: 13, color: Color(0xFF475569))),
+        ),
+      ],
+    );
+  }
+}
+
+class _DetailBadge extends StatelessWidget {
+  const _DetailBadge({
+    required this.label,
+    required this.icon,
+    required this.bg,
+    required this.fg,
+    required this.active,
+  });
+  final String label;
+  final IconData icon;
+  final Color bg;
+  final Color fg;
+  final bool active;
+
+  static const _inactiveBg = Color(0xFFF1F5F9);
+  static const _inactiveFg = Color(0xFFCBD5E1);
+
+  @override
+  Widget build(BuildContext context) {
+    final bgColor = active ? bg : _inactiveBg;
+    final fgColor = active ? fg : _inactiveFg;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+      decoration: BoxDecoration(
+          color: bgColor, borderRadius: BorderRadius.circular(20)),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 15, color: fgColor),
+          const SizedBox(width: 5),
+          Text(label,
+              style: TextStyle(
+                fontSize: 13,
+                color: fgColor,
+                fontWeight: FontWeight.w600,
+                decoration: active ? null : TextDecoration.lineThrough,
+                decorationColor: _inactiveFg,
+              )),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 class _InfoChip extends StatelessWidget {
   const _InfoChip({required this.icon, required this.label});

@@ -24,6 +24,7 @@ class TripSearchRepository {
       picks_up_at_door,
       drops_off_at_door,
       via,
+      stops,
       description,
       profiles!owner_id(full_name, avg_rating),
       vehicles!vehicle_id(brand, model, color)
@@ -58,5 +59,21 @@ class TripSearchRepository {
         .map((row) =>
             TripSearchResult.fromJson(row as Map<String, dynamic>))
         .toList();
+  }
+
+  Future<void> createTripRequest({
+    required String tripId,
+    required int seatsRequested,
+    String? message,
+  }) async {
+    final user = _client.auth.currentUser;
+    if (user == null) throw Exception('No authenticated user');
+    await _client.from('trip_requests').insert({
+      'trip_id': tripId,
+      'passenger_id': user.id,
+      'seats_requested': seatsRequested,
+      'status': 'pending',
+      if (message != null && message.isNotEmpty) 'message': message,
+    });
   }
 }

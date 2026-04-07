@@ -71,7 +71,16 @@ class ActiveDriverTrip {
     required this.status,
     required this.pendingRequestsCount,
     required this.acceptedPassengerNames,
+    required this.via,
+    required this.stops,
+    required this.allowsPets,
+    required this.picksUpAtDoor,
+    required this.dropsOffAtDoor,
     this.departureTime,
+    this.description,
+    this.vehicleBrand,
+    this.vehicleModel,
+    this.vehicleColor,
   });
 
   final String id;
@@ -84,10 +93,24 @@ class ActiveDriverTrip {
   final String status;
   final int pendingRequestsCount;
   final List<String> acceptedPassengerNames;
+  final List<String> via;
+  final List<String> stops;
+  final bool allowsPets;
+  final bool picksUpAtDoor;
+  final bool dropsOffAtDoor;
   final String? departureTime;
+  final String? description;
+  final String? vehicleBrand;
+  final String? vehicleModel;
+  final String? vehicleColor;
 
   int get freeSeats => availableSeats - seatsTaken;
   bool get isFull => status == 'full';
+
+  String get vehicleDisplay {
+    if (vehicleBrand == null) return '';
+    return '$vehicleBrand $vehicleModel · $vehicleColor';
+  }
 }
 
 class TripRequestEntry {
@@ -137,9 +160,18 @@ class HistoryRepository {
         pendingRequestsCount: (row['pending_requests_count'] as num?)?.toInt() ?? 0,
         acceptedPassengerNames:
             (row['accepted_passenger_names'] as List?)?.cast<String>() ?? [],
+        via: (row['via'] as List?)?.cast<String>() ?? [],
+        stops: (row['stops'] as List?)?.cast<String>() ?? [],
+        allowsPets: row['allows_pets'] as bool? ?? false,
+        picksUpAtDoor: row['picks_up_at_door'] as bool? ?? false,
+        dropsOffAtDoor: row['drops_off_at_door'] as bool? ?? false,
         departureTime: timeRaw != null && timeRaw.length >= 5
             ? timeRaw.substring(0, 5)
             : null,
+        description: row['description'] as String?,
+        vehicleBrand: row['vehicle_brand'] as String?,
+        vehicleModel: row['vehicle_model'] as String?,
+        vehicleColor: row['vehicle_color'] as String?,
       );
     }).toList();
   }

@@ -273,6 +273,7 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
         picksUpAtDoor: _picksUpPassengers,
         dropsOffAtDoor: _dropsOffPassengers,
         via: _routes,
+        stops: _stops,
         description: _descriptionController.text.trim(),
         vehicleId: _selectedVehicle?.id,
       );

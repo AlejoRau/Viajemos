@@ -254,16 +254,34 @@ class _TripCard extends StatelessWidget {
                 ),
               ],
             ),
-            if (trip.via.isNotEmpty) ...[
+            if (trip.stops.isNotEmpty) ...[
               const SizedBox(height: 4),
               Row(
                 children: [
-                  const Icon(Icons.subdirectory_arrow_right_rounded,
+                  const Icon(Icons.add_location_alt_outlined,
                       size: 13, color: AppColors.textSecondary),
                   const SizedBox(width: 3),
                   Expanded(
                     child: Text(
-                      'Paradas: ${trip.via.join(' · ')}',
+                      'Paradas: ${trip.stops.join(' · ')}',
+                      style: const TextStyle(
+                          fontSize: 13, color: AppColors.textSecondary),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            if (trip.via.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  const Icon(Icons.add_road_rounded,
+                      size: 13, color: AppColors.textSecondary),
+                  const SizedBox(width: 3),
+                  Expanded(
+                    child: Text(
+                      'Rutas: ${trip.via.join(' · ')}',
                       style: const TextStyle(
                           fontSize: 13, color: AppColors.textSecondary),
                       overflow: TextOverflow.ellipsis,
@@ -406,14 +424,50 @@ class _TripCard extends StatelessWidget {
 
 // ── Trip Details Sheet ────────────────────────────────────────────────────────
 
-class _TripDetailsSheet extends StatelessWidget {
+class _TripDetailsSheet extends StatefulWidget {
   const _TripDetailsSheet({required this.trip});
   final TripSearchResult trip;
+
+  @override
+  State<_TripDetailsSheet> createState() => _TripDetailsSheetState();
+}
+
+class _TripDetailsSheetState extends State<_TripDetailsSheet> {
+  bool _sending = false;
+
+  TripSearchResult get trip => widget.trip;
 
   String _formatPrice(int price) => '\$${price.toString().replaceAllMapped(
         RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
         (m) => '${m[1]}.',
       )}';
+
+  Future<void> _sendRequest() async {
+    setState(() => _sending = true);
+    try {
+      await TripSearchRepository().createTripRequest(
+        tripId: trip.id,
+        seatsRequested: 1,
+      );
+      if (mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Solicitud enviada a ${trip.driverName}')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Error al enviar la solicitud'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -564,12 +618,18 @@ class _TripDetailsSheet extends StatelessWidget {
                         icon: Icons.directions_car_rounded,
                         text: trip.vehicleDisplay),
                   ],
+                  if (trip.stops.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    _DetailRow(
+                        icon: Icons.add_location_alt_outlined,
+                        text:
+                            '${trip.stops.length} parada${trip.stops.length > 1 ? 's' : ''}: ${trip.stops.join(', ')}'),
+                  ],
                   if (trip.via.isNotEmpty) ...[
                     const SizedBox(height: 10),
                     _DetailRow(
-                        icon: Icons.place_rounded,
-                        text:
-                            '${trip.via.length} parada${trip.via.length > 1 ? 's' : ''}: ${trip.via.join(', ')}'),
+                        icon: Icons.add_road_rounded,
+                        text: 'Rutas: ${trip.via.join(', ')}'),
                   ],
 
                   // Badges — siempre visibles, grises si inactivos
@@ -699,25 +759,25 @@ class _TripDetailsSheet extends StatelessWidget {
               width: double.infinity,
               height: 54,
               child: ElevatedButton(
-                onPressed: () {
-                  Navigator.of(context).pop();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                        content: Text(
-                            'Solicitud enviada a ${trip.driverName}')),
-                  );
-                },
+                onPressed: _sending ? null : _sendRequest,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF1A73E8),
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(27)),
                   elevation: 0,
                 ),
-                child: const Text('Enviar solicitud',
-                    style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white)),
+                child: _sending
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2.5, color: Colors.white),
+                      )
+                    : const Text('Enviar solicitud',
+                        style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white)),
               ),
             ),
           ),
