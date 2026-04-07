@@ -182,14 +182,15 @@ class _TripCard extends StatelessWidget {
             Row(
               children: [
                 CircleAvatar(
-                  radius: 22,
+                  radius: 24,
                   backgroundColor: AppColors.primaryLight,
                   child: Text(trip.driverInitials,
                       style: const TextStyle(
                           color: AppColors.primary,
-                          fontWeight: FontWeight.bold)),
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15)),
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -197,20 +198,20 @@ class _TripCard extends StatelessWidget {
                       Text(trip.driverName,
                           style: const TextStyle(
                               fontWeight: FontWeight.w600,
-                              fontSize: 14)),
+                              fontSize: 16)),
+                      const SizedBox(height: 2),
                       Row(
                         children: [
                           const Icon(Icons.star_rounded,
-                              size: 14,
+                              size: 15,
                               color: Color(0xFFFACC15)),
-                          const SizedBox(width: 2),
+                          const SizedBox(width: 3),
                           Text(
                             trip.driverRating > 0
-                                ? trip.driverRating
-                                    .toStringAsFixed(1)
+                                ? trip.driverRating.toStringAsFixed(1)
                                 : 'Sin calificación',
                             style: const TextStyle(
-                                fontSize: 12,
+                                fontSize: 13,
                                 color: AppColors.textSecondary),
                           ),
                         ],
@@ -221,13 +222,13 @@ class _TripCard extends StatelessWidget {
                 Text(
                   _formatPrice(trip.pricePerSeat),
                   style: const TextStyle(
-                      fontSize: 17,
+                      fontSize: 19,
                       fontWeight: FontWeight.bold,
                       color: AppColors.primary),
                 ),
               ],
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 12),
 
             // Route
             Row(
@@ -235,79 +236,81 @@ class _TripCard extends StatelessWidget {
                 Flexible(
                   child: Text(trip.originAddress,
                       style: const TextStyle(
-                          fontWeight: FontWeight.w500,
-                          fontSize: 14),
+                          fontWeight: FontWeight.w600,
+                          fontSize: 15),
                       overflow: TextOverflow.ellipsis),
                 ),
                 const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 6),
                   child: Icon(Icons.arrow_forward,
-                      size: 14, color: AppColors.primary),
+                      size: 15, color: AppColors.primary),
                 ),
                 Flexible(
                   child: Text(trip.destinationAddress,
                       style: const TextStyle(
-                          fontWeight: FontWeight.w500,
-                          fontSize: 14),
+                          fontWeight: FontWeight.w600,
+                          fontSize: 15),
                       overflow: TextOverflow.ellipsis),
                 ),
-                if (trip.via.isNotEmpty) ...[
-                  const SizedBox(width: 6),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 7, vertical: 2),
-                    decoration: BoxDecoration(
-                        color: AppColors.primaryLight,
-                        borderRadius: BorderRadius.circular(20)),
+              ],
+            ),
+            if (trip.via.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  const Icon(Icons.subdirectory_arrow_right_rounded,
+                      size: 13, color: AppColors.textSecondary),
+                  const SizedBox(width: 3),
+                  Expanded(
                     child: Text(
-                      '${trip.via.length} parada${trip.via.length > 1 ? 's' : ''}',
+                      'Paradas: ${trip.via.join(' · ')}',
                       style: const TextStyle(
-                          fontSize: 11,
-                          color: AppColors.primary),
+                          fontSize: 13, color: AppColors.textSecondary),
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ],
-              ],
-            ),
-            const SizedBox(height: 6),
+              ),
+            ],
+            const SizedBox(height: 8),
 
             // Date & time
             Row(
               children: [
                 const Icon(Icons.calendar_today_rounded,
-                    size: 13,
+                    size: 14,
                     color: AppColors.textSecondary),
-                const SizedBox(width: 4),
+                const SizedBox(width: 5),
                 Text(
                   trip.formattedTime.isNotEmpty
                       ? '${trip.formattedDate}  •  ${trip.formattedTime}'
                       : trip.formattedDate,
                   style: const TextStyle(
-                      fontSize: 12,
+                      fontSize: 13,
                       color: AppColors.textSecondary),
                 ),
               ],
             ),
             const SizedBox(height: 6),
 
-            // Seats
+            // Seats available
             Row(
               children: [
                 const Icon(Icons.event_seat_rounded,
-                    size: 13,
+                    size: 14,
                     color: AppColors.textSecondary),
-                const SizedBox(width: 4),
+                const SizedBox(width: 5),
                 Text(
                   '${trip.freeSeats} lugar${trip.freeSeats != 1 ? 'es' : ''} disponible${trip.freeSeats != 1 ? 's' : ''}',
                   style: const TextStyle(
-                      fontSize: 12,
+                      fontSize: 13,
                       color: AppColors.textSecondary),
                 ),
               ],
             ),
 
             // Badges — siempre visibles, grises si inactivos
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
             Wrap(
               spacing: 6,
               runSpacing: 6,
@@ -342,7 +345,7 @@ class _TripCard extends StatelessWidget {
               children: [
                 const Text('Viajeros:',
                     style: TextStyle(
-                        fontSize: 12,
+                        fontSize: 13,
                         color: AppColors.textSecondary,
                         fontWeight: FontWeight.w500)),
                 const SizedBox(width: 8),
@@ -350,20 +353,20 @@ class _TripCard extends StatelessWidget {
                   Padding(
                     padding: const EdgeInsets.only(right: 4),
                     child: CircleAvatar(
-                      radius: 12,
+                      radius: 13,
                       backgroundColor: AppColors.primary,
                       child: const Icon(Icons.person,
-                          size: 13, color: Colors.white),
+                          size: 14, color: Colors.white),
                     ),
                   ),
                 for (int i = 0; i < trip.freeSeats; i++)
                   Padding(
                     padding: const EdgeInsets.only(right: 4),
                     child: CircleAvatar(
-                      radius: 12,
+                      radius: 13,
                       backgroundColor: AppColors.inputBackground,
                       child: const Icon(Icons.person_outline,
-                          size: 13,
+                          size: 14,
                           color: AppColors.textSecondary),
                     ),
                   ),
@@ -371,7 +374,7 @@ class _TripCard extends StatelessWidget {
                 Text(
                   '${trip.seatsTaken}/${trip.availableSeats}',
                   style: const TextStyle(
-                      fontSize: 12,
+                      fontSize: 13,
                       color: AppColors.textSecondary,
                       fontWeight: FontWeight.w600),
                 ),
@@ -384,12 +387,12 @@ class _TripCard extends StatelessWidget {
               Row(
                 children: [
                   const Icon(Icons.directions_car_rounded,
-                      size: 13,
+                      size: 14,
                       color: AppColors.textSecondary),
-                  const SizedBox(width: 4),
+                  const SizedBox(width: 5),
                   Text(trip.vehicleDisplay,
                       style: const TextStyle(
-                          fontSize: 12,
+                          fontSize: 13,
                           color: AppColors.textSecondary)),
                 ],
               ),

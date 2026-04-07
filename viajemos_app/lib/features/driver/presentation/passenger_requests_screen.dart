@@ -491,190 +491,229 @@ class _RequestCard extends StatelessWidget {
   final PassengerRequest request;
   final VoidCallback onOffer;
 
-  @override
-  Widget build(BuildContext context) {
-    final initials = request.passengerName.isNotEmpty
+  String _formatPrice(int price) => '\$${price.toString().replaceAllMapped(
+        RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+        (m) => '${m[1]}.',
+      )}';
+
+  String get _initials {
+    final parts = request.passengerName.trim().split(' ');
+    if (parts.length >= 2) return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
+    return request.passengerName.isNotEmpty
         ? request.passengerName[0].toUpperCase()
         : '?';
+  }
 
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: AppColors.background,
-        border: Border.all(color: AppColors.border, width: 2),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: const [
-          BoxShadow(
-              color: Color(0x0A000000), blurRadius: 8, offset: Offset(0, 2))
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header: Nombre y Precio
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  CircleAvatar(
-                    radius: 20,
-                    backgroundColor: AppColors.primaryLight,
-                    child: Text(initials,
-                        style: const TextStyle(
-                            color: AppColors.primary,
-                            fontWeight: FontWeight.bold)),
-                  ),
-                  const SizedBox(width: 10),
-                  Column(
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onOffer,
+      child: Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: AppColors.background,
+          border: Border.all(color: AppColors.border, width: 2),
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: const [
+            BoxShadow(
+                color: Color(0x0A000000), blurRadius: 8, offset: Offset(0, 2))
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Passenger + max price
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 24,
+                  backgroundColor: AppColors.primaryLight,
+                  child: Text(_initials,
+                      style: const TextStyle(
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15)),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(request.passengerName,
                           style: const TextStyle(
-                              fontWeight: FontWeight.w600, fontSize: 15)),
-                      if (request.avgRating != null)
-                        Row(
-                          children: [
+                              fontWeight: FontWeight.w600, fontSize: 16)),
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          if (request.avgRating != null) ...[
                             const Icon(Icons.star_rounded,
-                                size: 13, color: Color(0xFFF59E0B)),
+                                size: 15, color: Color(0xFFFACC15)),
                             const SizedBox(width: 3),
                             Text(
                               request.avgRating!.toStringAsFixed(1),
                               style: const TextStyle(
-                                  fontSize: 12,
+                                  fontSize: 13,
                                   color: AppColors.textSecondary),
                             ),
-                          ],
-                        ),
+                          ] else
+                            const Text('Sin calificación',
+                                style: TextStyle(
+                                    fontSize: 13,
+                                    color: AppColors.textSecondary)),
+                        ],
+                      ),
                     ],
                   ),
-                ],
-              ),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: request.maxPrice != null
-                      ? AppColors.greenLight
-                      : AppColors.primaryLight,
-                  borderRadius: BorderRadius.circular(10),
                 ),
-                child: Text(
+                Text(
                   request.maxPrice != null
-                      ? '\$${request.maxPrice}'
+                      ? _formatPrice(request.maxPrice!)
                       : 'A convenir',
                   style: TextStyle(
-                    color: request.maxPrice != null
-                        ? AppColors.green
-                        : AppColors.primary,
+                    fontSize: 19,
                     fontWeight: FontWeight.bold,
-                    fontSize: 13,
+                    color: request.maxPrice != null
+                        ? AppColors.primary
+                        : AppColors.textSecondary,
                   ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-
-          // Ruta
-          Row(
-            children: [
-              Flexible(
-                child: Text(request.originAddress,
-                    style: const TextStyle(fontWeight: FontWeight.w500),
-                    overflow: TextOverflow.ellipsis),
-              ),
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 6),
-                child: Icon(Icons.arrow_forward,
-                    size: 16, color: AppColors.primary),
-              ),
-              Flexible(
-                child: Text(request.destinationAddress,
-                    style: const TextStyle(fontWeight: FontWeight.w500),
-                    overflow: TextOverflow.ellipsis),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-
-          // Fecha y asientos
-          Row(
-            children: [
-              const Icon(Icons.calendar_today_rounded,
-                  size: 13, color: AppColors.textSecondary),
-              const SizedBox(width: 4),
-              Text(request.formattedDateRange,
-                  style: const TextStyle(
-                      fontSize: 13, color: AppColors.textSecondary)),
-              if (request.timeWindow.isNotEmpty) ...[
-                const SizedBox(width: 12),
-                const Icon(Icons.access_time_rounded,
-                    size: 13, color: AppColors.textSecondary),
-                const SizedBox(width: 4),
-                Text(request.timeWindow,
-                    style: const TextStyle(
-                        fontSize: 13, color: AppColors.textSecondary)),
               ],
-              const SizedBox(width: 12),
-              const Icon(Icons.people_rounded,
-                  size: 14, color: AppColors.textSecondary),
-              const SizedBox(width: 4),
-              Text(
-                  '${request.seatsNeeded} asiento${request.seatsNeeded > 1 ? 's' : ''}',
-                  style: const TextStyle(
-                      fontSize: 13, color: AppColors.textSecondary)),
-            ],
-          ),
+            ),
+            const SizedBox(height: 12),
 
-          // Badges
-          if (request.hasPet || request.isSmoker) ...[
-            const SizedBox(height: 8),
+            // Route
             Row(
               children: [
-                if (request.hasPet)
-                  _Badge(
-                      label: 'Mascota',
-                      icon: Icons.pets_rounded,
-                      bg: AppColors.greenLight,
-                      fg: AppColors.green),
-                if (request.hasPet && request.isSmoker)
-                  const SizedBox(width: 8),
-                if (request.isSmoker)
-                  _Badge(
-                      label: 'Fumador',
-                      icon: Icons.smoking_rooms_rounded,
-                      bg: AppColors.orangeLight,
-                      fg: AppColors.orange),
+                Flexible(
+                  child: Text(request.originAddress,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w600, fontSize: 15),
+                      overflow: TextOverflow.ellipsis),
+                ),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 6),
+                  child: Icon(Icons.arrow_forward,
+                      size: 15, color: AppColors.primary),
+                ),
+                Flexible(
+                  child: Text(request.destinationAddress,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w600, fontSize: 15),
+                      overflow: TextOverflow.ellipsis),
+                ),
               ],
             ),
-          ],
-
-          if (request.description != null &&
-              request.description!.isNotEmpty) ...[
             const SizedBox(height: 8),
-            Text(
-              request.description!,
-              style: const TextStyle(
-                  fontSize: 13, color: AppColors.textSecondary),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
+
+            // Date & time
+            Row(
+              children: [
+                const Icon(Icons.calendar_today_rounded,
+                    size: 14, color: AppColors.textSecondary),
+                const SizedBox(width: 5),
+                Text(request.formattedDateRange,
+                    style: const TextStyle(
+                        fontSize: 13, color: AppColors.textSecondary)),
+                if (request.timeWindow.isNotEmpty) ...[
+                  const SizedBox(width: 12),
+                  const Icon(Icons.access_time_rounded,
+                      size: 14, color: AppColors.textSecondary),
+                  const SizedBox(width: 5),
+                  Text(request.timeWindow,
+                      style: const TextStyle(
+                          fontSize: 13, color: AppColors.textSecondary)),
+                ],
+              ],
+            ),
+            const SizedBox(height: 6),
+
+            // Seats visualization
+            Row(
+              children: [
+                const Text('Viajeros:',
+                    style: TextStyle(
+                        fontSize: 13,
+                        color: AppColors.textSecondary,
+                        fontWeight: FontWeight.w500)),
+                const SizedBox(width: 8),
+                for (int i = 0; i < request.seatsNeeded; i++)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 4),
+                    child: CircleAvatar(
+                      radius: 13,
+                      backgroundColor: AppColors.primary,
+                      child: const Icon(Icons.person,
+                          size: 14, color: Colors.white),
+                    ),
+                  ),
+                const SizedBox(width: 6),
+                Text(
+                  '${request.seatsNeeded} asiento${request.seatsNeeded > 1 ? 's' : ''}',
+                  style: const TextStyle(
+                      fontSize: 13,
+                      color: AppColors.textSecondary,
+                      fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+
+            // Badges
+            if (request.hasPet || request.isSmoker) ...[
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                children: [
+                  if (request.hasPet)
+                    _Badge(
+                        label: 'Mascota',
+                        icon: Icons.pets_rounded,
+                        bg: AppColors.greenLight,
+                        fg: AppColors.green),
+                  if (request.isSmoker)
+                    _Badge(
+                        label: 'Fumador',
+                        icon: Icons.smoking_rooms_rounded,
+                        bg: AppColors.orangeLight,
+                        fg: AppColors.orange),
+                ],
+              ),
+            ],
+
+            if (request.description != null &&
+                request.description!.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Text(
+                request.description!,
+                style: const TextStyle(
+                    fontSize: 13, color: AppColors.textSecondary, height: 1.4),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+
+            const SizedBox(height: 14),
+
+            // Button
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: ElevatedButton(
+                onPressed: onOffer,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14)),
+                  elevation: 0,
+                ),
+                child: const Text('Ofrecer viaje',
+                    style:
+                        TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+              ),
             ),
           ],
-
-          const SizedBox(height: 12),
-
-          // Botón
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: onOffer,
-              style: ElevatedButton.styleFrom(
-                  minimumSize: const Size(double.infinity, 44)),
-              child: const Text('Ofrecer viaje'),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/providers/role_provider.dart';
+import '../../core/providers/badge_providers.dart';
 
 class MainShell extends ConsumerWidget {
   const MainShell({super.key, required this.child});
@@ -21,6 +22,8 @@ class MainShell extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final idx = _selectedIndex(context);
     final roleHome = ref.watch(roleProvider);
+    final unreadCount = ref.watch(unreadCountProvider);
+    final pendingCount = ref.watch(pendingRequestsCountProvider);
 
     return Scaffold(
       body: child,
@@ -29,12 +32,12 @@ class MainShell extends ConsumerWidget {
           color: Colors.white,
           boxShadow: [
             BoxShadow(
-              color: Color(0x1A000000), // rgba(0,0,0,0.10) — matches Figma Make shadow-md
+              color: Color(0x1A000000),
               blurRadius: 8,
               offset: Offset(0, -3),
             ),
             BoxShadow(
-              color: Color(0x0D000000), // rgba(0,0,0,0.05) — secondary layer
+              color: Color(0x0D000000),
               blurRadius: 4,
               offset: Offset(0, -1),
             ),
@@ -59,6 +62,7 @@ class MainShell extends ConsumerWidget {
                   activeIcon: Icons.history_rounded,
                   label: 'Historial',
                   selected: idx == 1,
+                  badge: pendingCount,
                   onTap: () => context.go('/history'),
                 ),
                 _NavItem(
@@ -66,6 +70,7 @@ class MainShell extends ConsumerWidget {
                   activeIcon: Icons.chat_bubble_rounded,
                   label: 'Chats',
                   selected: idx == 2,
+                  badge: unreadCount,
                   onTap: () => context.go('/chats'),
                 ),
                 _NavItem(
@@ -91,6 +96,7 @@ class _NavItem extends StatelessWidget {
     required this.label,
     required this.selected,
     required this.onTap,
+    this.badge = 0,
   });
 
   final IconData icon;
@@ -98,6 +104,7 @@ class _NavItem extends StatelessWidget {
   final String label;
   final bool selected;
   final VoidCallback onTap;
+  final int badge;
 
   @override
   Widget build(BuildContext context) {
@@ -116,10 +123,38 @@ class _NavItem extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              selected ? activeIcon : icon,
-              size: 22,
-              color: selected ? AppColors.primary : AppColors.textSecondary,
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Icon(
+                  selected ? activeIcon : icon,
+                  size: 22,
+                  color: selected ? AppColors.primary : AppColors.textSecondary,
+                ),
+                if (badge > 0)
+                  Positioned(
+                    top: -6,
+                    right: -10,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 4, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: Colors.red,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      constraints: const BoxConstraints(minWidth: 16),
+                      child: Text(
+                        badge > 9 ? '9+' : '$badge',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
+              ],
             ),
             if (selected) ...[
               const SizedBox(height: 3),

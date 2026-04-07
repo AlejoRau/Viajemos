@@ -1,56 +1,28 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
-
-class _Chat {
-  _Chat({
-    required this.id,
-    required this.name,
-    required this.lastMessage,
-    required this.timestamp,
-    required this.unread,
-  });
-  final String id;
-  final String name;
-  final String lastMessage;
-  final String timestamp;
-  final int unread;
-}
-
-final _mockChats = [
-  _Chat(
-    id: '1',
-    name: 'Carlos Rodríguez',
-    lastMessage: 'Perfecto, nos vemos mañana a las 8!',
-    timestamp: '10:45',
-    unread: 0,
-  ),
-  _Chat(
-    id: '2',
-    name: 'Ana López',
-    lastMessage: '¿Puedo llevar una valija grande?',
-    timestamp: 'Ayer',
-    unread: 2,
-  ),
-  _Chat(
-    id: '3',
-    name: 'Diego Fernández',
-    lastMessage: 'Gracias por el viaje!',
-    timestamp: 'Mar 25',
-    unread: 0,
-  ),
-  _Chat(
-    id: '4',
-    name: 'María González',
-    lastMessage: '¿Hacés parada en Rosario?',
-    timestamp: 'Mar 20',
-    unread: 1,
-  ),
-];
+import '../data/chat_repository.dart';
 
 String _initials(String name) {
   final parts = name.trim().split(' ');
   if (parts.length >= 2) return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
-  return name.substring(0, 2).toUpperCase();
+  return name.substring(0, name.length.clamp(1, 2)).toUpperCase();
+}
+
+String _formatTimestamp(DateTime? dt) {
+  if (dt == null) return '';
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final yesterday = today.subtract(const Duration(days: 1));
+  final msgDay = DateTime(dt.year, dt.month, dt.day);
+
+  if (msgDay == today) {
+    return '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+  } else if (msgDay == yesterday) {
+    return 'Ayer';
+  } else {
+    return '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}';
+  }
 }
 
 class ChatsScreen extends StatefulWidget {
@@ -62,7 +34,16 @@ class ChatsScreen extends StatefulWidget {
 
 class _ChatsScreenState extends State<ChatsScreen> {
   final _searchController = TextEditingController();
+  final _chatRepo = ChatRepository();
   String _query = '';
+  List<ConversationSummary> _conversations = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
 
   @override
   void dispose() {
@@ -70,10 +51,21 @@ class _ChatsScreenState extends State<ChatsScreen> {
     super.dispose();
   }
 
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    try {
+      final convs = await _chatRepo.fetchConversations();
+      if (mounted) setState(() { _conversations = convs; _loading = false; });
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final filtered = _mockChats
-        .where((c) => c.name.toLowerCase().contains(_query.toLowerCase()))
+    final filtered = _conversations
+        .where((c) =>
+            c.contactName.toLowerCase().contains(_query.toLowerCase()))
         .toList();
 
     return Scaffold(
@@ -86,7 +78,8 @@ class _ChatsScreenState extends State<ChatsScreen> {
             child: TextField(
               controller: _searchController,
               onChanged: (v) => setState(() => _query = v),
-              style: const TextStyle(fontSize: 14, color: AppColors.textPrimary),
+              style:
+                  const TextStyle(fontSize: 14, color: AppColors.textPrimary),
               decoration: InputDecoration(
                 hintText: 'Buscar conversaciones...',
                 hintStyle: const TextStyle(color: AppColors.textSecondary),
@@ -113,36 +106,50 @@ class _ChatsScreenState extends State<ChatsScreen> {
           ),
         ),
       ),
-      body: filtered.isEmpty
-            ? const _EmptyState()
-            : ListView.separated(
-                itemCount: filtered.length,
-                separatorBuilder: (_, __) =>
-                    const Divider(height: 1, color: AppColors.border),
-                itemBuilder: (context, i) => _ChatTile(chat: filtered[i]),
-              ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : RefreshIndicator(
+              onRefresh: _load,
+              child: filtered.isEmpty
+                  ? const _EmptyState()
+                  : ListView.separated(
+                      itemCount: filtered.length,
+                      separatorBuilder: (_, __) =>
+                          const Divider(height: 1, color: AppColors.border),
+                      itemBuilder: (context, i) => _ChatTile(
+                        conv: filtered[i],
+                        onTap: () => context.push(
+                          '/chats/${filtered[i].id}',
+                          extra: {
+                            'contactName': filtered[i].contactName,
+                            'contactId': filtered[i].contactId,
+                          },
+                        ),
+                      ),
+                    ),
+            ),
     );
   }
 }
 
 class _ChatTile extends StatelessWidget {
-  const _ChatTile({required this.chat});
-  final _Chat chat;
+  const _ChatTile({required this.conv, required this.onTap});
+  final ConversationSummary conv;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      onTap: () {},
+      onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
         child: Row(
           children: [
-            // Avatar
             CircleAvatar(
               radius: 28,
               backgroundColor: AppColors.primaryLight,
               child: Text(
-                _initials(chat.name),
+                _initials(conv.contactName),
                 style: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
@@ -151,7 +158,6 @@ class _ChatTile extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 14),
-            // Nombre + último mensaje
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -160,7 +166,7 @@ class _ChatTile extends StatelessWidget {
                     children: [
                       Expanded(
                         child: Text(
-                          chat.name,
+                          conv.contactName,
                           style: const TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w600,
@@ -171,23 +177,21 @@ class _ChatTile extends StatelessWidget {
                       ),
                       const SizedBox(width: 8),
                       Text(
-                        chat.timestamp,
+                        _formatTimestamp(conv.lastMessageAt),
                         style: const TextStyle(
-                          fontSize: 12,
-                          color: AppColors.textSecondary,
-                        ),
+                            fontSize: 12, color: AppColors.textSecondary),
                       ),
                     ],
                   ),
                   const SizedBox(height: 3),
                   Text(
-                    chat.lastMessage,
+                    conv.lastMessage,
                     style: TextStyle(
                       fontSize: 13,
-                      color: chat.unread > 0
+                      color: conv.unreadCount > 0
                           ? AppColors.textPrimary
                           : AppColors.textSecondary,
-                      fontWeight: chat.unread > 0
+                      fontWeight: conv.unreadCount > 0
                           ? FontWeight.w500
                           : FontWeight.normal,
                     ),
@@ -196,8 +200,7 @@ class _ChatTile extends StatelessWidget {
                 ],
               ),
             ),
-            // Badge mensajes no leídos
-            if (chat.unread > 0) ...[
+            if (conv.unreadCount > 0) ...[
               const SizedBox(width: 10),
               Container(
                 width: 24,
@@ -208,7 +211,7 @@ class _ChatTile extends StatelessWidget {
                 ),
                 alignment: Alignment.center,
                 child: Text(
-                  '${chat.unread}',
+                  '${conv.unreadCount}',
                   style: const TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
@@ -229,19 +232,24 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.chat_bubble_outline_rounded,
-              size: 64, color: AppColors.border),
-          SizedBox(height: 16),
-          Text(
-            'No se encontraron conversaciones',
-            style: TextStyle(fontSize: 15, color: AppColors.textSecondary),
+    return ListView(
+      children: const [
+        SizedBox(height: 120),
+        Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.chat_bubble_outline_rounded,
+                  size: 64, color: AppColors.border),
+              SizedBox(height: 16),
+              Text(
+                'No se encontraron conversaciones',
+                style: TextStyle(fontSize: 15, color: AppColors.textSecondary),
+              ),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

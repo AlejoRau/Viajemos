@@ -14,6 +14,7 @@ import 'features/passenger/presentation/search_trips_screen.dart';
 import 'features/passenger/presentation/create_request_screen.dart';
 import 'features/history/presentation/history_screen.dart';
 import 'features/chats/presentation/chats_screen.dart';
+import 'features/chats/presentation/chat_detail_screen.dart';
 import 'features/profile/presentation/profile_screen.dart';
 import 'features/passenger/presentation/search_results_screen.dart';
 import 'shared/widgets/main_shell.dart';
@@ -60,6 +61,19 @@ final _router = GoRouter(
       builder: (_, __) => const HomeScreen(),
     ),
 
+    // Chat detail: sin nav bar
+    GoRoute(
+      path: '/chats/:id',
+      builder: (_, state) {
+        final extra = (state.extra as Map?)?.cast<String, dynamic>() ?? {};
+        return ChatDetailScreen(
+          chatId: state.pathParameters['id']!,
+          contactName: extra['contactName'] as String? ?? 'Conversación',
+          contactId: extra['contactId'] as String?,
+        );
+      },
+    ),
+
     // Rutas con nav bar inferior
     ShellRoute(
       builder: (_, state, child) => MainShell(child: child),
@@ -70,12 +84,12 @@ final _router = GoRouter(
         GoRoute(
           path: '/driver/passenger-requests',
           builder: (_, state) {
-            final extra = state.extra as Map<String, String?>? ?? {};
+            final extra = (state.extra as Map?)?.cast<String, dynamic>() ?? {};
             return PassengerRequestsScreen(
-              origin: extra['origin'] ?? '',
-              destination: extra['destination'] ?? '',
-              dateFrom: extra['dateFrom'] ?? '',
-              dateTo: extra['dateTo'] ?? '',
+              origin: extra['origin'] as String? ?? '',
+              destination: extra['destination'] as String? ?? '',
+              dateFrom: extra['dateFrom'] as String? ?? '',
+              dateTo: extra['dateTo'] as String? ?? '',
             );
           },
         ),
@@ -84,13 +98,13 @@ final _router = GoRouter(
         GoRoute(
           path: '/passenger/search-results',
           builder: (_, state) {
-            final extra = state.extra as Map<String, String?>? ?? {};
+            final extra = (state.extra as Map?)?.cast<String, dynamic>() ?? {};
             return SearchResultsScreen(
-              origin: extra['origin'] ?? '',
-              destination: extra['destination'],
-              dateFromStr: extra['dateFrom'],
-              dateToStr: extra['dateTo'],
-              maxPriceStr: extra['maxPrice'],
+              origin: extra['origin'] as String? ?? '',
+              destination: extra['destination'] as String?,
+              dateFromStr: extra['dateFrom'] as String?,
+              dateToStr: extra['dateTo'] as String?,
+              maxPriceStr: extra['maxPrice'] as String?,
             );
           },
         ),

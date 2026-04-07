@@ -1,60 +1,10 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/theme/app_theme.dart';
-
-// ── Model ────────────────────────────────────────────────────────────────────
-
-class _Message {
-  final String text;
-  final bool isMine;
-  final DateTime time;
-  const _Message({required this.text, required this.isMine, required this.time});
-}
-
-// ── State ────────────────────────────────────────────────────────────────────
-
-final _chatMessagesProvider =
-    StateNotifierProvider.family<_MessagesNotifier, List<_Message>, String>(
-  (ref, chatId) => _MessagesNotifier(chatId),
-);
-
-class _MessagesNotifier extends StateNotifier<List<_Message>> {
-  _MessagesNotifier(String chatId) : super(_seed(chatId));
-
-  static List<_Message> _seed(String chatId) {
-    final now = DateTime.now();
-    final seeds = <String, List<_Message>>{
-      '1': [
-        _Message(text: 'Hola! Confirmás mi lugar para mañana?', isMine: true, time: now.subtract(const Duration(minutes: 40))),
-        _Message(text: 'Sí, todo confirmado. Sale 8:00 desde el obelisco.', isMine: false, time: now.subtract(const Duration(minutes: 35))),
-        _Message(text: 'Perfecto, nos vemos mañana a las 8!', isMine: false, time: now.subtract(const Duration(minutes: 10))),
-      ],
-      '2': [
-        _Message(text: 'Hola, tengo una consulta sobre el viaje', isMine: false, time: now.subtract(const Duration(hours: 2))),
-        _Message(text: 'Dale, decime', isMine: true, time: now.subtract(const Duration(hours: 1, minutes: 55))),
-        _Message(text: '¿Puedo llevar una valija grande?', isMine: false, time: now.subtract(const Duration(hours: 1))),
-      ],
-      '3': [
-        _Message(text: 'Gracias por el viaje!', isMine: false, time: now.subtract(const Duration(days: 1))),
-        _Message(text: 'A vos! Fue un placer.', isMine: true, time: now.subtract(const Duration(days: 1))),
-      ],
-      '4': [
-        _Message(text: '¿Hacés parada en Rosario?', isMine: false, time: now.subtract(const Duration(days: 5))),
-      ],
-    };
-    return seeds[chatId] ?? [];
-  }
-
-  void send(String text) {
-    state = [
-      ...state,
-      _Message(text: text, isMine: true, time: DateTime.now()),
-    ];
-  }
-}
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
+import '../../../core/providers/badge_providers.dart';
+import '../data/chat_repository.dart';
 
 String _initials(String name) {
   final parts = name.trim().split(' ');
@@ -68,16 +18,16 @@ String _formatTime(DateTime t) {
   return '$h:$m';
 }
 
-// ── Screen ───────────────────────────────────────────────────────────────────
-
 class ChatDetailScreen extends ConsumerStatefulWidget {
   final String chatId;
   final String contactName;
+  final String? contactId;
 
   const ChatDetailScreen({
     super.key,
     required this.chatId,
     required this.contactName,
+    this.contactId,
   });
 
   @override
@@ -87,19 +37,73 @@ class ChatDetailScreen extends ConsumerStatefulWidget {
 class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
   final _textController = TextEditingController();
   final _scrollController = ScrollController();
+  final _chatRepo = ChatRepository();
+
+  List<ChatMessage> _messages = [];
+  bool _loading = true;
+  RealtimeChannel? _channel;
+
+  PendingRequestInfo? _pendingRequest;
+  bool _bannerDismissed = false;
+  bool _processingRequest = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMessages();
+    _subscribe();
+    if (widget.contactId != null) {
+      _loadPendingRequest();
+    }
+  }
 
   @override
   void dispose() {
+    if (_channel != null) {
+      Supabase.instance.client.removeChannel(_channel!);
+    }
     _textController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
 
-  void _send() {
-    final text = _textController.text.trim();
-    if (text.isEmpty) return;
-    _textController.clear();
-    ref.read(_chatMessagesProvider(widget.chatId).notifier).send(text);
+  Future<void> _loadMessages() async {
+    try {
+      final msgs = await _chatRepo.fetchMessages(widget.chatId);
+      if (mounted) {
+        setState(() {
+          _messages = msgs;
+          _loading = false;
+        });
+        _scrollToBottom();
+        _chatRepo.markAsRead(widget.chatId);
+        ref.read(unreadCountProvider.notifier).refresh();
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _loadPendingRequest() async {
+    try {
+      final req =
+          await _chatRepo.fetchPendingRequestForContact(widget.contactId!);
+      if (mounted) setState(() => _pendingRequest = req);
+    } catch (_) {}
+  }
+
+  void _subscribe() {
+    _channel = _chatRepo.subscribeToMessages(widget.chatId, (msg) {
+      if (mounted) {
+        setState(() => _messages.add(msg));
+        _scrollToBottom();
+        _chatRepo.markAsRead(widget.chatId);
+        ref.read(unreadCountProvider.notifier).refresh();
+      }
+    });
+  }
+
+  void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
         _scrollController.animateTo(
@@ -111,9 +115,69 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
     });
   }
 
+  void _send() async {
+    final text = _textController.text.trim();
+    if (text.isEmpty) return;
+    _textController.clear();
+    await _chatRepo.sendMessage(widget.chatId, text);
+  }
+
+  Future<void> _handleRequest(bool accept) async {
+    if (_pendingRequest == null || _processingRequest) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(accept ? 'Aceptar solicitud' : 'Rechazar solicitud'),
+        content: Text(accept
+            ? '¿Confirmás que querés aceptar esta solicitud?'
+            : '¿Confirmás que querés rechazar esta solicitud?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(
+              accept ? 'Aceptar' : 'Rechazar',
+              style: TextStyle(
+                  color: accept ? Colors.green : Colors.red),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    setState(() => _processingRequest = true);
+    try {
+      if (accept) {
+        await _chatRepo.acceptRequest(_pendingRequest!.requestId);
+      } else {
+        await _chatRepo.declineRequest(_pendingRequest!.requestId);
+      }
+      if (mounted) {
+        setState(() {
+          _pendingRequest = null;
+          _bannerDismissed = true;
+          _processingRequest = false;
+        });
+        ref.read(pendingRequestsCountProvider.notifier).refresh();
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content:
+              Text(accept ? 'Solicitud aceptada' : 'Solicitud rechazada'),
+          backgroundColor: accept ? Colors.green : Colors.red,
+        ));
+      }
+    } catch (_) {
+      if (mounted) setState(() => _processingRequest = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final messages = ref.watch(_chatMessagesProvider(widget.chatId));
+    final showBanner =
+        _pendingRequest != null && !_bannerDismissed;
 
     return Scaffold(
       backgroundColor: AppColors.pageBackground,
@@ -157,24 +221,33 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
       ),
       body: Column(
         children: [
+          if (showBanner) _RequestBanner(
+            request: _pendingRequest!,
+            processing: _processingRequest,
+            onAccept: () => _handleRequest(true),
+            onDecline: () => _handleRequest(false),
+            onDismiss: () => setState(() => _bannerDismissed = true),
+          ),
           Expanded(
-            child: messages.isEmpty
-                ? const Center(
-                    child: Text(
-                      'No hay mensajes aún.\n¡Enviá el primero!',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                          color: AppColors.textSecondary, fontSize: 14),
-                    ),
-                  )
-                : ListView.builder(
-                    controller: _scrollController,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 12),
-                    itemCount: messages.length,
-                    itemBuilder: (context, i) =>
-                        _MessageBubble(message: messages[i]),
-                  ),
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : _messages.isEmpty
+                    ? const Center(
+                        child: Text(
+                          'No hay mensajes aún.\n¡Enviá el primero!',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                              color: AppColors.textSecondary, fontSize: 14),
+                        ),
+                      )
+                    : ListView.builder(
+                        controller: _scrollController,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 12),
+                        itemCount: _messages.length,
+                        itemBuilder: (context, i) =>
+                            _MessageBubble(message: _messages[i]),
+                      ),
           ),
           _InputBar(controller: _textController, onSend: _send),
         ],
@@ -183,11 +256,129 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
   }
 }
 
-// ── Bubble ───────────────────────────────────────────────────────────────────
+class _RequestBanner extends StatelessWidget {
+  const _RequestBanner({
+    required this.request,
+    required this.processing,
+    required this.onAccept,
+    required this.onDecline,
+    required this.onDismiss,
+  });
+
+  final PendingRequestInfo request;
+  final bool processing;
+  final VoidCallback onAccept;
+  final VoidCallback onDecline;
+  final VoidCallback onDismiss;
+
+  @override
+  Widget build(BuildContext context) {
+    final date = request.departureDate;
+    final dateStr =
+        '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+
+    return Container(
+      width: double.infinity,
+      color: const Color(0xFFFFF8E1),
+      padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.directions_car_rounded,
+                  size: 16, color: Color(0xFFF59E0B)),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Solicitud de viaje · $dateStr',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF92400E),
+                  ),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close_rounded,
+                    size: 18, color: Color(0xFF92400E)),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                onPressed: onDismiss,
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '${request.originAddress} → ${request.destinationAddress}',
+            style: const TextStyle(fontSize: 12, color: Color(0xFF92400E)),
+            overflow: TextOverflow.ellipsis,
+          ),
+          Text(
+            '${request.seatsRequested} asiento${request.seatsRequested > 1 ? 's' : ''} solicitado${request.seatsRequested > 1 ? 's' : ''}',
+            style: const TextStyle(fontSize: 12, color: Color(0xFF92400E)),
+          ),
+          if (request.message != null && request.message!.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              '"${request.message}"',
+              style: const TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFF92400E),
+                  fontStyle: FontStyle.italic),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+          const SizedBox(height: 10),
+          processing
+              ? const Center(
+                  child: SizedBox(
+                      height: 24,
+                      width: 24,
+                      child: CircularProgressIndicator(strokeWidth: 2)))
+              : Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: onDecline,
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.red,
+                          side: const BorderSide(color: Colors.red),
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8)),
+                        ),
+                        child: const Text('Rechazar',
+                            style: TextStyle(fontSize: 13)),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: onAccept,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8)),
+                        ),
+                        child: const Text('Aceptar',
+                            style: TextStyle(fontSize: 13)),
+                      ),
+                    ),
+                  ],
+                ),
+        ],
+      ),
+    );
+  }
+}
 
 class _MessageBubble extends StatelessWidget {
   const _MessageBubble({required this.message});
-  final _Message message;
+  final ChatMessage message;
 
   @override
   Widget build(BuildContext context) {
@@ -199,8 +390,7 @@ class _MessageBubble extends StatelessWidget {
         constraints: BoxConstraints(
           maxWidth: MediaQuery.of(context).size.width * 0.72,
         ),
-        padding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
           color: isMine ? AppColors.primary : Colors.white,
           borderRadius: BorderRadius.only(
@@ -222,7 +412,7 @@ class _MessageBubble extends StatelessWidget {
               isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
           children: [
             Text(
-              message.text,
+              message.content,
               style: TextStyle(
                 fontSize: 14,
                 color: isMine ? Colors.white : AppColors.textPrimary,
@@ -231,7 +421,7 @@ class _MessageBubble extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              _formatTime(message.time),
+              _formatTime(message.createdAt),
               style: TextStyle(
                 fontSize: 11,
                 color: isMine
@@ -245,8 +435,6 @@ class _MessageBubble extends StatelessWidget {
     );
   }
 }
-
-// ── Input bar ─────────────────────────────────────────────────────────────────
 
 class _InputBar extends StatefulWidget {
   const _InputBar({required this.controller, required this.onSend});
@@ -310,8 +498,8 @@ class _InputBarState extends State<_InputBar> {
                     border: InputBorder.none,
                     enabledBorder: InputBorder.none,
                     focusedBorder: InputBorder.none,
-                    contentPadding: EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 10),
+                    contentPadding:
+                        EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                     filled: false,
                   ),
                 ),

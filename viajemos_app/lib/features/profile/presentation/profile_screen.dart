@@ -1164,16 +1164,16 @@ class _VehicleRow extends ConsumerWidget {
   Future<void> _delete(BuildContext context, WidgetRef ref) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (ctx) => AlertDialog(
         title: const Text('Eliminar vehículo'),
         content: Text(
             '¿Eliminás ${vehicle.brand} ${vehicle.model}?'),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(context, false),
+              onPressed: () => Navigator.pop(ctx, false),
               child: const Text('Cancelar')),
           TextButton(
-              onPressed: () => Navigator.pop(context, true),
+              onPressed: () => Navigator.pop(ctx, true),
               child: const Text('Eliminar',
                   style: TextStyle(color: Colors.red))),
         ],
