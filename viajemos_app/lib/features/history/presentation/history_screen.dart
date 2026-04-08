@@ -1642,50 +1642,96 @@ class _PassengerHistoryBody extends ConsumerWidget {
             style: TextStyle(color: AppColors.textSecondary)),
       ),
       data: (trips) {
+        final pending = trips.where((t) => t.isPending).toList();
+        final done = trips.where((t) => !t.isPending).toList();
+
         if (trips.isEmpty) {
           return const _EmptyHistory(
             icon: Icons.location_on_outlined,
             message: 'Aún no realizaste viajes como pasajero.',
           );
         }
-        final totalSpent = trips.fold(0, (s, t) => s + t.pricePerSeat);
-        final avgRating = trips.fold(0.0, (s, t) => s + t.driverRating) /
-            trips.length;
 
-        return SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [
-              Expanded(
-                  child: _StatCard(
-                      icon: Icons.location_on_rounded,
-                      value: '${trips.length}',
-                      label: 'Viajes')),
-              const SizedBox(width: 10),
-              Expanded(
-                  child: _StatCard(
-                      icon: Icons.star_rounded,
-                      value: avgRating.toStringAsFixed(1),
-                      label: 'Rating',
-                      iconColor: const Color(0xFFFACC15))),
-              const SizedBox(width: 10),
-              Expanded(
-                  child: _StatCard(
-                      icon: Icons.attach_money_rounded,
-                      value:
-                          '\$${(totalSpent / 1000).toStringAsFixed(0)}k',
-                      label: 'Gastado',
-                      valueFontSize: 20)),
+        final totalSpent = done.fold(0, (s, t) => s + t.pricePerSeat);
+        final avgRating = done.isEmpty
+            ? 0.0
+            : done.fold(0.0, (s, t) => s + t.driverRating) / done.length;
+
+        return RefreshIndicator(
+          onRefresh: () async => ref.refresh(passengerHistoryProvider),
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              // Stats (solo viajes completados/aceptados)
+              Row(children: [
+                Expanded(
+                    child: _StatCard(
+                        icon: Icons.location_on_rounded,
+                        value: '${done.length}',
+                        label: 'Viajes')),
+                const SizedBox(width: 10),
+                Expanded(
+                    child: _StatCard(
+                        icon: Icons.star_rounded,
+                        value: avgRating.toStringAsFixed(1),
+                        label: 'Rating',
+                        iconColor: const Color(0xFFFACC15))),
+                const SizedBox(width: 10),
+                Expanded(
+                    child: _StatCard(
+                        icon: Icons.attach_money_rounded,
+                        value: '\$${(totalSpent / 1000).toStringAsFixed(0)}k',
+                        label: 'Gastado',
+                        valueFontSize: 20)),
+              ]),
+
+              // Solicitudes pendientes
+              if (pending.isNotEmpty) ...[
+                const SizedBox(height: 28),
+                Row(children: [
+                  const Text('Esperando aprobación',
+                      style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textPrimary)),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEF3C7),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text('${pending.length}',
+                        style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF92400E))),
+                  ),
+                ]),
+                const SizedBox(height: 12),
+                ...pending.map((t) => _PassengerTripCard(trip: t)),
+              ],
+
+              // Viajes realizados
+              if (done.isNotEmpty) ...[
+                const SizedBox(height: 28),
+                const Text('Viajes realizados',
+                    style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary)),
+                const SizedBox(height: 12),
+                ...done.map((t) => _PassengerTripCard(trip: t)),
+              ],
+
+              if (done.isEmpty && pending.isEmpty)
+                const _EmptyHistory(
+                  icon: Icons.location_on_outlined,
+                  message: 'Aún no realizaste viajes como pasajero.',
+                ),
             ]),
-            const SizedBox(height: 28),
-            const Text('Viajes realizados',
-                style: TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary)),
-            const SizedBox(height: 12),
-            ...trips.map((t) => _PassengerTripCard(trip: t)),
-          ]),
+          ),
         );
       },
     );
@@ -1702,8 +1748,11 @@ class _PassengerTripCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.background,
-        border: Border.all(color: AppColors.border, width: 1.5),
+        color: trip.isPending ? const Color(0xFFFFFBEB) : AppColors.background,
+        border: Border.all(
+          color: trip.isPending ? const Color(0xFFFCD34D) : AppColors.border,
+          width: 1.5,
+        ),
         borderRadius: BorderRadius.circular(16),
         boxShadow: const [
           BoxShadow(
@@ -1772,16 +1821,53 @@ class _PassengerTripCard extends StatelessWidget {
         const SizedBox(height: 10),
         const Divider(height: 1, color: AppColors.border),
         const SizedBox(height: 10),
-        Align(
-          alignment: Alignment.centerRight,
-          child: GestureDetector(
-            onTap: () {},
-            child: const Text('Ver detalles',
-                style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    color: AppColors.primary)),
-          ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            if (trip.isPending)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF3C7),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: const Color(0xFFFCD34D)),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.hourglass_top_rounded,
+                        size: 13, color: Color(0xFF92400E)),
+                    SizedBox(width: 4),
+                    Text('Esperando aprobación',
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF92400E))),
+                  ],
+                ),
+              )
+            else
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFDCFCE7),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.check_circle_outline_rounded,
+                        size: 13, color: Color(0xFF166534)),
+                    SizedBox(width: 4),
+                    Text('Aceptado',
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF166534))),
+                  ],
+                ),
+              ),
+          ],
         ),
       ]),
     );

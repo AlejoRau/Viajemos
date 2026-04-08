@@ -46,6 +46,7 @@ class PassengerTripHistory {
     required this.pricePerSeat,
     required this.driverName,
     required this.driverRating,
+    required this.status,
     this.departureTime,
   });
 
@@ -56,7 +57,11 @@ class PassengerTripHistory {
   final int pricePerSeat;
   final String driverName;
   final double driverRating;
+  final String status; // 'pending' | 'accepted' | 'declined'
   final String? departureTime;
+
+  bool get isPending => status == 'pending';
+  bool get isAccepted => status == 'accepted';
 }
 
 class ActiveDriverTrip {
@@ -256,6 +261,7 @@ class HistoryRepository {
         pricePerSeat: (row['price_per_seat'] as num).toInt(),
         driverName: row['driver_name'] as String? ?? 'Conductor',
         driverRating: (row['driver_rating'] as num?)?.toDouble() ?? 0.0,
+        status: row['status'] as String? ?? 'accepted',
         departureTime: timeRaw != null && timeRaw.length >= 5
             ? timeRaw.substring(0, 5)
             : null,
