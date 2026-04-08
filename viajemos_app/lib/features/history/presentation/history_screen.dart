@@ -232,7 +232,7 @@ class _ActiveTripCardState extends ConsumerState<_ActiveTripCard> {
         context: context,
         isScrollControlled: true,
         backgroundColor: Colors.transparent,
-        builder: (_) => _DriverTripDetailsSheet(trip: trip),
+        builder: (_) => _DriverTripDetailsSheet(trip: trip, pageContext: context),
       ),
       child: Stack(
         clipBehavior: Clip.none,
@@ -469,8 +469,9 @@ class _ActiveTripCardState extends ConsumerState<_ActiveTripCard> {
 // ── Driver Trip Details Sheet ──────────────────────────────────────────────
 
 class _DriverTripDetailsSheet extends StatelessWidget {
-  const _DriverTripDetailsSheet({required this.trip});
+  const _DriverTripDetailsSheet({required this.trip, required this.pageContext});
   final ActiveDriverTrip trip;
+  final BuildContext pageContext;
 
   String _formatPrice(int p) => '\$${p.toString().replaceAllMapped(
         RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.')}';
@@ -478,7 +479,7 @@ class _DriverTripDetailsSheet extends StatelessWidget {
   void _openRequests(BuildContext context) {
     Navigator.pop(context);
     showModalBottomSheet(
-      context: context,
+      context: pageContext,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => _TripRequestsSheet(trip: trip),
@@ -616,13 +617,13 @@ class _DriverTripDetailsSheet extends StatelessWidget {
                     const SizedBox(height: 16),
                     const Text('Descripción',
                         style: TextStyle(
-                            fontSize: 13,
+                            fontSize: 15,
                             fontWeight: FontWeight.w600,
                             color: Color(0xFF1E293B))),
                     const SizedBox(height: 6),
                     Text(trip.description!,
                         style: const TextStyle(
-                            fontSize: 13,
+                            fontSize: 15,
                             color: Color(0xFF64748B),
                             height: 1.5)),
                   ],
@@ -651,75 +652,40 @@ class _DriverTripDetailsSheet extends StatelessWidget {
                   ),
                   const SizedBox(height: 10),
                   if (trip.acceptedPassengerNames.isNotEmpty)
-                    GestureDetector(
-                      onTap: () {
-                        Navigator.pop(context);
-                        showModalBottomSheet(
-                          context: context,
-                          isScrollControlled: true,
-                          backgroundColor: Colors.transparent,
-                          builder: (_) => _PassengerListSheet(
-                            names: trip.acceptedPassengerNames,
-                            ids: trip.acceptedPassengerIds,
-                          ),
-                        );
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 12),
-                        decoration: BoxDecoration(
-                          color: AppColors.inputBackground,
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: Row(
-                          children: [
-                            // Overlapping big avatars
-                            SizedBox(
-                              height: 44,
-                              width: trip.acceptedPassengerNames.length == 1
-                                  ? 44
-                                  : 44 +
-                                      (trip.acceptedPassengerNames
-                                                  .take(4)
-                                                  .length -
-                                              1) *
-                                          28.0,
-                              child: Stack(
+                    Column(
+                      children: [
+                        for (int i = 0; i < trip.acceptedPassengerNames.length; i++)
+                          InkWell(
+                            onTap: () => showPublicProfile(
+                                context, trip.acceptedPassengerIds[i]),
+                            borderRadius: BorderRadius.circular(12),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                  vertical: 8, horizontal: 2),
+                              child: Row(
                                 children: [
-                                  for (int i = 0;
-                                      i <
-                                          trip.acceptedPassengerNames
-                                              .take(4)
-                                              .length;
-                                      i++)
-                                    Positioned(
-                                      left: i * 28.0,
-                                      child: _MiniAvatar(
-                                        name: trip.acceptedPassengerNames[i],
-                                        index: i,
-                                        size: 44,
-                                      ),
+                                  _MiniAvatar(
+                                    name: trip.acceptedPassengerNames[i],
+                                    index: i,
+                                    size: 42,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      trip.acceptedPassengerNames[i],
+                                      style: const TextStyle(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w600,
+                                          color: Color(0xFF1E293B)),
                                     ),
+                                  ),
+                                  const Icon(Icons.chevron_right_rounded,
+                                      color: AppColors.textSecondary, size: 22),
                                 ],
                               ),
                             ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                trip.acceptedPassengerNames.length == 1
-                                    ? trip.acceptedPassengerNames.first
-                                    : '${trip.acceptedPassengerNames.length} pasajeros aceptados',
-                                style: const TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                    color: Color(0xFF1E293B)),
-                              ),
-                            ),
-                            const Icon(Icons.chevron_right_rounded,
-                                color: AppColors.textSecondary, size: 20),
-                          ],
-                        ),
-                      ),
+                          ),
+                      ],
                     )
                   else
                     Row(
@@ -817,12 +783,12 @@ class _SheetDetailRow extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 16, color: AppColors.textSecondary),
-        const SizedBox(width: 8),
+        Icon(icon, size: 19, color: AppColors.textSecondary),
+        const SizedBox(width: 10),
         Expanded(
           child: Text(text,
               style: const TextStyle(
-                  fontSize: 13, color: Color(0xFF475569))),
+                  fontSize: 15, color: Color(0xFF475569))),
         ),
       ],
     );

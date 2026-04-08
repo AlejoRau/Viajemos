@@ -3,6 +3,10 @@
 build/
 *.g.dart
 *.freezed.dart
+.flutter-plugins
+.flutter-plugins-dependencies
+.metadata
+*.log
 
 # pub
 .packages
@@ -25,3 +29,6 @@ macos/.symlinks/
 .idea/
 .vscode/
 *.iml
+
+# Claude Code local config
+.claude/settings.local.json
