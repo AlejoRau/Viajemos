@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
@@ -167,54 +168,93 @@ class _ActiveTripCard extends ConsumerStatefulWidget {
 class _ActiveTripCardState extends ConsumerState<_ActiveTripCard> {
   bool _deleting = false;
 
-  void _showPassengerList(
-      BuildContext context, List<String> names, List<String> ids) {
+  void _showPassengerList(BuildContext context, List<String> names,
+      List<String> ids, List<String> requestIds) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => _PassengerListSheet(names: names, ids: ids),
+      builder: (_) => _PassengerListSheet(
+        names: names,
+        ids: ids,
+        requestIds: requestIds,
+      ),
     );
   }
 
   Future<void> _confirmDelete() async {
+    final hasPassengers = widget.trip.acceptedPassengerNames.isNotEmpty;
+    final msgController = TextEditingController();
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Borrar viaje'),
-        content: Text(
-          '¿Seguro que querés borrar el viaje '
-          '${widget.trip.originAddress} → ${widget.trip.destinationAddress}?\n\n'
-          'Esta acción no se puede deshacer.',
+        title: const Text('Cancelar viaje'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              hasPassengers
+                  ? '¿Seguro que querés cancelar el viaje '
+                    '${widget.trip.originAddress} → ${widget.trip.destinationAddress}?\n\n'
+                    'Tenés ${widget.trip.acceptedPassengerNames.length} pasajero(s) aceptado(s). '
+                    'Esta cancelación quedará registrada en tu perfil.'
+                  : '¿Seguro que querés cancelar el viaje '
+                    '${widget.trip.originAddress} → ${widget.trip.destinationAddress}?',
+            ),
+            if (hasPassengers) ...[
+              const SizedBox(height: 16),
+              TextField(
+                controller: msgController,
+                maxLines: 3,
+                maxLength: 200,
+                decoration: const InputDecoration(
+                  hintText:
+                      'Mensaje para los pasajeros (opcional)\nEj: Por motivos personales debo cancelar.',
+                  border: OutlineInputBorder(),
+                  contentPadding:
+                      EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                ),
+              ),
+            ],
+          ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancelar'),
+            child: const Text('Volver'),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Borrar'),
+            child: const Text('Cancelar viaje'),
           ),
         ],
       ),
     );
+
+    final message = msgController.text.trim();
+    msgController.dispose();
+
     if (confirmed != true || !mounted) return;
 
     setState(() => _deleting = true);
     try {
-      await ref.read(historyRepositoryProvider).deleteTrip(widget.trip.id);
+      await ref.read(historyRepositoryProvider).cancelTrip(
+            widget.trip.id,
+            message: message.isEmpty ? null : message,
+          );
       ref.refresh(activeDriverTripsProvider);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Viaje eliminado con éxito')),
+          const SnackBar(content: Text('Viaje cancelado')),
         );
       }
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Error al borrar el viaje')),
+          const SnackBar(content: Text('Error al cancelar el viaje')),
         );
       }
     } finally {
@@ -310,9 +350,12 @@ class _ActiveTripCardState extends ConsumerState<_ActiveTripCard> {
                             context,
                             trip.acceptedPassengerNames,
                             trip.acceptedPassengerIds,
+                            trip.acceptedPassengerRequestIds,
                           ),
                           child: _OverlappingAvatars(
-                              names: trip.acceptedPassengerNames),
+                            names: trip.acceptedPassengerNames,
+                            avatarUrls: trip.acceptedPassengerAvatarUrls,
+                          ),
                         ),
                       const SizedBox(width: 4),
                       // Delete button
@@ -468,13 +511,114 @@ class _ActiveTripCardState extends ConsumerState<_ActiveTripCard> {
 
 // ── Driver Trip Details Sheet ──────────────────────────────────────────────
 
-class _DriverTripDetailsSheet extends StatelessWidget {
+class _DriverTripDetailsSheet extends ConsumerStatefulWidget {
   const _DriverTripDetailsSheet({required this.trip, required this.pageContext});
   final ActiveDriverTrip trip;
   final BuildContext pageContext;
 
+  @override
+  ConsumerState<_DriverTripDetailsSheet> createState() =>
+      _DriverTripDetailsSheetState();
+}
+
+class _DriverTripDetailsSheetState
+    extends ConsumerState<_DriverTripDetailsSheet> {
+  late List<String> _passengerNames;
+  late List<String> _passengerIds;
+  late List<String> _passengerRequestIds;
+  final Set<String> _expelling = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _passengerNames = List.from(widget.trip.acceptedPassengerNames);
+    _passengerIds = List.from(widget.trip.acceptedPassengerIds);
+    _passengerRequestIds = List.from(widget.trip.acceptedPassengerRequestIds);
+  }
+
+  ActiveDriverTrip get trip => widget.trip;
+  BuildContext get pageContext => widget.pageContext;
+
   String _formatPrice(int p) => '\$${p.toString().replaceAllMapped(
         RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.')}';
+
+  Future<void> _expelPassenger(BuildContext context, int index) async {
+    final name = _passengerNames[index];
+    final requestId = _passengerRequestIds[index];
+    final msgController = TextEditingController();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('¿Eliminar pasajero?'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('¿Querés eliminar a $name del viaje? '
+                'Esto quedará registrado en tu historial.'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: msgController,
+              maxLines: 3,
+              maxLength: 200,
+              decoration: const InputDecoration(
+                hintText: 'Mensaje para el pasajero (opcional)\n'
+                    'Ej: Hubo un cambio de planes.',
+                border: OutlineInputBorder(),
+                contentPadding:
+                    EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+
+    final message = msgController.text.trim();
+    msgController.dispose();
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _expelling.add(requestId));
+    try {
+      await ref.read(historyRepositoryProvider).expelPassenger(
+            requestId,
+            message: message.isEmpty ? null : message,
+          );
+      if (!mounted) return;
+      setState(() {
+        _passengerNames.removeAt(index);
+        _passengerIds.removeAt(index);
+        _passengerRequestIds.removeAt(index);
+        _expelling.remove(requestId);
+      });
+      ref.refresh(activeDriverTripsProvider);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$name fue eliminado/a del viaje')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _expelling.remove(requestId));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
 
   void _openRequests(BuildContext context) {
     Navigator.pop(context);
@@ -651,38 +795,56 @@ class _DriverTripDetailsSheet extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 10),
-                  if (trip.acceptedPassengerNames.isNotEmpty)
+                  if (_passengerNames.isNotEmpty)
                     Column(
                       children: [
-                        for (int i = 0; i < trip.acceptedPassengerNames.length; i++)
-                          InkWell(
-                            onTap: () => showPublicProfile(
-                                context, trip.acceptedPassengerIds[i]),
-                            borderRadius: BorderRadius.circular(12),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                  vertical: 8, horizontal: 2),
-                              child: Row(
-                                children: [
-                                  _MiniAvatar(
-                                    name: trip.acceptedPassengerNames[i],
+                        for (int i = 0; i < _passengerNames.length; i++)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            child: Row(
+                              children: [
+                                InkWell(
+                                  onTap: () => showPublicProfile(
+                                      context, _passengerIds[i]),
+                                  borderRadius: BorderRadius.circular(21),
+                                  child: _MiniAvatar(
+                                    name: _passengerNames[i],
                                     index: i,
                                     size: 42,
                                   ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: InkWell(
+                                    onTap: () => showPublicProfile(
+                                        context, _passengerIds[i]),
                                     child: Text(
-                                      trip.acceptedPassengerNames[i],
+                                      _passengerNames[i],
                                       style: const TextStyle(
                                           fontSize: 15,
                                           fontWeight: FontWeight.w600,
                                           color: Color(0xFF1E293B)),
                                     ),
                                   ),
-                                  const Icon(Icons.chevron_right_rounded,
-                                      color: AppColors.textSecondary, size: 22),
-                                ],
-                              ),
+                                ),
+                                if (_expelling.contains(_passengerRequestIds[i]))
+                                  const SizedBox(
+                                    width: 24,
+                                    height: 24,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2),
+                                  )
+                                else
+                                  IconButton(
+                                    icon: const Icon(
+                                        Icons.person_remove_rounded,
+                                        color: Colors.red,
+                                        size: 20),
+                                    tooltip: 'Eliminar del viaje',
+                                    onPressed: () =>
+                                        _expelPassenger(context, i),
+                                  ),
+                              ],
                             ),
                           ),
                       ],
@@ -862,8 +1024,9 @@ class _InfoChip extends StatelessWidget {
 }
 
 class _OverlappingAvatars extends StatelessWidget {
-  const _OverlappingAvatars({required this.names});
+  const _OverlappingAvatars({required this.names, this.avatarUrls});
   final List<String> names;
+  final List<String?> ? avatarUrls;
 
   static const double _size = 28;
   static const double _overlap = 10;
@@ -883,7 +1046,13 @@ class _OverlappingAvatars extends StatelessWidget {
           for (int i = 0; i < visible.length; i++)
             Positioned(
               left: i * (_size - _overlap),
-              child: _MiniAvatar(name: visible[i], index: i),
+              child: _MiniAvatar(
+                name: visible[i],
+                avatarUrl: avatarUrls != null && i < avatarUrls!.length
+                    ? avatarUrls![i]
+                    : null,
+                index: i,
+              ),
             ),
           if (extra > 0)
             Positioned(
@@ -913,8 +1082,14 @@ class _OverlappingAvatars extends StatelessWidget {
 }
 
 class _MiniAvatar extends StatelessWidget {
-  const _MiniAvatar({required this.name, required this.index, this.size = 28});
+  const _MiniAvatar({
+    required this.name,
+    required this.index,
+    this.avatarUrl,
+    this.size = 28,
+  });
   final String name;
+  final String? avatarUrl;
   final int index;
   final double size;
 
@@ -924,36 +1099,158 @@ class _MiniAvatar extends StatelessWidget {
     Color(0xFFF59E0B),
   ];
 
+  Widget _initialsWidget(Color color) => Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.15),
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.white, width: 1.5),
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          _initials(name),
+          style: TextStyle(
+            fontSize: size * 0.32,
+            fontWeight: FontWeight.w700,
+            color: color,
+          ),
+        ),
+      );
+
   @override
   Widget build(BuildContext context) {
     final color = _colors[index % _colors.length];
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
-        shape: BoxShape.circle,
-        border: Border.all(color: Colors.white, width: 1.5),
-      ),
-      alignment: Alignment.center,
-      child: Text(
-        _initials(name),
-        style: TextStyle(
-          fontSize: size * 0.32,
-          fontWeight: FontWeight.w700,
-          color: color,
+    if (avatarUrl != null && avatarUrl!.isNotEmpty) {
+      return Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.white, width: 1.5),
         ),
-      ),
-    );
+        child: ClipOval(
+          child: CachedNetworkImage(
+            imageUrl: avatarUrl!,
+            fit: BoxFit.cover,
+            placeholder: (_, __) => _initialsWidget(color),
+            errorWidget: (_, __, ___) => _initialsWidget(color),
+          ),
+        ),
+      );
+    }
+    return _initialsWidget(color);
   }
 }
 
 // ── Passenger list bottom sheet ───────────────────────────────────────────
 
-class _PassengerListSheet extends StatelessWidget {
-  const _PassengerListSheet({required this.names, required this.ids});
+class _PassengerListSheet extends ConsumerStatefulWidget {
+  const _PassengerListSheet({
+    required this.names,
+    required this.ids,
+    required this.requestIds,
+  });
   final List<String> names;
   final List<String> ids;
+  final List<String> requestIds;
+
+  @override
+  ConsumerState<_PassengerListSheet> createState() =>
+      _PassengerListSheetState();
+}
+
+class _PassengerListSheetState extends ConsumerState<_PassengerListSheet> {
+  late List<String> _names;
+  late List<String> _ids;
+  late List<String> _requestIds;
+  final Set<String> _expelling = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _names = List.from(widget.names);
+    _ids = List.from(widget.ids);
+    _requestIds = List.from(widget.requestIds);
+  }
+
+  Future<void> _expel(int index) async {
+    final requestId = _requestIds[index];
+    final name = _names[index];
+    final msgController = TextEditingController();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('¿Eliminar pasajero?'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('¿Querés eliminar a $name del viaje? '
+                'Esto quedará registrado en tu historial.'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: msgController,
+              maxLines: 3,
+              maxLength: 200,
+              decoration: const InputDecoration(
+                hintText: 'Mensaje para el pasajero (opcional)\n'
+                    'Ej: Hubo un cambio de planes.',
+                border: OutlineInputBorder(),
+                contentPadding:
+                    EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+
+    final message = msgController.text.trim();
+    msgController.dispose();
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _expelling.add(requestId));
+    try {
+      await ref.read(historyRepositoryProvider).expelPassenger(
+            requestId,
+            message: message.isEmpty ? null : message,
+          );
+      if (!mounted) return;
+      setState(() {
+        _names.removeAt(index);
+        _ids.removeAt(index);
+        _requestIds.removeAt(index);
+        _expelling.remove(requestId);
+      });
+      ref.refresh(activeDriverTripsProvider);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$name fue eliminado/a del viaje')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _expelling.remove(requestId));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -975,13 +1272,15 @@ class _PassengerListSheet extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 20),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Align(
               alignment: Alignment.centerLeft,
               child: Text(
-                'Pasajeros aceptados',
-                style: TextStyle(
+                _names.isEmpty
+                    ? 'Sin pasajeros'
+                    : 'Pasajeros aceptados (${_names.length})',
+                style: const TextStyle(
                     fontSize: 17,
                     fontWeight: FontWeight.bold,
                     color: Color(0xFF1E293B)),
@@ -989,34 +1288,55 @@ class _PassengerListSheet extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
-          for (int i = 0; i < names.length; i++)
-            InkWell(
-              onTap: () {
-                Navigator.pop(context);
-                showPublicProfile(context, ids[i]);
-              },
-              child: Padding(
+          if (_names.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: Text('No quedan pasajeros en este viaje.',
+                  style: TextStyle(color: AppColors.textSecondary)),
+            )
+          else
+            for (int i = 0; i < _names.length; i++) ...[
+              const Divider(height: 1, indent: 20, endIndent: 20),
+              Padding(
                 padding: const EdgeInsets.symmetric(
-                    horizontal: 20, vertical: 12),
+                    horizontal: 16, vertical: 8),
                 child: Row(
                   children: [
-                    _MiniAvatar(name: names[i], index: i, size: 44),
-                    const SizedBox(width: 14),
+                    InkWell(
+                      onTap: () => showPublicProfile(context, _ids[i]),
+                      borderRadius: BorderRadius.circular(22),
+                      child: _MiniAvatar(name: _names[i], index: i, size: 44),
+                    ),
+                    const SizedBox(width: 12),
                     Expanded(
-                      child: Text(
-                        names[i],
-                        style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF1E293B)),
+                      child: InkWell(
+                        onTap: () => showPublicProfile(context, _ids[i]),
+                        child: Text(
+                          _names[i],
+                          style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF1E293B)),
+                        ),
                       ),
                     ),
-                    const Icon(Icons.chevron_right_rounded,
-                        color: AppColors.textSecondary, size: 22),
+                    if (_expelling.contains(_requestIds[i]))
+                      const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    else
+                      IconButton(
+                        icon: const Icon(Icons.person_remove_rounded,
+                            color: Colors.red, size: 22),
+                        tooltip: 'Eliminar del viaje',
+                        onPressed: () => _expel(i),
+                      ),
                   ],
                 ),
               ),
-            ),
+            ],
         ],
       ),
     );
@@ -1059,7 +1379,7 @@ class _TripRequestsSheetState extends ConsumerState<_TripRequestsSheet> {
   Future<void> _handleAction(TripRequestEntry entry, bool accept) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (ctx) => AlertDialog(
         title: Text(accept ? '¿Aceptar solicitud?' : '¿Rechazar solicitud?'),
         content: Text(
           accept
@@ -1068,14 +1388,14 @@ class _TripRequestsSheetState extends ConsumerState<_TripRequestsSheet> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context, false),
+            onPressed: () => Navigator.pop(ctx, false),
             child: const Text('Cancelar'),
           ),
           TextButton(
             style: TextButton.styleFrom(
               foregroundColor: accept ? Colors.green : Colors.red,
             ),
-            onPressed: () => Navigator.pop(context, true),
+            onPressed: () => Navigator.pop(ctx, true),
             child: Text(accept ? 'Aceptar' : 'Rechazar'),
           ),
         ],
@@ -1277,17 +1597,11 @@ class _RequestEntry extends StatelessWidget {
             children: [
               GestureDetector(
                 onTap: () => showPublicProfile(context, entry.passengerId),
-                child: CircleAvatar(
-                  radius: 22,
-                  backgroundColor: AppColors.primaryLight,
-                  child: Text(
-                    _initials(entry.passengerName),
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.primary,
-                    ),
-                  ),
+                child: _MiniAvatar(
+                  name: entry.passengerName,
+                  avatarUrl: entry.passengerAvatarUrl,
+                  index: 0,
+                  size: 44,
                 ),
               ),
               const SizedBox(width: 12),

@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -5,6 +6,49 @@ import '../../../core/theme/app_theme.dart';
 import '../../../shared/widgets/public_profile_sheet.dart';
 import '../data/trip_search_repository.dart';
 import '../domain/trip_search_result.dart';
+
+// ── Passenger avatar helper ───────────────────────────────────────────────────
+
+Widget _passengerAvatar({
+  required String name,
+  String? avatarUrl,
+  required double radius,
+  required Color color,
+}) {
+  String initials(String n) {
+    final parts = n.trim().split(' ');
+    if (parts.length >= 2) return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
+    return n.isNotEmpty ? n[0].toUpperCase() : '?';
+  }
+
+  Widget fallback() => CircleAvatar(
+        radius: radius,
+        backgroundColor: color.withValues(alpha: 0.15),
+        child: Text(
+          initials(name),
+          style: TextStyle(
+            fontSize: radius * 0.62,
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
+      );
+
+  if (avatarUrl == null || avatarUrl.isEmpty) return fallback();
+
+  return SizedBox(
+    width: radius * 2,
+    height: radius * 2,
+    child: ClipOval(
+      child: CachedNetworkImage(
+        imageUrl: avatarUrl,
+        fit: BoxFit.cover,
+        placeholder: (_, __) => fallback(),
+        errorWidget: (_, __, ___) => fallback(),
+      ),
+    ),
+  );
+}
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 
@@ -139,6 +183,50 @@ class _SearchResultsScreenState
   }
 }
 
+// ── Driver Avatar ─────────────────────────────────────────────────────────────
+
+class _DriverAvatar extends StatelessWidget {
+  const _DriverAvatar({
+    required this.initials,
+    required this.avatarUrl,
+    required this.radius,
+  });
+  final String initials;
+  final String? avatarUrl;
+  final double radius;
+
+  Widget _initialsAvatar() => CircleAvatar(
+        radius: radius,
+        backgroundColor: AppColors.primaryLight,
+        child: Text(
+          initials,
+          style: TextStyle(
+            color: AppColors.primary,
+            fontWeight: FontWeight.bold,
+            fontSize: radius * 0.62,
+          ),
+        ),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    if (avatarUrl == null || avatarUrl!.isEmpty) return _initialsAvatar();
+
+    return SizedBox(
+      width: radius * 2,
+      height: radius * 2,
+      child: ClipOval(
+        child: CachedNetworkImage(
+          imageUrl: avatarUrl!,
+          fit: BoxFit.cover,
+          placeholder: (_, __) => _initialsAvatar(),
+          errorWidget: (_, __, ___) => _initialsAvatar(),
+        ),
+      ),
+    );
+  }
+}
+
 // ── Trip Card ─────────────────────────────────────────────────────────────────
 
 class _TripCard extends StatelessWidget {
@@ -182,14 +270,10 @@ class _TripCard extends StatelessWidget {
             // Driver + price
             Row(
               children: [
-                CircleAvatar(
+                _DriverAvatar(
+                  initials: trip.driverInitials,
+                  avatarUrl: trip.driverAvatarUrl,
                   radius: 24,
-                  backgroundColor: AppColors.primaryLight,
-                  child: Text(trip.driverInitials,
-                      style: const TextStyle(
-                          color: AppColors.primary,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15)),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -371,12 +455,19 @@ class _TripCard extends StatelessWidget {
                 for (int i = 0; i < trip.seatsTaken; i++)
                   Padding(
                     padding: const EdgeInsets.only(right: 4),
-                    child: CircleAvatar(
-                      radius: 13,
-                      backgroundColor: AppColors.primary,
-                      child: const Icon(Icons.person,
-                          size: 14, color: Colors.white),
-                    ),
+                    child: i < trip.passengers.length
+                        ? _passengerAvatar(
+                            name: trip.passengers[i].name,
+                            avatarUrl: trip.passengers[i].avatarUrl,
+                            radius: 13,
+                            color: AppColors.primary,
+                          )
+                        : const CircleAvatar(
+                            radius: 13,
+                            backgroundColor: AppColors.primary,
+                            child: Icon(Icons.person,
+                                size: 14, color: Colors.white),
+                          ),
                   ),
                 for (int i = 0; i < trip.freeSeats; i++)
                   Padding(
@@ -436,6 +527,28 @@ class _TripDetailsSheet extends StatefulWidget {
 class _TripDetailsSheetState extends State<_TripDetailsSheet> {
   bool _sending = false;
   final _messageController = TextEditingController();
+  List<Map<String, String?>> _passengers = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPassengers();
+  }
+
+  Future<void> _loadPassengers() async {
+    // Use data already loaded in the model if available
+    if (widget.trip.passengers.isNotEmpty) {
+      setState(() => _passengers = widget.trip.passengers
+          .map((p) => {'name': p.name, 'avatarUrl': p.avatarUrl})
+          .toList());
+      return;
+    }
+    try {
+      final list =
+          await TripSearchRepository().fetchTripPassengers(widget.trip.id);
+      if (mounted) setState(() => _passengers = list);
+    } catch (_) {}
+  }
 
   @override
   void dispose() {
@@ -569,14 +682,10 @@ class _TripDetailsSheetState extends State<_TripDetailsSheet> {
                     onTap: () => showPublicProfile(context, trip.driverId),
                     child: Row(
                       children: [
-                        CircleAvatar(
+                        _DriverAvatar(
+                          initials: trip.driverInitials,
+                          avatarUrl: trip.driverAvatarUrl,
                           radius: 28,
-                          backgroundColor: AppColors.primaryLight,
-                          child: Text(trip.driverInitials,
-                              style: const TextStyle(
-                                  color: AppColors.primary,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16)),
                         ),
                         const SizedBox(width: 14),
                         Expanded(
@@ -701,27 +810,32 @@ class _TripDetailsSheetState extends State<_TripDetailsSheet> {
                   const SizedBox(height: 8),
                   Row(
                     children: [
+                      // Accepted passengers with real photo/initials
                       for (int i = 0; i < trip.seatsTaken; i++)
                         Padding(
-                          padding:
-                              const EdgeInsets.only(right: 6),
-                          child: CircleAvatar(
-                            radius: 14,
-                            backgroundColor: AppColors.primary,
-                            child: const Icon(Icons.person,
-                                size: 15, color: Colors.white),
-                          ),
+                          padding: const EdgeInsets.only(right: 6),
+                          child: i < _passengers.length
+                              ? _passengerAvatar(
+                                  name: _passengers[i]['name'] ?? 'Pasajero',
+                                  avatarUrl: _passengers[i]['avatarUrl'],
+                                  radius: 14,
+                                  color: AppColors.primary,
+                                )
+                              : const CircleAvatar(
+                                  radius: 14,
+                                  backgroundColor: AppColors.primary,
+                                  child: Icon(Icons.person,
+                                      size: 15, color: Colors.white),
+                                ),
                         ),
+                      // Free seats
                       for (int i = 0; i < trip.freeSeats; i++)
                         Padding(
-                          padding:
-                              const EdgeInsets.only(right: 6),
+                          padding: const EdgeInsets.only(right: 6),
                           child: CircleAvatar(
                             radius: 14,
-                            backgroundColor:
-                                AppColors.inputBackground,
-                            child: const Icon(
-                                Icons.person_outline,
+                            backgroundColor: AppColors.inputBackground,
+                            child: const Icon(Icons.person_outline,
                                 size: 15,
                                 color: AppColors.textSecondary),
                           ),

@@ -54,7 +54,7 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       await Supabase.instance.client.auth.signInWithOAuth(
         OAuthProvider.google,
-        redirectTo: kIsWeb ? null : 'io.viajemos.app://login-callback/',
+        redirectTo: kIsWeb ? Uri.base.origin : 'io.viajemos.app://login-callback/',
         authScreenLaunchMode: kIsWeb
             ? LaunchMode.platformDefault
             : LaunchMode.externalApplication,

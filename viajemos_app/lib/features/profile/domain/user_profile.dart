@@ -7,6 +7,8 @@ class UserProfile {
     required this.tripsDriver,
     required this.tripsPassenger,
     required this.memberSince,
+    this.cancelledTripsCount = 0,
+    this.expelledPassengersCount = 0,
     this.phone,
     this.birthDate,
     this.bioDriver,
@@ -22,6 +24,8 @@ class UserProfile {
   final int tripsDriver;
   final int tripsPassenger;
   final DateTime memberSince;
+  final int cancelledTripsCount;
+  final int expelledPassengersCount;
   final String? phone;
   final DateTime? birthDate;
   final String? bioDriver;

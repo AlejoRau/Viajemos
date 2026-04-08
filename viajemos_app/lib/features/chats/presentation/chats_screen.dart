@@ -123,6 +123,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
                           extra: {
                             'contactName': filtered[i].contactName,
                             'contactId': filtered[i].contactId,
+                            'tripId': filtered[i].tripId,
                           },
                         ),
                       ),

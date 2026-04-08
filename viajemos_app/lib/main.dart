@@ -16,17 +16,17 @@ void main() async {
   );
 
   // En web, Supabase redirige de vuelta con ?code=... en la URL.
-  // supabase_flutter no intercambia ese código automáticamente en web,
-  // así que lo hacemos antes de que corra el router para que la sesión
-  // esté lista cuando Go Router evalúe el redirect.
+  // Intercambiamos el código por sesión antes de que corra el router,
+  // para que la sesión esté lista cuando Go Router evalúe el redirect.
   if (kIsWeb) {
     final uri = Uri.base;
     if (uri.queryParameters.containsKey('code')) {
       try {
         await Supabase.instance.client.auth.getSessionFromUrl(uri);
-      } catch (_) {
-        // El código puede estar expirado o ya fue usado — el usuario
-        // simplemente vuelve al login para intentar de nuevo.
+      } catch (e) {
+        // El código puede estar expirado o ya fue usado.
+        // ignore: avoid_print
+        print('[Auth] getSessionFromUrl falló: $e');
       }
     }
   }

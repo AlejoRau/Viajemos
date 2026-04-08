@@ -77,6 +77,8 @@ class ActiveDriverTrip {
     required this.pendingRequestsCount,
     required this.acceptedPassengerNames,
     required this.acceptedPassengerIds,
+    required this.acceptedPassengerRequestIds,
+    required this.acceptedPassengerAvatarUrls,
     required this.via,
     required this.stops,
     required this.allowsPets,
@@ -100,6 +102,8 @@ class ActiveDriverTrip {
   final int pendingRequestsCount;
   final List<String> acceptedPassengerNames;
   final List<String> acceptedPassengerIds;
+  final List<String> acceptedPassengerRequestIds;
+  final List<String?> acceptedPassengerAvatarUrls;
   final List<String> via;
   final List<String> stops;
   final bool allowsPets;
@@ -129,12 +133,14 @@ class TripRequestEntry {
     required this.passengerTrips,
     required this.seatsRequested,
     required this.createdAt,
+    this.passengerAvatarUrl,
     this.message,
   });
 
   final String requestId;
   final String passengerId;
   final String passengerName;
+  final String? passengerAvatarUrl;
   final double passengerRating;
   final int passengerTrips;
   final int seatsRequested;
@@ -169,6 +175,10 @@ class HistoryRepository {
             (row['accepted_passenger_names'] as List?)?.cast<String>() ?? [],
         acceptedPassengerIds:
             (row['accepted_passenger_ids'] as List?)?.cast<String>() ?? [],
+        acceptedPassengerRequestIds:
+            (row['accepted_passenger_request_ids'] as List?)?.cast<String>() ?? [],
+        acceptedPassengerAvatarUrls:
+            (row['accepted_passenger_avatar_urls'] as List?)?.cast<String?>() ?? [],
         via: (row['via'] as List?)?.cast<String>() ?? [],
         stops: (row['stops'] as List?)?.cast<String>() ?? [],
         allowsPets: row['allows_pets'] as bool? ?? false,
@@ -195,6 +205,7 @@ class HistoryRepository {
         requestId: row['request_id'] as String,
         passengerId: row['passenger_id'] as String,
         passengerName: row['passenger_name'] as String? ?? 'Pasajero',
+        passengerAvatarUrl: row['passenger_avatar_url'] as String?,
         passengerRating: (row['passenger_rating'] as num?)?.toDouble() ?? 0.0,
         passengerTrips: (row['passenger_trips'] as int?) ?? 0,
         seatsRequested: (row['seats_requested'] as int?) ?? 1,
@@ -218,8 +229,18 @@ class HistoryRepository {
         .eq('id', requestId);
   }
 
-  Future<void> deleteTrip(String tripId) async {
-    await _client.from('trips').delete().eq('id', tripId);
+  Future<void> cancelTrip(String tripId, {String? message}) async {
+    await _client.rpc('cancel_trip', params: {
+      'p_trip_id': tripId,
+      'p_message': message,
+    });
+  }
+
+  Future<void> expelPassenger(String requestId, {String? message}) async {
+    await _client.rpc('expel_passenger', params: {
+      'p_request_id': requestId,
+      'p_message': message,
+    });
   }
 
   Future<List<DriverTripHistory>> fetchDriverHistory() async {
