@@ -51,6 +51,11 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
   bool _processingRequest = false;
   AcceptedTripInfo? _tripInfo;
 
+  // Invitation (driver → passenger)
+  PendingInvitationInfo? _pendingInvitation;
+  bool _invitationBannerDismissed = false;
+  bool _processingInvitation = false;
+
   @override
   void initState() {
     super.initState();
@@ -58,6 +63,7 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
     _subscribe();
     if (widget.contactId != null) {
       _loadPendingRequest();
+      _loadPendingInvitation();
     }
     if (widget.tripId != null) {
       _loadTripInfo();
@@ -82,7 +88,6 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
           _messages = msgs;
           _loading = false;
         });
-        _scrollToBottom();
         _chatRepo.markAsRead(widget.chatId);
         ref.read(unreadCountProvider.notifier).refresh();
       }
@@ -99,6 +104,14 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
     } catch (_) {}
   }
 
+  Future<void> _loadPendingInvitation() async {
+    try {
+      final inv =
+          await _chatRepo.fetchPendingInvitationFromContact(widget.contactId!);
+      if (mounted) setState(() => _pendingInvitation = inv);
+    } catch (_) {}
+  }
+
   Future<void> _loadTripInfo() async {
     final info = await _chatRepo.fetchTripInfo(widget.tripId!);
     if (mounted && info != null) setState(() => _tripInfo = info);
@@ -108,21 +121,8 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
     _channel = _chatRepo.subscribeToMessages(widget.chatId, (msg) {
       if (mounted) {
         setState(() => _messages.add(msg));
-        _scrollToBottom();
         _chatRepo.markAsRead(widget.chatId);
         ref.read(unreadCountProvider.notifier).refresh();
-      }
-    });
-  }
-
-  void _scrollToBottom() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-        );
       }
     });
   }
@@ -144,7 +144,6 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
       isMine: true,
     );
     setState(() => _messages.add(optimistic));
-    _scrollToBottom();
 
     try {
       await _chatRepo.sendMessage(widget.chatId, text);
@@ -208,6 +207,62 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
       }
     } catch (_) {
       if (mounted) setState(() => _processingRequest = false);
+    }
+  }
+
+  Future<void> _handleInvitation(bool accept) async {
+    if (_pendingInvitation == null || _processingInvitation) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(accept ? 'Aceptar oferta' : 'Rechazar oferta'),
+        content: Text(accept
+            ? '¿Confirmás que querés aceptar esta oferta de viaje?'
+            : '¿Confirmás que querés rechazar esta oferta de viaje?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(
+                foregroundColor: accept ? Colors.green : Colors.red),
+            child: Text(accept ? 'Aceptar' : 'Rechazar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    setState(() => _processingInvitation = true);
+    try {
+      if (accept) {
+        await _chatRepo.acceptInvitation(_pendingInvitation!.invitationId);
+      } else {
+        await _chatRepo.declineInvitation(_pendingInvitation!.invitationId);
+      }
+      if (mounted) {
+        setState(() {
+          _pendingInvitation = null;
+          _invitationBannerDismissed = true;
+          _processingInvitation = false;
+        });
+        // Refresh the trip info card if accepted
+        if (accept && widget.tripId != null) _loadTripInfo();
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(accept ? 'Oferta aceptada' : 'Oferta rechazada'),
+          backgroundColor: accept ? Colors.green : Colors.red,
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _processingInvitation = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 
@@ -278,6 +333,15 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
             onDecline: () => _handleRequest(false),
             onDismiss: () => setState(() => _bannerDismissed = true),
           ),
+          if (_pendingInvitation != null && !_invitationBannerDismissed)
+            _InvitationBanner(
+              invitation: _pendingInvitation!,
+              processing: _processingInvitation,
+              onAccept: () => _handleInvitation(true),
+              onDecline: () => _handleInvitation(false),
+              onDismiss: () =>
+                  setState(() => _invitationBannerDismissed = true),
+            ),
           Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
@@ -292,30 +356,33 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
                       )
                     : ListView.builder(
                         controller: _scrollController,
+                        reverse: true,
                         padding: const EdgeInsets.symmetric(
                             horizontal: 16, vertical: 12),
                         itemCount: _messages.length + (_tripInfo != null ? 1 : 0),
                         itemBuilder: (context, i) {
-                          if (_tripInfo != null) {
-                            if (i == 0) {
-                              final myId = Supabase.instance.client.auth.currentUser?.id ?? '';
-                              return _TripInfoCard(
-                                trip: _tripInfo!,
-                                onViewDetails: () => showModalBottomSheet(
-                                  context: context,
-                                  isScrollControlled: true,
-                                  backgroundColor: Colors.transparent,
-                                  builder: (_) => ChatTripDetailSheet(
-                                    tripId: _tripInfo!.tripId,
-                                    isDriver: myId == _tripInfo!.ownerId,
-                                    chatRepo: _chatRepo,
-                                  ),
+                          // With reverse:true, i=0 is the bottom (newest message).
+                          // Messages are stored oldest-first, so we read them backwards.
+                          // The TripInfoCard lives at the last index so it appears
+                          // pinned at the very top when the user scrolls up.
+                          if (_tripInfo != null && i == _messages.length) {
+                            final myId = Supabase.instance.client.auth.currentUser?.id ?? '';
+                            return _TripInfoCard(
+                              trip: _tripInfo!,
+                              onViewDetails: () => showModalBottomSheet(
+                                context: context,
+                                isScrollControlled: true,
+                                backgroundColor: Colors.transparent,
+                                builder: (_) => ChatTripDetailSheet(
+                                  tripId: _tripInfo!.tripId,
+                                  isDriver: myId == _tripInfo!.ownerId,
+                                  chatRepo: _chatRepo,
                                 ),
-                              );
-                            }
-                            return _MessageBubble(message: _messages[i - 1]);
+                              ),
+                            );
                           }
-                          return _MessageBubble(message: _messages[i]);
+                          final msgIndex = _messages.length - 1 - i;
+                          return _MessageBubble(message: _messages[msgIndex]);
                         },
                       ),
           ),
@@ -565,6 +632,131 @@ class _RequestBanner extends StatelessWidget {
                         onPressed: onAccept,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.green,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8)),
+                        ),
+                        child: const Text('Aceptar',
+                            style: TextStyle(fontSize: 13)),
+                      ),
+                    ),
+                  ],
+                ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Invitation Banner (driver → passenger offer) ────────────────────────────
+
+class _InvitationBanner extends StatelessWidget {
+  const _InvitationBanner({
+    required this.invitation,
+    required this.processing,
+    required this.onAccept,
+    required this.onDecline,
+    required this.onDismiss,
+  });
+
+  final PendingInvitationInfo invitation;
+  final bool processing;
+  final VoidCallback onAccept;
+  final VoidCallback onDecline;
+  final VoidCallback onDismiss;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      color: const Color(0xFFEFF6FF),
+      padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.local_offer_rounded,
+                  size: 16, color: Color(0xFF2563EB)),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Oferta de viaje · ${invitation.formattedDate}',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF1E3A8A),
+                  ),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close_rounded,
+                    size: 18, color: Color(0xFF1E3A8A)),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                onPressed: onDismiss,
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '${invitation.originAddress} → ${invitation.destinationAddress}',
+            style: const TextStyle(fontSize: 12, color: Color(0xFF1E40AF)),
+            overflow: TextOverflow.ellipsis,
+          ),
+          Text(
+            '\$${invitation.pricePerSeat} por asiento · ${invitation.freeSeats} lugar${invitation.freeSeats != 1 ? 'es' : ''} disponible${invitation.freeSeats != 1 ? 's' : ''}',
+            style: const TextStyle(fontSize: 12, color: Color(0xFF1E40AF)),
+          ),
+          if (invitation.vehicleBrand != null) ...[
+            Text(
+              '${invitation.vehicleBrand} ${invitation.vehicleModel} · ${invitation.vehicleColor}',
+              style: const TextStyle(fontSize: 12, color: Color(0xFF1E40AF)),
+            ),
+          ],
+          if (invitation.message != null &&
+              invitation.message!.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              '"${invitation.message}"',
+              style: const TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFF1E40AF),
+                  fontStyle: FontStyle.italic),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+          const SizedBox(height: 10),
+          processing
+              ? const Center(
+                  child: SizedBox(
+                      height: 24,
+                      width: 24,
+                      child: CircularProgressIndicator(strokeWidth: 2)))
+              : Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: onDecline,
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.red,
+                          side: const BorderSide(color: Colors.red),
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8)),
+                        ),
+                        child: const Text('Rechazar',
+                            style: TextStyle(fontSize: 13)),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: onAccept,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF2563EB),
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 8),
                           shape: RoundedRectangleBorder(

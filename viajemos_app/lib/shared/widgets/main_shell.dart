@@ -22,8 +22,11 @@ class MainShell extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final idx = _selectedIndex(context);
     final roleHome = ref.watch(roleProvider);
+    final isDriver = roleHome == '/driver';
     final unreadCount = ref.watch(unreadCountProvider);
-    final pendingCount = ref.watch(pendingRequestsCountProvider);
+    final pendingCount = isDriver
+        ? ref.watch(pendingRequestsCountProvider)
+        : ref.watch(pendingInvitationsCountProvider);
 
     return Scaffold(
       body: child,

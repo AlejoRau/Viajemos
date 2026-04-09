@@ -64,6 +64,136 @@ class PassengerTripHistory {
   bool get isAccepted => status == 'accepted';
 }
 
+// Active request (pending or accepted, future trip)
+class ActivePassengerRequest {
+  const ActivePassengerRequest({
+    required this.id,
+    required this.tripId,
+    required this.departureDate,
+    required this.originAddress,
+    required this.destinationAddress,
+    required this.pricePerSeat,
+    required this.seatsRequested,
+    required this.status,
+    required this.driverName,
+    required this.driverId,
+    required this.driverRating,
+    this.departureTime,
+    this.driverAvatarUrl,
+    this.vehicleBrand,
+    this.vehicleModel,
+    this.vehicleColor,
+  });
+
+  final String id; // request_id
+  final String tripId;
+  final DateTime departureDate;
+  final String originAddress;
+  final String destinationAddress;
+  final int pricePerSeat;
+  final int seatsRequested;
+  final String status; // 'pending' | 'accepted'
+  final String driverName;
+  final String driverId;
+  final double driverRating;
+  final String? departureTime;
+  final String? driverAvatarUrl;
+  final String? vehicleBrand;
+  final String? vehicleModel;
+  final String? vehicleColor;
+
+  bool get isPending => status == 'pending';
+  bool get isAccepted => status == 'accepted';
+
+  String get vehicleDisplay {
+    if (vehicleBrand == null) return '';
+    return '$vehicleBrand $vehicleModel · $vehicleColor';
+  }
+}
+
+// Completed trip (accepted request, departure date in the past)
+class PassengerCompletedTrip {
+  const PassengerCompletedTrip({
+    required this.id,
+    required this.tripId,
+    required this.departureDate,
+    required this.originAddress,
+    required this.destinationAddress,
+    required this.pricePerSeat,
+    required this.driverName,
+    required this.driverId,
+    required this.driverRating,
+    required this.hasRated,
+    required this.via,
+    this.departureTime,
+    this.driverAvatarUrl,
+    this.myRating,
+    this.vehicleBrand,
+    this.vehicleModel,
+    this.vehicleColor,
+  });
+
+  final String id; // request_id
+  final String tripId;
+  final DateTime departureDate;
+  final String originAddress;
+  final String destinationAddress;
+  final int pricePerSeat;
+  final String driverName;
+  final String driverId;
+  final double driverRating;
+  final bool hasRated;
+  final List<String> via;
+  final String? departureTime;
+  final String? driverAvatarUrl;
+  final int? myRating;
+  final String? vehicleBrand;
+  final String? vehicleModel;
+  final String? vehicleColor;
+
+  String get vehicleDisplay {
+    if (vehicleBrand == null) return '';
+    return '$vehicleBrand $vehicleModel · $vehicleColor';
+  }
+}
+
+// Passenger's own trip alert (pedido de viaje) with pending invitation count
+class MyTripAlert {
+  const MyTripAlert({
+    required this.id,
+    required this.originAddress,
+    required this.destinationAddress,
+    required this.dateFrom,
+    required this.dateTo,
+    required this.seatsNeeded,
+    required this.pendingInvitations,
+    required this.timeFlexible,
+    this.departureTime,
+    this.departureTimeTo,
+    this.maxPrice,
+    this.description,
+    this.hasPet = false,
+    this.isSmoker = false,
+  });
+
+  final String id;
+  final String originAddress;
+  final String destinationAddress;
+  final DateTime dateFrom;
+  final DateTime dateTo;
+  final int seatsNeeded;
+  final int pendingInvitations;
+  final bool timeFlexible;
+  final String? departureTime; // "HH:mm"
+  final String? departureTimeTo;
+  final int? maxPrice;
+  final String? description;
+  final bool hasPet;
+  final bool isSmoker;
+
+  bool get hasInvitations => pendingInvitations > 0;
+}
+
 class ActiveDriverTrip {
   const ActiveDriverTrip({
     required this.id,
@@ -289,6 +419,118 @@ class HistoryRepository {
       );
     }).toList();
   }
+
+  Future<void> updatePassengerPendingStatuses() async {
+    await _client.rpc('update_passenger_pending_statuses');
+  }
+
+  Future<List<ActivePassengerRequest>> fetchPassengerActiveRequests() async {
+    final data = await _client.rpc('get_passenger_active_requests') as List;
+    return data.map((row) {
+      final timeRaw = row['departure_time'] as String?;
+      return ActivePassengerRequest(
+        id: row['request_id'] as String,
+        tripId: row['trip_id'] as String,
+        departureDate: DateTime.parse(row['departure_date'] as String),
+        originAddress: row['origin_address'] as String,
+        destinationAddress: row['destination_address'] as String,
+        pricePerSeat: (row['price_per_seat'] as num).toInt(),
+        seatsRequested: (row['seats_requested'] as int?) ?? 1,
+        status: row['status'] as String,
+        driverName: row['driver_name'] as String? ?? 'Conductor',
+        driverId: row['driver_id'] as String,
+        driverRating: (row['driver_rating'] as num?)?.toDouble() ?? 0.0,
+        driverAvatarUrl: row['driver_avatar_url'] as String?,
+        departureTime: timeRaw != null && timeRaw.length >= 5
+            ? timeRaw.substring(0, 5)
+            : null,
+        vehicleBrand: row['vehicle_brand'] as String?,
+        vehicleModel: row['vehicle_model'] as String?,
+        vehicleColor: row['vehicle_color'] as String?,
+      );
+    }).toList();
+  }
+
+  Future<List<PassengerCompletedTrip>> fetchPassengerCompletedTrips() async {
+    final data = await _client.rpc('get_passenger_completed_trips') as List;
+    return data.map((row) {
+      final timeRaw = row['departure_time'] as String?;
+      return PassengerCompletedTrip(
+        id: row['request_id'] as String,
+        tripId: row['trip_id'] as String,
+        departureDate: DateTime.parse(row['departure_date'] as String),
+        originAddress: row['origin_address'] as String,
+        destinationAddress: row['destination_address'] as String,
+        pricePerSeat: (row['price_per_seat'] as num).toInt(),
+        driverName: row['driver_name'] as String? ?? 'Conductor',
+        driverId: row['driver_id'] as String,
+        driverRating: (row['driver_rating'] as num?)?.toDouble() ?? 0.0,
+        hasRated: row['has_rated'] as bool? ?? false,
+        via: (row['via'] as List?)?.cast<String>() ?? [],
+        departureTime: timeRaw != null && timeRaw.length >= 5
+            ? timeRaw.substring(0, 5)
+            : null,
+        driverAvatarUrl: row['driver_avatar_url'] as String?,
+        myRating: row['my_rating'] as int?,
+        vehicleBrand: row['vehicle_brand'] as String?,
+        vehicleModel: row['vehicle_model'] as String?,
+        vehicleColor: row['vehicle_color'] as String?,
+      );
+    }).toList();
+  }
+
+  Future<void> cancelPassengerRequest(String requestId) async {
+    await _client.rpc(
+      'cancel_passenger_request',
+      params: {'p_request_id': requestId},
+    );
+  }
+
+  String? _trimTime(dynamic v) {
+    final s = v as String?;
+    if (s == null || s.length < 5) return null;
+    return s.substring(0, 5);
+  }
+
+  Future<List<MyTripAlert>> fetchMyTripAlerts() async {
+    final data = await _client.rpc('get_my_trip_alerts') as List;
+    return data.map((row) {
+      return MyTripAlert(
+        id: row['alert_id'] as String,
+        originAddress: row['origin_address'] as String,
+        destinationAddress: row['destination_address'] as String,
+        dateFrom: DateTime.parse(row['date_from'] as String),
+        dateTo: DateTime.parse(row['date_to'] as String),
+        seatsNeeded: (row['seats_needed'] as int?) ?? 1,
+        pendingInvitations: (row['pending_invitations'] as int?) ?? 0,
+        timeFlexible: row['time_flexible'] as bool? ?? true,
+        departureTime: _trimTime(row['departure_time']),
+        departureTimeTo: _trimTime(row['departure_time_to']),
+        maxPrice: row['max_price'] as int?,
+        description: row['description'] as String?,
+        hasPet: row['has_pet'] as bool? ?? false,
+        isSmoker: row['is_smoker'] as bool? ?? false,
+      );
+    }).toList();
+  }
+
+  Future<void> deactivateAlert(String alertId) async {
+    await _client.rpc('deactivate_trip_alert', params: {'p_alert_id': alertId});
+  }
+
+  Future<void> submitDriverReview({
+    required String tripId,
+    required String driverId,
+    required int rating,
+    String? comment,
+  }) async {
+    await _client.rpc('submit_driver_review', params: {
+      'p_trip_id': tripId,
+      'p_driver_id': driverId,
+      'p_rating': rating,
+      'p_comment': comment,
+    });
+  }
 }
 
 // ── Providers ──────────────────────────────────────────────────────────────
@@ -310,4 +552,20 @@ final driverHistoryProvider =
 final passengerHistoryProvider =
     FutureProvider.autoDispose<List<PassengerTripHistory>>((ref) {
   return ref.read(historyRepositoryProvider).fetchPassengerHistory();
+});
+
+final passengerActiveRequestsProvider =
+    FutureProvider.autoDispose<List<ActivePassengerRequest>>((ref) async {
+  await ref.read(historyRepositoryProvider).updatePassengerPendingStatuses();
+  return ref.read(historyRepositoryProvider).fetchPassengerActiveRequests();
+});
+
+final passengerCompletedTripsProvider =
+    FutureProvider.autoDispose<List<PassengerCompletedTrip>>((ref) {
+  return ref.read(historyRepositoryProvider).fetchPassengerCompletedTrips();
+});
+
+final myTripAlertsProvider =
+    FutureProvider.autoDispose<List<MyTripAlert>>((ref) {
+  return ref.read(historyRepositoryProvider).fetchMyTripAlerts();
 });

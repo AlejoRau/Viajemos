@@ -43,6 +43,49 @@ class UnreadCountNotifier extends StateNotifier<int> {
   }
 }
 
+// ── Pending invitations count (history nav badge, passengers only) ──────────
+
+final pendingInvitationsCountProvider =
+    StateNotifierProvider<PendingInvitationsNotifier, int>(
+        (_) => PendingInvitationsNotifier());
+
+class PendingInvitationsNotifier extends StateNotifier<int> {
+  final _client = Supabase.instance.client;
+  RealtimeChannel? _channel;
+
+  PendingInvitationsNotifier() : super(0) {
+    _fetch();
+    _subscribe();
+  }
+
+  Future<void> _fetch() async {
+    try {
+      final result = await _client.rpc('get_total_pending_invitations');
+      if (mounted) state = (result as num?)?.toInt() ?? 0;
+    } catch (_) {}
+  }
+
+  void _subscribe() {
+    _channel = _client
+        .channel('pending-invitations-badge')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'trip_invitations',
+          callback: (_) => _fetch(),
+        )
+        .subscribe();
+  }
+
+  Future<void> refresh() => _fetch();
+
+  @override
+  void dispose() {
+    if (_channel != null) _client.removeChannel(_channel!);
+    super.dispose();
+  }
+}
+
 // ── Pending trip requests count (history nav badge, drivers only) ───────────
 
 final pendingRequestsCountProvider =
