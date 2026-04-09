@@ -290,54 +290,126 @@ class _InfoPersonalTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Avatar ────────────────────────────────────────────────────
-          Center(
-            child: Column(
-              children: [
-                CircleAvatar(
-                  radius: 52,
-                  backgroundColor: AppColors.primaryLight,
-                  child: Text(
-                    profile.initials,
-                    style: const TextStyle(
-                      fontSize: 36,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.primary,
+
+          // ── Hero ──────────────────────────────────────────────────────
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              // Banner degradado
+              Container(
+                height: 130,
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Color(0xFF1A73E8), Color(0xFF1248B3)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                ),
+                child: Align(
+                  alignment: Alignment.topRight,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: GestureDetector(
+                      onTap: onEditPersonalData,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.edit_rounded, size: 13, color: Colors.white),
+                            SizedBox(width: 5),
+                            Text('Editar', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
                 ),
-                const SizedBox(height: 14),
+              ),
+              // Avatar
+              Positioned(
+                bottom: -50,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: GestureDetector(
+                    onTap: () => ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Foto de perfil — próximamente disponible')),
+                    ),
+                    child: Stack(
+                      children: [
+                        Container(
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 4),
+                            boxShadow: [
+                              BoxShadow(color: Colors.black.withValues(alpha: 0.12), blurRadius: 16, offset: const Offset(0, 4)),
+                            ],
+                          ),
+                          child: CircleAvatar(
+                            radius: 48,
+                            backgroundColor: AppColors.primaryLight,
+                            child: Text(
+                              profile.initials,
+                              style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: AppColors.primary),
+                            ),
+                          ),
+                        ),
+                        Positioned(
+                          bottom: 2,
+                          right: 2,
+                          child: Container(
+                            width: 26,
+                            height: 26,
+                            decoration: BoxDecoration(
+                              color: AppColors.primary,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 2),
+                            ),
+                            child: const Icon(Icons.camera_alt_rounded, size: 13, color: Colors.white),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          // ── Nombre y rating ───────────────────────────────────────────
+          const SizedBox(height: 62),
+          Center(
+            child: Column(
+              children: [
                 Text(
                   profile.fullName,
-                  style: const TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textPrimary,
-                  ),
+                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
                 ),
                 const SizedBox(height: 6),
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.star_rounded,
-                        size: 22, color: Color(0xFFFACC15)),
+                    const Icon(Icons.star_rounded, size: 18, color: Color(0xFFFACC15)),
                     const SizedBox(width: 4),
                     Text(
                       profile.avgRating.toStringAsFixed(1),
-                      style: const TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textPrimary),
+                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
                     ),
-                    const SizedBox(width: 4),
+                    const SizedBox(width: 6),
+                    Container(width: 3, height: 3, decoration: const BoxDecoration(color: AppColors.border, shape: BoxShape.circle)),
+                    const SizedBox(width: 6),
                     Text(
-                      '(${isDriver ? profile.tripsDriver : profile.tripsPassenger} viajes)',
-                      style: const TextStyle(
-                          fontSize: 13, color: AppColors.textSecondary),
+                      isDriver ? 'Conductor' : 'Pasajero',
+                      style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
                     ),
                   ],
                 ),
@@ -347,148 +419,317 @@ class _InfoPersonalTab extends StatelessWidget {
           const SizedBox(height: 24),
 
           // ── Stats ─────────────────────────────────────────────────────
-          Row(
-            children: [
-              Expanded(
-                child: _StatCard(
-                  icon: isDriver
-                      ? Icons.directions_car_rounded
-                      : Icons.airline_seat_recline_normal_rounded,
-                  value:
-                      '${isDriver ? profile.tripsDriver : profile.tripsPassenger}',
-                  label: isDriver ? 'Viajes conducidos' : 'Viajes realizados',
-                ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 16, offset: const Offset(0, 4)),
+                ],
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _StatCard(
-                  icon: Icons.calendar_today_rounded,
-                  value: '${profile.memberSince.year}',
-                  label: 'Miembro desde',
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-
-          // ── Botones de edición ────────────────────────────────────────
-          SizedBox(
-            width: double.infinity,
-            height: 48,
-            child: OutlinedButton.icon(
-              onPressed: onEditPersonalData,
-              icon: const Icon(Icons.edit_rounded, size: 18),
-              label: const Text('Editar datos personales'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.primary,
-                side: const BorderSide(color: AppColors.primary, width: 1.5),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
+              child: Row(
+                children: [
+                  Expanded(child: _StatItem(
+                    value: '${isDriver ? profile.tripsDriver : profile.tripsPassenger}',
+                    label: isDriver ? 'Conducidos' : 'Realizados',
+                    icon: isDriver ? Icons.directions_car_rounded : Icons.airline_seat_recline_normal_rounded,
+                  )),
+                  _StatDivider(),
+                  Expanded(child: _StatItem(
+                    value: '${profile.memberSince.year}',
+                    label: 'Miembro desde',
+                    icon: Icons.calendar_today_rounded,
+                  )),
+                ],
               ),
             ),
           ),
-          const SizedBox(height: 10),
-          SizedBox(
-            width: double.infinity,
-            height: 48,
-            child: OutlinedButton.icon(
-              onPressed: () {},
-              icon: const Icon(Icons.add_a_photo_rounded, size: 18),
-              label: const Text('Editar foto de perfil'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.textSecondary,
-                side: const BorderSide(
-                    color: AppColors.border, width: 1.5),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
-              ),
-            ),
-          ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 28),
 
           // ── Sobre mí ──────────────────────────────────────────────────
-          Row(
-            children: [
-              const _SectionHeading('Sobre mí'),
-              const SizedBox(width: 8),
-              _AutoSaveIndicator(bioSaveStatus),
-            ],
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: bioController,
-            minLines: 4,
-            maxLines: null,
-            cursorColor: AppColors.primary,
-            style: const TextStyle(
-              fontSize: 14,
-              color: AppColors.textPrimary,
-              height: 1.6,
-            ),
-            decoration: InputDecoration(
-              hintText: 'Contá algo sobre vos...',
-              hintStyle: TextStyle(
-                color: AppColors.textSecondary.withValues(alpha: 0.5),
-                fontSize: 14,
-                height: 1.6,
-              ),
-              filled: true,
-              fillColor: Colors.white,
-              contentPadding: const EdgeInsets.all(16),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: const BorderSide(color: Color(0xFFE2E8F0), width: 1.2),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: BorderSide(color: AppColors.primary, width: 1.5),
-              ),
-            ),
-          ),
-          const SizedBox(height: 20),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _ProfileSectionLabel(label: 'Sobre mí', trailing: _AutoSaveIndicator(bioSaveStatus)),
+                const SizedBox(height: 10),
+                _BioField(controller: bioController),
+                const SizedBox(height: 24),
 
-          // ── Redes sociales ────────────────────────────────────────────
-          Row(
-            children: [
-              const _SectionHeading('Redes sociales'),
-              const SizedBox(width: 8),
-              _AutoSaveIndicator(socialSaveStatus),
-            ],
-          ),
-          const SizedBox(height: 12),
-          _SocialRow(
-            controller: instagramController,
-            hint: 'tu_usuario',
-            icon: _InstagramIcon(),
-            label: 'Instagram',
-          ),
-          const SizedBox(height: 10),
-          _SocialRow(
-            controller: facebookController,
-            hint: 'tu_usuario',
-            icon: _FacebookIcon(),
-            label: 'Facebook',
-          ),
-          const SizedBox(height: 20),
+                // ── Redes sociales ─────────────────────────────────────
+                _ProfileSectionLabel(label: 'Redes sociales', trailing: _AutoSaveIndicator(socialSaveStatus)),
+                const SizedBox(height: 10),
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 3)),
+                    ],
+                  ),
+                  child: Column(
+                    children: [
+                      _SocialRow(controller: instagramController, hint: 'tu_usuario', icon: _InstagramIcon(), label: 'Instagram'),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Divider(height: 1, thickness: 1, color: AppColors.border.withValues(alpha: 0.6)),
+                      ),
+                      _SocialRow(controller: facebookController, hint: 'tu_usuario', icon: _FacebookIcon(), label: 'Facebook'),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
 
-          // ── Autos ─────────────────────────────────────────────────────
-          const _VehiclesSection(),
-          const SizedBox(height: 32),
+                // ── Vehículos ──────────────────────────────────────────
+                const _VehiclesSection(),
+                const SizedBox(height: 36),
+              ],
+            ),
+          ),
         ],
       ),
     );
   }
 }
 
+// ── Widgets del hero ──────────────────────────────────────────────────────────
+
+class _StatItem extends StatelessWidget {
+  const _StatItem({required this.value, required this.label, required this.icon, this.iconColor});
+  final String value;
+  final String label;
+  final IconData icon;
+  final Color? iconColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 8),
+      child: Column(
+        children: [
+          Icon(icon, size: 20, color: iconColor ?? AppColors.primary),
+          const SizedBox(height: 6),
+          Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+          const SizedBox(height: 2),
+          Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Bio Field ─────────────────────────────────────────────────────────────────
+
+class _BioField extends StatefulWidget {
+  const _BioField({required this.controller});
+  final TextEditingController controller;
+
+  @override
+  State<_BioField> createState() => _BioFieldState();
+}
+
+class _BioFieldState extends State<_BioField> {
+  bool _focused = false;
+  late final FocusNode _focusNode;
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNode = FocusNode();
+    _focusNode.addListener(() => setState(() => _focused = _focusNode.hasFocus));
+    widget.controller.addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final charCount = widget.controller.text.length;
+    const maxChars = 300;
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: _focused
+            ? [
+                BoxShadow(color: AppColors.primary.withValues(alpha: 0.10), blurRadius: 18, offset: const Offset(0, 4)),
+                BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 6, offset: const Offset(0, 2)),
+              ]
+            : [
+                BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 3)),
+              ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Acento lateral izquierdo
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                width: 4,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: _focused
+                        ? [AppColors.primary, const Color(0xFF4FA3F7)]
+                        : [const Color(0xFFD1DCF0), const Color(0xFFE2E8F3)],
+                  ),
+                ),
+              ),
+              // Contenido
+              Expanded(
+                child: Stack(
+                  children: [
+                    // Comilla decorativa de fondo
+                    Positioned(
+                      right: 10,
+                      bottom: 28,
+                      child: Text(
+                        '\u201C',
+                        style: TextStyle(
+                          fontSize: 72,
+                          height: 1,
+                          color: AppColors.primary.withValues(alpha: _focused ? 0.06 : 0.03),
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        TextField(
+                          controller: widget.controller,
+                          focusNode: _focusNode,
+                          minLines: 4,
+                          maxLines: null,
+                          maxLength: maxChars,
+                          cursorColor: AppColors.primary,
+                          style: const TextStyle(fontSize: 14, color: AppColors.textPrimary, height: 1.65),
+                          decoration: InputDecoration(
+                            hintText: 'Contá algo sobre vos...',
+                            hintStyle: TextStyle(color: AppColors.textSecondary.withValues(alpha: 0.4), fontSize: 14, height: 1.65),
+                            filled: true,
+                            fillColor: Colors.transparent,
+                            counterText: '',
+                            contentPadding: const EdgeInsets.fromLTRB(14, 14, 44, 6),
+                            enabledBorder: const OutlineInputBorder(borderSide: BorderSide.none),
+                            focusedBorder: const OutlineInputBorder(borderSide: BorderSide.none),
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(0, 0, 14, 10),
+                          child: Text(
+                            '$charCount/$maxChars',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: charCount > maxChars * 0.85
+                                  ? (charCount >= maxChars ? Colors.red : const Color(0xFFE67E22))
+                                  : AppColors.textSecondary.withValues(alpha: 0.4),
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _StatDivider extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(width: 1, height: 48, color: AppColors.border);
+  }
+}
+
+class _ProfileSectionLabel extends StatelessWidget {
+  const _ProfileSectionLabel({required this.label, this.trailing});
+  final String label;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(width: 3, height: 16, decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(2))),
+        const SizedBox(width: 8),
+        Text(label, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+        if (trailing != null) ...[const SizedBox(width: 8), trailing!],
+      ],
+    );
+  }
+}
+
 // ── Tab 2: Cuenta ─────────────────────────────────────────────────────────────
 
-class _CuentaTab extends StatelessWidget {
-  const _CuentaTab(
-      {required this.email, required this.onOpinionsTap, required this.onLogout});
-
+class _CuentaTab extends StatefulWidget {
+  const _CuentaTab({required this.email, required this.onOpinionsTap, required this.onLogout});
   final String email;
   final VoidCallback onOpinionsTap;
   final VoidCallback onLogout;
+
+  @override
+  State<_CuentaTab> createState() => _CuentaTabState();
+}
+
+class _CuentaTabState extends State<_CuentaTab> {
+
+  void _showChangeEmail() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _ChangeEmailSheet(currentEmail: widget.email),
+    );
+  }
+
+  void _showChangePassword() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => const _ChangePasswordSheet(),
+    );
+  }
+
+  void _showHelp() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => const _HelpSheet(),
+    );
+  }
+
+  void _showRate() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => const _RateSheet(),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -503,22 +744,24 @@ class _CuentaTab extends StatelessWidget {
           _AccountRow(
             icon: Icons.mail_rounded,
             label: 'Email',
-            value: email,
-            onTap: () {},
+            value: widget.email,
+            onTap: _showChangeEmail,
           ),
           const SizedBox(height: 8),
           _AccountRow(
             icon: Icons.lock_outline_rounded,
             label: 'Contraseña',
             value: '••••••••',
-            onTap: () {},
+            onTap: _showChangePassword,
           ),
           const SizedBox(height: 8),
           _AccountRow(
             icon: Icons.home_outlined,
             label: 'Dirección postal',
             value: '',
-            onTap: () {},
+            onTap: () => ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Dirección postal — próximamente disponible')),
+            ),
           ),
           const SizedBox(height: 24),
 
@@ -529,7 +772,7 @@ class _CuentaTab extends StatelessWidget {
             icon: Icons.reviews_outlined,
             label: 'Opiniones',
             value: 'Recibidas y realizadas',
-            onTap: onOpinionsTap,
+            onTap: widget.onOpinionsTap,
           ),
           const SizedBox(height: 24),
 
@@ -540,14 +783,14 @@ class _CuentaTab extends StatelessWidget {
             icon: Icons.star_rate_outlined,
             label: 'Valorar la app',
             value: '',
-            onTap: () {},
+            onTap: _showRate,
           ),
           const SizedBox(height: 8),
           _AccountRow(
             icon: Icons.help_outline_rounded,
             label: 'Ayuda',
             value: '',
-            onTap: () {},
+            onTap: _showHelp,
           ),
           const SizedBox(height: 32),
 
@@ -556,20 +799,419 @@ class _CuentaTab extends StatelessWidget {
             width: double.infinity,
             height: 52,
             child: OutlinedButton(
-              onPressed: onLogout,
+              onPressed: widget.onLogout,
               style: OutlinedButton.styleFrom(
                 side: const BorderSide(color: Color(0xFFEF4444), width: 2),
                 foregroundColor: const Color(0xFFEF4444),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
-                textStyle: const TextStyle(
-                    fontSize: 16, fontWeight: FontWeight.w600),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
               ),
               child: const Text('Cerrar sesión'),
             ),
           ),
           const SizedBox(height: 32),
         ],
+      ),
+    );
+  }
+}
+
+// ── Sheet: Cambiar email ───────────────────────────────────────────────────────
+
+class _ChangeEmailSheet extends StatefulWidget {
+  const _ChangeEmailSheet({required this.currentEmail});
+  final String currentEmail;
+
+  @override
+  State<_ChangeEmailSheet> createState() => _ChangeEmailSheetState();
+}
+
+class _ChangeEmailSheetState extends State<_ChangeEmailSheet> {
+  late final _emailController = TextEditingController(text: widget.currentEmail);
+  bool _loading = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final newEmail = _emailController.text.trim();
+    if (newEmail == widget.currentEmail) { Navigator.pop(context); return; }
+    if (!newEmail.contains('@')) {
+      setState(() => _error = 'Ingresá un email válido');
+      return;
+    }
+    setState(() { _loading = true; _error = null; });
+    try {
+      await Supabase.instance.client.auth.updateUser(UserAttributes(email: newEmail));
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Te enviamos un correo de confirmación al nuevo email')),
+        );
+      }
+    } catch (e) {
+      if (mounted) setState(() { _loading = false; _error = 'Error al actualizar el email'; });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _BottomSheetWrapper(
+      title: 'Cambiar email',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _EditField(label: 'Nuevo email', controller: _emailController, keyboardType: TextInputType.emailAddress),
+          if (_error != null) ...[
+            const SizedBox(height: 8),
+            Text(_error!, style: const TextStyle(color: Color(0xFFEF4444), fontSize: 13)),
+          ],
+          const SizedBox(height: 8),
+          Text(
+            'Te enviaremos un correo de confirmación al nuevo email.',
+            style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 24),
+          _SaveButton(loading: _loading, onPressed: _save),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Sheet: Cambiar contraseña ─────────────────────────────────────────────────
+
+class _ChangePasswordSheet extends StatefulWidget {
+  const _ChangePasswordSheet();
+
+  @override
+  State<_ChangePasswordSheet> createState() => _ChangePasswordSheetState();
+}
+
+class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
+  final _newPassController = TextEditingController();
+  final _confirmController = TextEditingController();
+  bool _loading = false;
+  bool _obscureNew = true;
+  bool _obscureConfirm = true;
+  String? _error;
+
+  @override
+  void dispose() {
+    _newPassController.dispose();
+    _confirmController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final newPass = _newPassController.text;
+    if (newPass.length < 6) {
+      setState(() => _error = 'La contraseña debe tener al menos 6 caracteres');
+      return;
+    }
+    if (newPass != _confirmController.text) {
+      setState(() => _error = 'Las contraseñas no coinciden');
+      return;
+    }
+    setState(() { _loading = true; _error = null; });
+    try {
+      await Supabase.instance.client.auth.updateUser(UserAttributes(password: newPass));
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Contraseña actualizada correctamente')),
+        );
+      }
+    } catch (e) {
+      if (mounted) setState(() { _loading = false; _error = 'Error al actualizar la contraseña'; });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _BottomSheetWrapper(
+      title: 'Cambiar contraseña',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _PasswordField(
+            label: 'Nueva contraseña',
+            controller: _newPassController,
+            obscure: _obscureNew,
+            onToggle: () => setState(() => _obscureNew = !_obscureNew),
+          ),
+          const SizedBox(height: 14),
+          _PasswordField(
+            label: 'Confirmar contraseña',
+            controller: _confirmController,
+            obscure: _obscureConfirm,
+            onToggle: () => setState(() => _obscureConfirm = !_obscureConfirm),
+          ),
+          if (_error != null) ...[
+            const SizedBox(height: 8),
+            Text(_error!, style: const TextStyle(color: Color(0xFFEF4444), fontSize: 13)),
+          ],
+          const SizedBox(height: 24),
+          _SaveButton(loading: _loading, onPressed: _save),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Sheet: Valorar la app ─────────────────────────────────────────────────────
+
+class _RateSheet extends StatefulWidget {
+  const _RateSheet();
+
+  @override
+  State<_RateSheet> createState() => _RateSheetState();
+}
+
+class _RateSheetState extends State<_RateSheet> {
+  int _stars = 0;
+  bool _sent = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return _BottomSheetWrapper(
+      title: 'Valorar la app',
+      child: _sent
+          ? SizedBox(
+              width: double.infinity,
+              child: const Column(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  SizedBox(height: 16),
+                  Icon(Icons.check_circle_rounded, color: Color(0xFF16A34A), size: 52),
+                  SizedBox(height: 14),
+                  Text('¡Gracias por tu opinión!',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+                  SizedBox(height: 6),
+                  Text('Tu valoración nos ayuda a mejorar.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+                  SizedBox(height: 28),
+                ],
+              ),
+            )
+          : Column(
+              children: [
+                const Text('¿Cómo calificarías tu experiencia con Viajemos?',
+                    style: TextStyle(fontSize: 14, color: AppColors.textSecondary)),
+                const SizedBox(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: List.generate(5, (i) => GestureDetector(
+                    onTap: () => setState(() => _stars = i + 1),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      child: Icon(
+                        i < _stars ? Icons.star_rounded : Icons.star_outline_rounded,
+                        size: 40,
+                        color: i < _stars ? const Color(0xFFFACC15) : AppColors.border,
+                      ),
+                    ),
+                  )),
+                ),
+                const SizedBox(height: 28),
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: ElevatedButton(
+                    onPressed: _stars == 0 ? null : () {
+                      setState(() => _sent = true);
+                      Future.delayed(const Duration(seconds: 2), () {
+                        if (context.mounted) Navigator.pop(context);
+                      });
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      disabledBackgroundColor: AppColors.border,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      elevation: 0,
+                    ),
+                    child: const Text('Enviar valoración',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white)),
+                  ),
+                ),
+              ],
+            ),
+    );
+  }
+}
+
+// ── Sheet: Ayuda ──────────────────────────────────────────────────────────────
+
+class _HelpSheet extends StatelessWidget {
+  const _HelpSheet();
+
+  @override
+  Widget build(BuildContext context) {
+    return _BottomSheetWrapper(
+      title: 'Ayuda',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _HelpItem(
+            icon: Icons.mail_outline_rounded,
+            title: 'Contactanos',
+            subtitle: 'soporte@viajemos.app',
+          ),
+          const SizedBox(height: 12),
+          _HelpItem(
+            icon: Icons.security_rounded,
+            title: 'Política de privacidad',
+            subtitle: 'Cómo usamos tus datos',
+          ),
+          const SizedBox(height: 12),
+          _HelpItem(
+            icon: Icons.description_outlined,
+            title: 'Términos y condiciones',
+            subtitle: 'Condiciones de uso de la plataforma',
+          ),
+          const SizedBox(height: 12),
+          _HelpItem(
+            icon: Icons.info_outline_rounded,
+            title: 'Versión',
+            subtitle: '1.0.0 (beta)',
+          ),
+          const SizedBox(height: 8),
+        ],
+      ),
+    );
+  }
+}
+
+class _HelpItem extends StatelessWidget {
+  const _HelpItem({required this.icon, required this.title, required this.subtitle});
+  final IconData icon;
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.pageBackground,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 22, color: AppColors.primary),
+          const SizedBox(width: 14),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+              const SizedBox(height: 2),
+              Text(subtitle, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Widgets compartidos para sheets ───────────────────────────────────────────
+
+class _BottomSheetWrapper extends StatelessWidget {
+  const _BottomSheetWrapper({required this.title, required this.child});
+  final String title;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 12),
+            Center(
+              child: Container(
+                width: 40, height: 4,
+                decoration: BoxDecoration(color: const Color(0xFFE2E8F0), borderRadius: BorderRadius.circular(2)),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+            const SizedBox(height: 20),
+            child,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PasswordField extends StatelessWidget {
+  const _PasswordField({required this.label, required this.controller, required this.obscure, required this.onToggle});
+  final String label;
+  final TextEditingController controller;
+  final bool obscure;
+  final VoidCallback onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 12, color: Color(0xFF64748B), fontWeight: FontWeight.w500)),
+        const SizedBox(height: 6),
+        Container(
+          decoration: BoxDecoration(color: const Color(0xFFF1F5F9), borderRadius: BorderRadius.circular(12)),
+          child: TextField(
+            controller: controller,
+            obscureText: obscure,
+            decoration: InputDecoration(
+              border: InputBorder.none,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              suffixIcon: IconButton(
+                icon: Icon(obscure ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 20, color: AppColors.textSecondary),
+                onPressed: onToggle,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SaveButton extends StatelessWidget {
+  const _SaveButton({required this.loading, required this.onPressed});
+  final bool loading;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      height: 52,
+      child: ElevatedButton(
+        onPressed: loading ? null : onPressed,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColors.primary,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          elevation: 0,
+        ),
+        child: loading
+            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+            : const Text('Guardar cambios', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white)),
       ),
     );
   }
@@ -1038,40 +1680,45 @@ class _SocialRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: const Color(0xFFE2E8F0), width: 1.2),
-        borderRadius: BorderRadius.circular(16),
-      ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       child: Row(
         children: [
           icon,
           const SizedBox(width: 14),
-          const Text('@',
-              style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.textSecondary)),
-          const SizedBox(width: 2),
           Expanded(
-            child: TextField(
-              controller: controller,
-              cursorColor: AppColors.textPrimary,
-              style: const TextStyle(
-                  fontSize: 15, color: AppColors.textPrimary),
-              decoration: InputDecoration(
-                hintText: hint,
-                hintStyle: const TextStyle(
-                    color: AppColors.textSecondary, fontSize: 15),
-                border: InputBorder.none,
-                focusedBorder: InputBorder.none,
-                enabledBorder: InputBorder.none,
-                isDense: true,
-                contentPadding: const EdgeInsets.only(top: 2),
-                filled: false,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textSecondary, letterSpacing: 0.3),
+                ),
+                const SizedBox(height: 2),
+                Row(
+                  children: [
+                    Text('@', style: TextStyle(fontSize: 14, color: AppColors.textSecondary.withValues(alpha: 0.5), fontWeight: FontWeight.w500)),
+                    const SizedBox(width: 2),
+                    Expanded(
+                      child: TextField(
+                        controller: controller,
+                        cursorColor: AppColors.primary,
+                        style: const TextStyle(fontSize: 14, color: AppColors.textPrimary, fontWeight: FontWeight.w500),
+                        decoration: InputDecoration(
+                          hintText: hint,
+                          hintStyle: TextStyle(color: AppColors.textSecondary.withValues(alpha: 0.4), fontSize: 14),
+                          border: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(vertical: 2),
+                          filled: false,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
         ],
