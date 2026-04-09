@@ -415,32 +415,33 @@ class _InfoPersonalTab extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          Container(
-            width: double.infinity,
-            constraints: const BoxConstraints(minHeight: 130),
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              color: AppColors.pageBackground,
-              borderRadius: BorderRadius.circular(16),
+          TextField(
+            controller: bioController,
+            minLines: 4,
+            maxLines: null,
+            cursorColor: AppColors.primary,
+            style: const TextStyle(
+              fontSize: 14,
+              color: AppColors.textPrimary,
+              height: 1.6,
             ),
-            child: TextField(
-              controller: bioController,
-              minLines: 4,
-              maxLines: null,
-              cursorColor: AppColors.textPrimary,
-              style: const TextStyle(
+            decoration: InputDecoration(
+              hintText: 'Contá algo sobre vos...',
+              hintStyle: TextStyle(
+                color: AppColors.textSecondary.withValues(alpha: 0.5),
                 fontSize: 14,
-                color: AppColors.textPrimary,
                 height: 1.6,
               ),
-              decoration: InputDecoration(
-                border: InputBorder.none,
-                isDense: true,
-                contentPadding: EdgeInsets.zero,
-                hintText: 'Contá algo sobre vos...',
-                hintStyle: TextStyle(
-                    color: AppColors.textSecondary.withValues(alpha: 0.6),
-                    fontSize: 14),
+              filled: true,
+              fillColor: Colors.white,
+              contentPadding: const EdgeInsets.all(16),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: const BorderSide(color: Color(0xFFE2E8F0), width: 1.2),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide(color: AppColors.primary, width: 1.5),
               ),
             ),
           ),
