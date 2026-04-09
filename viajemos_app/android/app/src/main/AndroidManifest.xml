@@ -31,7 +31,7 @@
                 <category android:name="android.intent.category.DEFAULT"/>
                 <category android:name="android.intent.category.BROWSABLE"/>
                 <data
-                    android:scheme="com.example.viajemos_app"
+                    android:scheme="io.viajemos.app"
                     android:host="login-callback"/>
             </intent-filter>
         </activity>

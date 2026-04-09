@@ -1,18 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/widgets/role_option_card.dart';
+import '../../../shared/widgets/role_switcher_title.dart';
 
-class DriverHomeScreen extends StatelessWidget {
+class DriverHomeScreen extends ConsumerWidget {
   const DriverHomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Conductor',
-            style: AppTextStyles.passengerTitle
-                .copyWith(color: AppColors.primary)),
+        title: const RoleSwitcherTitle(),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.go('/'),

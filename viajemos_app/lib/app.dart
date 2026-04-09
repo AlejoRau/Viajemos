@@ -70,6 +70,7 @@ final _router = GoRouter(
           chatId: state.pathParameters['id']!,
           contactName: extra['contactName'] as String? ?? 'Conversación',
           contactId: extra['contactId'] as String?,
+          tripId: extra['tripId'] as String?,
         );
       },
     ),

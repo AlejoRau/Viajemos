@@ -27,8 +27,9 @@ class TripSearchRepository {
       via,
       stops,
       description,
-      profiles!owner_id(full_name, avg_rating),
-      vehicles!vehicle_id(brand, model, color)
+      profiles!owner_id(full_name, avg_rating, avatar_url),
+      vehicles!vehicle_id(brand, model, color),
+      trip_requests!trip_id(status, profiles!passenger_id(full_name, avatar_url))
     ''').eq('status', 'open');
 
     if (origin.isNotEmpty) {
@@ -60,6 +61,22 @@ class TripSearchRepository {
         .map((row) =>
             TripSearchResult.fromJson(row as Map<String, dynamic>))
         .toList();
+  }
+
+  Future<List<Map<String, String?>>> fetchTripPassengers(String tripId) async {
+    final data = await _client
+        .from('trip_requests')
+        .select('passenger_id, profiles!passenger_id(full_name, avatar_url)')
+        .eq('trip_id', tripId)
+        .eq('status', 'accepted') as List;
+
+    return data.map((row) {
+      final profile = row['profiles'] as Map<String, dynamic>? ?? {};
+      return {
+        'name': profile['full_name'] as String? ?? 'Pasajero',
+        'avatarUrl': profile['avatar_url'] as String?,
+      };
+    }).toList();
   }
 
   Future<void> createTripRequest({

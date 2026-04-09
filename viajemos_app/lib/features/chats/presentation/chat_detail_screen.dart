@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/providers/badge_providers.dart';
 import '../data/chat_repository.dart';
+import 'chat_trip_detail_sheet.dart';
 
 String _initials(String name) {
   final parts = name.trim().split(' ');
@@ -22,12 +23,14 @@ class ChatDetailScreen extends ConsumerStatefulWidget {
   final String chatId;
   final String contactName;
   final String? contactId;
+  final String? tripId;
 
   const ChatDetailScreen({
     super.key,
     required this.chatId,
     required this.contactName,
     this.contactId,
+    this.tripId,
   });
 
   @override
@@ -46,6 +49,7 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
   PendingRequestInfo? _pendingRequest;
   bool _bannerDismissed = false;
   bool _processingRequest = false;
+  AcceptedTripInfo? _tripInfo;
 
   @override
   void initState() {
@@ -54,6 +58,9 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
     _subscribe();
     if (widget.contactId != null) {
       _loadPendingRequest();
+    }
+    if (widget.tripId != null) {
+      _loadTripInfo();
     }
   }
 
@@ -90,6 +97,11 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
           await _chatRepo.fetchPendingRequestForContact(widget.contactId!);
       if (mounted) setState(() => _pendingRequest = req);
     } catch (_) {}
+  }
+
+  Future<void> _loadTripInfo() async {
+    final info = await _chatRepo.fetchTripInfo(widget.tripId!);
+    if (mounted && info != null) setState(() => _tripInfo = info);
   }
 
   void _subscribe() {
@@ -233,13 +245,26 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
               ),
             ),
             const SizedBox(width: 10),
-            Text(
-              widget.contactName,
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: AppColors.textPrimary,
-              ),
+            Expanded(
+              child: _tripInfo != null
+                  ? Text(
+                      '${widget.contactName} · ${_tripInfo!.originCity}→${_tripInfo!.destinationCity} ${_tripInfo!.shortDate}',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    )
+                  : Text(
+                      widget.contactName,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
             ),
           ],
         ),
@@ -269,9 +294,29 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
                         controller: _scrollController,
                         padding: const EdgeInsets.symmetric(
                             horizontal: 16, vertical: 12),
-                        itemCount: _messages.length,
-                        itemBuilder: (context, i) =>
-                            _MessageBubble(message: _messages[i]),
+                        itemCount: _messages.length + (_tripInfo != null ? 1 : 0),
+                        itemBuilder: (context, i) {
+                          if (_tripInfo != null) {
+                            if (i == 0) {
+                              final myId = Supabase.instance.client.auth.currentUser?.id ?? '';
+                              return _TripInfoCard(
+                                trip: _tripInfo!,
+                                onViewDetails: () => showModalBottomSheet(
+                                  context: context,
+                                  isScrollControlled: true,
+                                  backgroundColor: Colors.transparent,
+                                  builder: (_) => ChatTripDetailSheet(
+                                    tripId: _tripInfo!.tripId,
+                                    isDriver: myId == _tripInfo!.ownerId,
+                                    chatRepo: _chatRepo,
+                                  ),
+                                ),
+                              );
+                            }
+                            return _MessageBubble(message: _messages[i - 1]);
+                          }
+                          return _MessageBubble(message: _messages[i]);
+                        },
                       ),
           ),
           _InputBar(controller: _textController, onSend: _send),
@@ -280,6 +325,142 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
     );
   }
 }
+
+// ── Trip Info Card ────────────────────────────────────────────────────────────
+
+class _TripInfoCard extends StatelessWidget {
+  const _TripInfoCard({required this.trip, required this.onViewDetails});
+  final AcceptedTripInfo trip;
+  final VoidCallback onViewDetails;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.25), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withValues(alpha: 0.07),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryLight,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.directions_car_rounded,
+                    size: 16,
+                    color: AppColors.primary,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                const Text(
+                  'Viaje confirmado',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // Route
+            Row(
+              children: [
+                Flexible(
+                  child: Text(
+                    trip.originCity,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF1E293B),
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 8),
+                  child: Icon(Icons.arrow_forward_rounded,
+                      size: 16, color: AppColors.primary),
+                ),
+                Flexible(
+                  child: Text(
+                    trip.destinationCity,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF1E293B),
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+
+            // Date & time
+            Row(
+              children: [
+                const Icon(Icons.calendar_today_rounded,
+                    size: 13, color: AppColors.textSecondary),
+                const SizedBox(width: 5),
+                Text(
+                  trip.formattedTime.isNotEmpty
+                      ? '${trip.formattedDate}  ·  ${trip.formattedTime}'
+                      : trip.formattedDate,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // Button
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: onViewDetails,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.primary,
+                  side: const BorderSide(color: AppColors.primary),
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                ),
+                child: const Text(
+                  'Ver detalles',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Request Banner ─────────────────────────────────────────────────────────────
 
 class _RequestBanner extends StatelessWidget {
   const _RequestBanner({
@@ -472,6 +653,8 @@ class _InputBar extends StatefulWidget {
 
 class _InputBarState extends State<_InputBar> {
   bool _hasText = false;
+  int _charCount = 0;
+  static const int _maxChars = 50;
 
   @override
   void initState() {
@@ -480,8 +663,15 @@ class _InputBarState extends State<_InputBar> {
   }
 
   void _onTextChanged() {
-    final hasText = widget.controller.text.trim().isNotEmpty;
-    if (hasText != _hasText) setState(() => _hasText = hasText);
+    final text = widget.controller.text;
+    final hasText = text.trim().isNotEmpty;
+    final count = text.length;
+    if (hasText != _hasText || count != _charCount) {
+      setState(() {
+        _hasText = hasText;
+        _charCount = count;
+      });
+    }
   }
 
   @override
@@ -492,59 +682,87 @@ class _InputBarState extends State<_InputBar> {
 
   @override
   Widget build(BuildContext context) {
+    final remaining = _maxChars - _charCount;
+    final isNearLimit = remaining <= 10;
+    final isOverLimit = remaining < 0;
+
     return Container(
       decoration: const BoxDecoration(
         color: Colors.white,
         border: Border(top: BorderSide(color: AppColors.border)),
       ),
-      padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+      padding: const EdgeInsets.fromLTRB(12, 6, 8, 8),
       child: SafeArea(
         top: false,
-        child: Row(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            Expanded(
-              child: Container(
-                constraints: const BoxConstraints(maxHeight: 120),
-                decoration: BoxDecoration(
-                  color: AppColors.inputBackground,
-                  borderRadius: BorderRadius.circular(24),
-                ),
-                child: TextField(
-                  controller: widget.controller,
-                  maxLines: null,
-                  textInputAction: TextInputAction.newline,
-                  style: const TextStyle(
-                      fontSize: 15, color: AppColors.textPrimary),
-                  decoration: const InputDecoration(
-                    hintText: 'Escribí un mensaje...',
-                    hintStyle: TextStyle(
-                        color: AppColors.textSecondary, fontSize: 15),
-                    border: InputBorder.none,
-                    enabledBorder: InputBorder.none,
-                    focusedBorder: InputBorder.none,
-                    contentPadding:
-                        EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                    filled: false,
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Expanded(
+                  child: Container(
+                    constraints: const BoxConstraints(maxHeight: 100),
+                    decoration: BoxDecoration(
+                      color: AppColors.inputBackground,
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    child: TextField(
+                      controller: widget.controller,
+                      maxLines: null,
+                      maxLength: _maxChars,
+                      textInputAction: TextInputAction.newline,
+                      style: const TextStyle(
+                          fontSize: 15, color: AppColors.textPrimary),
+                      decoration: const InputDecoration(
+                        hintText: 'Escribí un mensaje...',
+                        hintStyle: TextStyle(
+                            color: AppColors.textSecondary, fontSize: 15),
+                        border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                        counterText: '',
+                        contentPadding: EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 10),
+                        filled: false,
+                      ),
+                    ),
                   ),
                 ),
-              ),
+                const SizedBox(width: 8),
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  child: Material(
+                    color: (_hasText && !isOverLimit)
+                        ? AppColors.primary
+                        : AppColors.border,
+                    shape: const CircleBorder(),
+                    child: InkWell(
+                      customBorder: const CircleBorder(),
+                      onTap: (_hasText && !isOverLimit) ? widget.onSend : null,
+                      child: const Padding(
+                        padding: EdgeInsets.all(10),
+                        child: Icon(Icons.send_rounded,
+                            color: Colors.white, size: 20),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: 8),
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              child: Material(
-                color: _hasText ? AppColors.primary : AppColors.border,
-                shape: const CircleBorder(),
-                child: InkWell(
-                  customBorder: const CircleBorder(),
-                  onTap: _hasText ? widget.onSend : null,
-                  child: const Padding(
-                    padding: EdgeInsets.all(10),
-                    child: Icon(Icons.send_rounded,
-                        color: Colors.white, size: 20),
-                  ),
-                ),
+            const SizedBox(height: 3),
+            Text(
+              '$_charCount/$_maxChars',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight:
+                    isNearLimit ? FontWeight.w600 : FontWeight.normal,
+                color: isOverLimit
+                    ? Colors.red
+                    : isNearLimit
+                        ? Colors.orange.shade700
+                        : AppColors.textSecondary,
               ),
             ),
           ],
@@ -553,3 +771,4 @@ class _InputBarState extends State<_InputBar> {
     );
   }
 }
+

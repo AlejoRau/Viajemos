@@ -238,7 +238,12 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
       final origin = await Navigator.push<MapResult>(
         context,
         MaterialPageRoute(
-          builder: (_) => const TripMapScreen(title: 'Punto de salida'),
+          builder: (_) => TripMapScreen(
+            title: 'Punto de salida',
+            initialCity: _originController.text.trim().isEmpty
+                ? null
+                : _originController.text.trim(),
+          ),
         ),
       );
       if (origin == null) return;
@@ -250,7 +255,12 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
       final dest = await Navigator.push<MapResult>(
         context,
         MaterialPageRoute(
-          builder: (_) => const TripMapScreen(title: 'Punto de llegada'),
+          builder: (_) => TripMapScreen(
+            title: 'Punto de llegada',
+            initialCity: _destinationController.text.trim().isEmpty
+                ? null
+                : _destinationController.text.trim(),
+          ),
         ),
       );
       if (dest == null) return;
