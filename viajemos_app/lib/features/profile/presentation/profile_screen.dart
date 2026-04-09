@@ -1666,7 +1666,7 @@ class _AccountRow extends StatelessWidget {
   }
 }
 
-class _SocialRow extends StatelessWidget {
+class _SocialRow extends StatefulWidget {
   const _SocialRow({
     required this.controller,
     required this.hint,
@@ -1679,33 +1679,47 @@ class _SocialRow extends StatelessWidget {
   final String label;
 
   @override
+  State<_SocialRow> createState() => _SocialRowState();
+}
+
+class _SocialRowState extends State<_SocialRow> {
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(() => setState(() {}));
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final hasText = widget.controller.text.isNotEmpty;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       child: Row(
         children: [
-          icon,
+          widget.icon,
           const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  label,
+                  widget.label,
                   style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textSecondary, letterSpacing: 0.3),
                 ),
                 const SizedBox(height: 2),
                 Row(
                   children: [
-                    Text('@', style: TextStyle(fontSize: 14, color: AppColors.textSecondary.withValues(alpha: 0.5), fontWeight: FontWeight.w500)),
-                    const SizedBox(width: 2),
+                    if (!hasText) ...[
+                      Text('@', style: TextStyle(fontSize: 14, color: AppColors.textSecondary.withValues(alpha: 0.5), fontWeight: FontWeight.w500)),
+                      const SizedBox(width: 2),
+                    ],
                     Expanded(
                       child: TextField(
-                        controller: controller,
+                        controller: widget.controller,
                         cursorColor: AppColors.primary,
                         style: const TextStyle(fontSize: 14, color: AppColors.textPrimary, fontWeight: FontWeight.w500),
                         decoration: InputDecoration(
-                          hintText: hint,
+                          hintText: '@${widget.hint}',
                           hintStyle: TextStyle(color: AppColors.textSecondary.withValues(alpha: 0.4), fontSize: 14),
                           border: InputBorder.none,
                           focusedBorder: InputBorder.none,
