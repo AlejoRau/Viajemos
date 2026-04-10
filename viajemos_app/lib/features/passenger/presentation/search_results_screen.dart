@@ -304,12 +304,46 @@ class _TripCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                Text(
-                  _formatPrice(trip.pricePerSeat),
-                  style: const TextStyle(
-                      fontSize: 19,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.primary),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    if (trip.splitCosts)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEFF6FF),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                              color: const Color(0xFFBFDBFE), width: 1),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.people_alt_outlined,
+                                size: 13, color: Color(0xFF1D4ED8)),
+                            SizedBox(width: 4),
+                            Text(
+                              'Gastos\ndivididos',
+                              style: TextStyle(
+                                  fontSize: 10,
+                                  color: Color(0xFF1D4ED8),
+                                  fontWeight: FontWeight.w600,
+                                  height: 1.2),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ),
+                      )
+                    else
+                      Text(
+                        _formatPrice(trip.pricePerSeat),
+                        style: const TextStyle(
+                            fontSize: 19,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.primary),
+                      ),
+                  ],
                 ),
               ],
             ),
@@ -658,19 +692,19 @@ class _TripDetailsSheetState extends State<_TripDetailsSheet> {
                       ),
                     ],
                   ),
-                  // Specific addresses (only shown when there's address detail)
-                  if (trip.originDetailAddress != null ||
-                      trip.destinationDetailAddress != null) ...[
+                  // Specific pickup/dropoff addresses (when driver set them)
+                  if (trip.pickupAddress != null ||
+                      trip.dropoffAddress != null) ...[
                     const SizedBox(height: 10),
-                    if (trip.originDetailAddress != null)
+                    if (trip.pickupAddress != null)
                       _DetailRow(
                           icon: Icons.trip_origin_rounded,
-                          text: 'Salida: ${trip.originDetailAddress!}'),
-                    if (trip.destinationDetailAddress != null) ...[
+                          text: 'Dirección de partida: ${trip.pickupAddress!}'),
+                    if (trip.dropoffAddress != null) ...[
                       const SizedBox(height: 6),
                       _DetailRow(
                           icon: Icons.place_rounded,
-                          text: 'Llegada: ${trip.destinationDetailAddress!}'),
+                          text: 'Dirección de destino: ${trip.dropoffAddress!}'),
                     ],
                   ],
                   const SizedBox(height: 24),
@@ -853,22 +887,55 @@ class _TripDetailsSheetState extends State<_TripDetailsSheet> {
                   const SizedBox(height: 20),
 
                   // Price
-                  Row(
-                    children: [
-                      Text(
-                        _formatPrice(trip.pricePerSeat),
-                        style: const TextStyle(
-                            fontSize: 26,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.primary),
+                  if (trip.splitCosts)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEFF6FF),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                            color: const Color(0xFFBFDBFE), width: 1),
                       ),
-                      const SizedBox(width: 6),
-                      const Text('por asiento',
-                          style: TextStyle(
-                              fontSize: 14,
-                              color: Color(0xFF64748B))),
-                    ],
-                  ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.people_alt_outlined,
+                              size: 18, color: Color(0xFF1D4ED8)),
+                          SizedBox(width: 8),
+                          Flexible(
+                            child: Text(
+                              'El precio se dividirá entre los gastos totales del viaje',
+                              style: TextStyle(
+                                  fontSize: 13,
+                                  color: Color(0xFF1D4ED8),
+                                  fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  else
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          _formatPrice(trip.pricePerSeat),
+                          style: const TextStyle(
+                              fontSize: 26,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.primary),
+                        ),
+                        const SizedBox(width: 6),
+                        const Padding(
+                          padding: EdgeInsets.only(bottom: 2),
+                          child: Text('por asiento',
+                              style: TextStyle(
+                                  fontSize: 14,
+                                  color: Color(0xFF64748B))),
+                        ),
+                      ],
+                    ),
                   const SizedBox(height: 24),
                 ],
               ),

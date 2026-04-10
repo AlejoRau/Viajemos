@@ -217,18 +217,7 @@ class _TripMapScreenState extends State<TripMapScreen> {
         final addr = data['address'] as Map<String, dynamic>? ?? {};
         final displayName = data['display_name'] as String? ?? '';
 
-        // Build a human-readable label: prefer "Calle 1234" but only when
-        // the road name is not an abbreviated route code (length > 3 chars).
-        final road = addr['road'] as String?;
-        final houseNumber = addr['house_number'] as String?;
-        String streetLabel;
-        if (road != null && road.length > 3) {
-          streetLabel = houseNumber != null ? '$road $houseNumber' : road;
-        } else {
-          // Fall back to the display_name trimmed to the first 3 parts, which
-          // gives something like "Av. San Martín 268, Villa del Parque, CABA".
-          streetLabel = displayName.isNotEmpty ? _short(displayName) : '';
-        }
+        final streetLabel = _buildAddressLabel(addr, displayName);
 
         if (mounted) {
           setState(() => _address = streetLabel);
@@ -242,6 +231,56 @@ class _TripMapScreenState extends State<TripMapScreen> {
     } finally {
       if (mounted) setState(() => _reversing = false);
     }
+  }
+
+  /// Builds a clean human-readable street address from a Nominatim
+  /// reverse-geocode response, avoiding coordinate-like or abbreviated outputs.
+  String _buildAddressLabel(Map<String, dynamic> addr, String displayName) {
+    final road = addr['road'] as String?;
+    final houseNumber = addr['house_number'] as String?;
+
+    // Use street name when it's clearly a named road (not just a route code
+    // like "R7" or a single digit street number).
+    if (road != null && road.length > 3 &&
+        !RegExp(r'^[\dA-Z]{1,4}$').hasMatch(road.trim())) {
+      return houseNumber != null ? '$road $houseNumber' : road;
+    }
+
+    // Build from structured address fields to avoid coordinate-like display.
+    final parts = <String>[];
+
+    // Street with number if available
+    if (road != null && road.isNotEmpty) {
+      parts.add(houseNumber != null ? '$road $houseNumber' : road);
+    }
+
+    // Neighborhood / district for context
+    final neighborhood = addr['suburb'] as String? ??
+        addr['city_district'] as String? ??
+        addr['neighbourhood'] as String?;
+    if (neighborhood != null) parts.add(neighborhood);
+
+    // City / town
+    final city = addr['city'] as String? ??
+        addr['town'] as String? ??
+        addr['village'] as String? ??
+        addr['municipality'] as String?;
+    if (city != null) parts.add(city);
+
+    if (parts.isNotEmpty) return parts.join(', ');
+
+    // Last resort: use display_name but filter out pure-number segments
+    // that could look like coordinates (e.g. "43, 12, La Plata").
+    if (displayName.isNotEmpty) {
+      final filtered = displayName
+          .split(', ')
+          .where((s) => !RegExp(r'^-?\d+\.?\d*$').hasMatch(s.trim()))
+          .take(3)
+          .join(', ');
+      if (filtered.isNotEmpty) return filtered;
+    }
+
+    return '';
   }
 
   /// Shows only the first 3 segments of the Nominatim display_name.

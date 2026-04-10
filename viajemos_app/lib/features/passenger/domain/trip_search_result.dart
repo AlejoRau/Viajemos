@@ -28,6 +28,9 @@ class TripSearchResult {
     this.vehicleModel,
     this.vehicleColor,
     this.passengers = const [],
+    this.splitCosts = false,
+    this.pickupAddress,
+    this.dropoffAddress,
   });
 
   final String id;
@@ -52,6 +55,9 @@ class TripSearchResult {
   final String? vehicleModel;
   final String? vehicleColor;
   final List<TripPassengerPreview> passengers;
+  final bool splitCosts;
+  final String? pickupAddress;
+  final String? dropoffAddress;
 
   int get freeSeats => availableSeats - seatsTaken;
 
@@ -143,6 +149,9 @@ class TripSearchResult {
       vehicleBrand: vehicle?['brand'] as String?,
       vehicleModel: vehicle?['model'] as String?,
       vehicleColor: vehicle?['color'] as String?,
+      splitCosts: json['split_costs'] as bool? ?? false,
+      pickupAddress: json['pickup_address'] as String?,
+      dropoffAddress: json['dropoff_address'] as String?,
       passengers: ((json['trip_requests'] as List?) ?? [])
           .where((r) => r['status'] == 'accepted')
           .map((r) {

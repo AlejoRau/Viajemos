@@ -82,6 +82,7 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
 
   int _seats = 3;
   int _price = 4500;
+  bool _splitCosts = false;
 
   DateTime? _departureDate;
   MapResult? _originResult;
@@ -90,11 +91,22 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
   Vehicle? _selectedVehicle;
   bool _publishing = false;
 
+  // Validation state — set true on first publish attempt to show inline errors
+  bool _showErrors = false;
+
   @override
   void initState() {
     super.initState();
     _timeFromController.addListener(_onTimeChanged);
+    _timeFromController.addListener(_onFieldChanged);
     _timeToController.addListener(_onTimeChanged);
+    // Rebuild when origin/destination/time change so error hints update live
+    _originController.addListener(_onFieldChanged);
+    _destinationController.addListener(_onFieldChanged);
+  }
+
+  void _onFieldChanged() {
+    if (_showErrors) setState(() {});
   }
 
   @override
@@ -176,36 +188,25 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
     return h * 60 + m;
   }
 
+  bool get _hasRequiredErrors {
+    if (_originController.text.trim().isEmpty) return true;
+    if (_destinationController.text.trim().isEmpty) return true;
+    if (_departureDate == null) return true;
+    if (_timeFromController.text.trim().isEmpty) return true;
+    if (_selectedVehicle == null) return true;
+    return false;
+  }
+
   Future<void> _onNext() async {
-    if (_originController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Completá el origen del viaje')),
-      );
-      return;
-    }
-    if (_destinationController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Completá el destino del viaje')),
-      );
-      return;
-    }
-    if (_departureDate == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Seleccioná la fecha de salida')),
-      );
+    // Trigger inline validation display
+    if (_hasRequiredErrors) {
+      setState(() => _showErrors = true);
       return;
     }
 
-    // Validate time
+    // Validate time format
     final fromText = _timeFromController.text.trim();
     final toText = _timeToController.text.trim();
-    if (fromText.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Completá la hora de salida')),
-      );
-      return;
-    }
     final fromMin = _parseMinutes(fromText);
     if (fromMin == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -275,18 +276,18 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
     try {
       final repo = TripRepository();
       await repo.createTrip(
-        originAddress: _picksUpPassengers
-            ? _originController.text.trim()
-            : (_originResult?.address ?? _originController.text.trim()),
-        destinationAddress: _dropsOffPassengers
-            ? _destinationController.text.trim()
-            : (_destResult?.address ?? _destinationController.text.trim()),
+        // City names always used as the trip title (origin/destination)
+        originAddress: _originController.text.trim(),
+        destinationAddress: _destinationController.text.trim(),
+        // Specific street-level addresses from map pin (only when driver set them)
+        pickupAddress: _picksUpPassengers ? null : _originResult?.address,
+        dropoffAddress: _dropsOffPassengers ? null : _destResult?.address,
         originLat: _originResult?.lat,
         originLng: _originResult?.lng,
         destLat: _destResult?.lat,
         destLng: _destResult?.lng,
         availableSeats: _seats,
-        pricePerSeat: _price,
+        pricePerSeat: _splitCosts ? 0 : _price,
         departureDate: _departureDate!,
         departureTimeFrom: _timeFromController.text.trim(),
         allowsPets: _acceptsPets,
@@ -294,6 +295,7 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
         dropsOffAtDoor: _dropsOffPassengers,
         via: _routes,
         stops: _stops,
+        splitCosts: _splitCosts,
         description: _descriptionController.text.trim(),
         vehicleId: _selectedVehicle?.id,
       );
@@ -361,6 +363,7 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
                   ),
                   Expanded(
                     child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         CityAutocompleteField(
                           controller: _originController,
@@ -369,6 +372,18 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
                           defaultSuggestions: popularArgentineCities,
                           citySearchSource: CitySearchSource.georef,
                         ),
+                        if (_showErrors &&
+                            _originController.text.trim().isEmpty)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 4, left: 4),
+                            child: Text(
+                              'Este campo es obligatorio',
+                              style: TextStyle(
+                                  color: Color(0xFFDC2626),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500),
+                            ),
+                          ),
                         const SizedBox(height: 12),
                         CityAutocompleteField(
                           controller: _destinationController,
@@ -377,6 +392,18 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
                           defaultSuggestions: popularArgentineCities,
                           citySearchSource: CitySearchSource.georef,
                         ),
+                        if (_showErrors &&
+                            _destinationController.text.trim().isEmpty)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 4, left: 4),
+                            child: Text(
+                              'Este campo es obligatorio',
+                              style: TextStyle(
+                                  color: Color(0xFFDC2626),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500),
+                            ),
+                          ),
                       ],
                     ),
                   ),
@@ -446,7 +473,19 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
             // ── VEHÍCULO ───────────────────────────────────────────────────
             const _SectionHeader(
                 icon: Icons.directions_car_rounded, title: 'Vehículo'),
-            const SizedBox(height: 16),
+            const SizedBox(height: 4),
+            if (_showErrors && _selectedVehicle == null)
+              const Padding(
+                padding: EdgeInsets.only(bottom: 6),
+                child: Text(
+                  'Este campo es obligatorio',
+                  style: TextStyle(
+                      color: Color(0xFFDC2626),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500),
+                ),
+              ),
+            const SizedBox(height: 8),
             vehiclesAsync.when(
               loading: () => const Center(
                   child: CircularProgressIndicator()),
@@ -455,6 +494,7 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
               data: (vehicles) => _VehicleSelector(
                 vehicles: vehicles,
                 selected: _selectedVehicle,
+                hasError: _showErrors && _selectedVehicle == null,
                 onTap: () => _openVehicleSelector(vehicles),
               ),
             ),
@@ -483,7 +523,21 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
                 icon: Icons.calendar_today_rounded,
                 title: 'Fecha y hora'),
             const SizedBox(height: 16),
-            const _MedLabel('FECHA DE SALIDA'),
+            Row(
+              children: [
+                const _MedLabel('FECHA DE SALIDA'),
+                if (_showErrors && _departureDate == null) ...[
+                  const SizedBox(width: 8),
+                  const Text(
+                    '— Este campo es obligatorio',
+                    style: TextStyle(
+                        color: Color(0xFFDC2626),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500),
+                  ),
+                ],
+              ],
+            ),
             const SizedBox(height: 8),
             GestureDetector(
               onTap: () async {
@@ -526,7 +580,21 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            const _MedLabel('HORA DE SALIDA'),
+            Row(
+              children: [
+                const _MedLabel('HORA DE SALIDA'),
+                if (_showErrors && _timeFromController.text.trim().isEmpty) ...[
+                  const SizedBox(width: 8),
+                  const Text(
+                    '— Este campo es obligatorio',
+                    style: TextStyle(
+                        color: Color(0xFFDC2626),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500),
+                  ),
+                ],
+              ],
+            ),
             const SizedBox(height: 8),
             _RangeInputRow(
               label1: 'Salgo a las',
@@ -564,8 +632,10 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
             _SeatsAndPriceCard(
               seats: _seats,
               price: _price,
+              splitCosts: _splitCosts,
               onSeatsChanged: (v) => setState(() => _seats = v),
               onPriceChanged: (v) => setState(() => _price = v),
+              onSplitCostsChanged: (v) => setState(() => _splitCosts = v),
             ),
 
             const SizedBox(height: 32),
@@ -606,6 +676,36 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
             _DescriptionField(controller: _descriptionController),
 
             const SizedBox(height: 40),
+
+            // ── ERROR BANNER ──────────────────────────────────────────────
+            if (_showErrors && _hasRequiredErrors) ...[
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEE2E2),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFFCA5A5)),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.error_outline_rounded,
+                        color: Color(0xFFDC2626), size: 20),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Hay campos obligatorios sin completar. Revisá los campos marcados en rojo.',
+                        style: TextStyle(
+                            color: Color(0xFFDC2626),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
 
             // ── BOTÓN PUBLICAR ────────────────────────────────────────────
             SizedBox(
@@ -652,11 +752,13 @@ class _VehicleSelector extends StatelessWidget {
     required this.vehicles,
     required this.selected,
     required this.onTap,
+    this.hasError = false,
   });
 
   final List<Vehicle> vehicles;
   final Vehicle? selected;
   final VoidCallback onTap;
+  final bool hasError;
 
   @override
   Widget build(BuildContext context) {
@@ -666,11 +768,13 @@ class _VehicleSelector extends StatelessWidget {
         padding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
-          color: const Color(0xFFF1F5F9),
+          color: hasError ? const Color(0xFFFFF5F5) : const Color(0xFFF1F5F9),
           borderRadius: BorderRadius.circular(12),
-          border: selected != null
-              ? Border.all(color: AppColors.primary, width: 1.5)
-              : null,
+          border: hasError
+              ? Border.all(color: const Color(0xFFDC2626), width: 1.5)
+              : selected != null
+                  ? Border.all(color: AppColors.primary, width: 1.5)
+                  : null,
         ),
         child: Row(
           children: [
@@ -944,23 +1048,58 @@ class _RangeInputRow extends StatelessWidget {
   }
 }
 
-class _SeatsAndPriceCard extends StatelessWidget {
+class _SeatsAndPriceCard extends StatefulWidget {
   const _SeatsAndPriceCard({
     required this.seats,
     required this.price,
+    required this.splitCosts,
     required this.onSeatsChanged,
     required this.onPriceChanged,
+    required this.onSplitCostsChanged,
   });
 
   final int seats;
   final int price;
+  final bool splitCosts;
   final ValueChanged<int> onSeatsChanged;
   final ValueChanged<int> onPriceChanged;
+  final ValueChanged<bool> onSplitCostsChanged;
+
+  @override
+  State<_SeatsAndPriceCard> createState() => _SeatsAndPriceCardState();
+}
+
+class _SeatsAndPriceCardState extends State<_SeatsAndPriceCard> {
+  late final TextEditingController _priceController;
+
+  @override
+  void initState() {
+    super.initState();
+    _priceController = TextEditingController(text: widget.price.toString());
+  }
+
+  @override
+  void didUpdateWidget(_SeatsAndPriceCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Update text only when price changed externally (not from our own editing)
+    if (oldWidget.price != widget.price) {
+      final cursor = _priceController.selection;
+      _priceController.text = widget.price.toString();
+      // Restore cursor if still valid
+      if (cursor.start <= _priceController.text.length) {
+        _priceController.selection = cursor;
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _priceController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final priceController =
-        TextEditingController(text: price.toString());
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -999,24 +1138,24 @@ class _SeatsAndPriceCard extends StatelessWidget {
                   children: [
                     IconButton(
                       onPressed: () {
-                        if (seats > 1) onSeatsChanged(seats - 1);
+                        if (widget.seats > 1) widget.onSeatsChanged(widget.seats - 1);
                       },
                       icon: const Icon(Icons.remove,
                           color: AppColors.primary),
                     ),
                     Text(
-                      '$seats',
+                      '${widget.seats}',
                       style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
                           color: Color(0xFF1E293B)),
                     ),
                     IconButton(
-                      onPressed: seats < 5
-                          ? () => onSeatsChanged(seats + 1)
+                      onPressed: widget.seats < 5
+                          ? () => widget.onSeatsChanged(widget.seats + 1)
                           : null,
                       icon: Icon(Icons.add,
-                          color: seats < 5
+                          color: widget.seats < 5
                               ? AppColors.primary
                               : const Color(0xFFCBD5E1)),
                     ),
@@ -1051,39 +1190,93 @@ class _SeatsAndPriceCard extends StatelessWidget {
                   ),
                 ],
               ),
-              Container(
-                width: 120,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: TextField(
-                  controller: priceController,
-                  keyboardType: TextInputType.number,
-                  textAlign: TextAlign.right,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.digitsOnly
-                  ],
-                  style: const TextStyle(
-                      fontWeight: FontWeight.bold, fontSize: 16),
-                  onChanged: (v) =>
-                      onPriceChanged(int.tryParse(v) ?? 0),
-                  decoration: const InputDecoration(
-                    prefixIcon: Padding(
-                      padding: EdgeInsets.only(left: 12, top: 12),
-                      child: Text(
-                        'ARS',
-                        style: TextStyle(
-                            color: AppColors.primary,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13),
-                      ),
-                    ),
-                    border: InputBorder.none,
-                    contentPadding: EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 12),
+              Opacity(
+                opacity: widget.splitCosts ? 0.4 : 1.0,
+                child: Container(
+                  width: 130,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
                   ),
+                  child: widget.splitCosts
+                      ? const Padding(
+                          padding: EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 14),
+                          child: Text(
+                            'Se dividirán',
+                            style: TextStyle(
+                                color: Color(0xFF94A3B8),
+                                fontSize: 13,
+                                fontStyle: FontStyle.italic),
+                            textAlign: TextAlign.center,
+                          ),
+                        )
+                      : TextField(
+                          controller: _priceController,
+                          keyboardType: TextInputType.number,
+                          textAlign: TextAlign.right,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly
+                          ],
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 16),
+                          onChanged: (v) =>
+                              widget.onPriceChanged(int.tryParse(v) ?? 0),
+                          decoration: const InputDecoration(
+                            prefixIcon: Padding(
+                              padding: EdgeInsets.only(left: 12, top: 12),
+                              child: Text(
+                                'ARS',
+                                style: TextStyle(
+                                    color: AppColors.primary,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13),
+                              ),
+                            ),
+                            border: InputBorder.none,
+                            contentPadding: EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 12),
+                          ),
+                        ),
                 ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 16),
+          const Divider(color: Color(0xFFE2E8F0)),
+          const SizedBox(height: 4),
+
+          // Dividir gastos
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Dividir gastos',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 15,
+                          color: Color(0xFF1E293B)),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Activa esta opción si el precio del viaje será la división de los gastos totales del mismo',
+                      style: const TextStyle(
+                          fontSize: 11,
+                          color: Color(0xFF64748B),
+                          height: 1.4),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Switch(
+                value: widget.splitCosts,
+                onChanged: widget.onSplitCostsChanged,
+                activeColor: AppColors.primary,
               ),
             ],
           ),

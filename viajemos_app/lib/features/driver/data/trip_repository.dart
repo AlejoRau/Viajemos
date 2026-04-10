@@ -19,6 +19,9 @@ class TripRepository {
     required bool dropsOffAtDoor,
     required List<String> via,
     required List<String> stops,
+    required bool splitCosts,
+    String? pickupAddress,
+    String? dropoffAddress,
     String? description,
     String? vehicleId,
   }) async {
@@ -37,6 +40,11 @@ class TripRepository {
       'drops_off_at_door': dropsOffAtDoor,
       'via': via,
       'stops': stops,
+      'split_costs': splitCosts,
+      if (pickupAddress != null && pickupAddress.isNotEmpty)
+        'pickup_address': pickupAddress,
+      if (dropoffAddress != null && dropoffAddress.isNotEmpty)
+        'dropoff_address': dropoffAddress,
       if (description != null && description.isNotEmpty)
         'description': description,
       if (vehicleId != null) 'vehicle_id': vehicleId,
