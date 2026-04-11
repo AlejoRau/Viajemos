@@ -2,9 +2,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/providers/role_provider.dart';
+import '../../../core/providers/badge_providers.dart';
 import '../data/profile_provider.dart';
 import '../domain/user_profile.dart';
 import '../../../features/vehicles/data/vehicles_provider.dart';
@@ -255,6 +257,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
               onOpinionsTap: _showOpinions,
               onLogout: () async {
                 await Supabase.instance.client.auth.signOut();
+                // Reset all in-memory providers so the next user starts clean.
+                ref.invalidate(profileProvider);
+                ref.invalidate(unreadCountProvider);
+                ref.invalidate(pendingRequestsCountProvider);
+                ref.invalidate(pendingInvitationsCountProvider);
+                ref.read(roleProvider.notifier).state = '/driver';
+                if (context.mounted) context.go('/login');
               },
             ),
           ],

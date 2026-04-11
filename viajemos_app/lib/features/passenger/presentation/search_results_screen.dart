@@ -143,7 +143,10 @@ class _SearchResultsScreenState
               ),
             );
           }
-          final trips = snap.data ?? [];
+          final trips = snap.data ?? []
+            ..sort((a, b) =>
+                (a.freeSeats == 0 ? 1 : 0)
+                    .compareTo(b.freeSeats == 0 ? 1 : 0));
           if (trips.isEmpty) {
             return Center(
               child: Column(
@@ -249,13 +252,20 @@ class _TripCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isFull = trip.freeSeats == 0;
     return GestureDetector(
       onTap: () => _showDetails(context),
-      child: Container(
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: AppColors.background,
-          border: Border.all(color: AppColors.border, width: 2),
+          color: isFull ? const Color(0xFFF8FAFC) : AppColors.background,
+          border: Border.all(
+            color: isFull ? const Color(0xFFCBD5E1) : AppColors.border,
+            width: 2,
+          ),
           borderRadius: BorderRadius.circular(20),
           boxShadow: const [
             BoxShadow(
@@ -543,6 +553,30 @@ class _TripCard extends StatelessWidget {
             ],
           ],
         ),
+          ),
+          // Lock badge — only shown when trip is full
+          if (isFull)
+            Positioned(
+              top: -8,
+              right: -8,
+              child: Container(
+                width: 28,
+                height: 28,
+                decoration: const BoxDecoration(
+                  color: Color(0xFF64748B),
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                        color: Color(0x33000000),
+                        blurRadius: 4,
+                        offset: Offset(0, 2)),
+                  ],
+                ),
+                child: const Icon(Icons.lock_rounded,
+                    size: 14, color: Colors.white),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -954,51 +988,76 @@ class _TripDetailsSheetState extends State<_TripDetailsSheet> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                TextField(
-                  controller: _messageController,
-                  maxLines: 2,
-                  minLines: 1,
-                  textCapitalization: TextCapitalization.sentences,
-                  decoration: InputDecoration(
-                    hintText: 'Mensaje para el conductor (opcional)',
-                    hintStyle: const TextStyle(
-                        fontSize: 13, color: Color(0xFF94A3B8)),
-                    filled: true,
-                    fillColor: const Color(0xFFF1F5F9),
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 10),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide.none,
+                if (trip.freeSeats > 0) ...[
+                  TextField(
+                    controller: _messageController,
+                    maxLines: 2,
+                    minLines: 1,
+                    textCapitalization: TextCapitalization.sentences,
+                    decoration: InputDecoration(
+                      hintText: 'Mensaje para el conductor (opcional)',
+                      hintStyle: const TextStyle(
+                          fontSize: 13, color: Color(0xFF94A3B8)),
+                      filled: true,
+                      fillColor: const Color(0xFFF1F5F9),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 10),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 10),
+                  const SizedBox(height: 10),
+                ],
                 SizedBox(
-              width: double.infinity,
-              height: 54,
-              child: ElevatedButton(
-                onPressed: _sending ? null : _sendRequest,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF1A73E8),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(27)),
-                  elevation: 0,
+                  width: double.infinity,
+                  height: 54,
+                  child: trip.freeSeats == 0
+                      ? Container(
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF1F5F9),
+                            borderRadius: BorderRadius.circular(27),
+                          ),
+                          child: const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.lock_rounded,
+                                  size: 18, color: Color(0xFF94A3B8)),
+                              SizedBox(width: 8),
+                              Text(
+                                'Sin lugares disponibles',
+                                style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF94A3B8)),
+                              ),
+                            ],
+                          ),
+                        )
+                      : ElevatedButton(
+                          onPressed: _sending ? null : _sendRequest,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF1A73E8),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(27)),
+                            elevation: 0,
+                          ),
+                          child: _sending
+                              ? const SizedBox(
+                                  width: 22,
+                                  height: 22,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2.5,
+                                      color: Colors.white),
+                                )
+                              : const Text('Enviar solicitud',
+                                  style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white)),
+                        ),
                 ),
-                child: _sending
-                    ? const SizedBox(
-                        width: 22,
-                        height: 22,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2.5, color: Colors.white),
-                      )
-                    : const Text('Enviar solicitud',
-                        style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white)),
-              ),
-            ),
               ],
             ),
           ),

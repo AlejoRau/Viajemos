@@ -287,7 +287,7 @@ class ChatRepository {
         .from('messages')
         .select('id, conversation_id, sender_id, content, created_at')
         .eq('conversation_id', conversationId)
-        .order('created_at') as List;
+        .order('created_at', ascending: false) as List; // newest first
 
     final myId = _myId;
     return data

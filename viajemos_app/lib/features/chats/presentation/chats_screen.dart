@@ -118,14 +118,17 @@ class _ChatsScreenState extends State<ChatsScreen> {
                           const Divider(height: 1, color: AppColors.border),
                       itemBuilder: (context, i) => _ChatTile(
                         conv: filtered[i],
-                        onTap: () => context.push(
-                          '/chats/${filtered[i].id}',
-                          extra: {
-                            'contactName': filtered[i].contactName,
-                            'contactId': filtered[i].contactId,
-                            'tripId': filtered[i].tripId,
-                          },
-                        ),
+                        onTap: () async {
+                          await context.push(
+                            '/chats/${filtered[i].id}',
+                            extra: {
+                              'contactName': filtered[i].contactName,
+                              'contactId': filtered[i].contactId,
+                              'tripId': filtered[i].tripId,
+                            },
+                          );
+                          if (mounted) _load();
+                        },
                       ),
                     ),
             ),

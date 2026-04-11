@@ -85,7 +85,9 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
       final msgs = await _chatRepo.fetchMessages(widget.chatId);
       if (mounted) {
         setState(() {
-          _messages = msgs;
+          // Store newest-first so index 0 = newest.
+          // With reverse:true, index 0 is always at the bottom — no scroll needed.
+          _messages = msgs; // DB returns newest-first (descending default)
           _loading = false;
         });
         _chatRepo.markAsRead(widget.chatId);
@@ -120,7 +122,7 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
   void _subscribe() {
     _channel = _chatRepo.subscribeToMessages(widget.chatId, (msg) {
       if (mounted) {
-        setState(() => _messages.add(msg));
+        setState(() => _messages.insert(0, msg));
         _chatRepo.markAsRead(widget.chatId);
         ref.read(unreadCountProvider.notifier).refresh();
       }
@@ -143,7 +145,7 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
       createdAt: DateTime.now(),
       isMine: true,
     );
-    setState(() => _messages.add(optimistic));
+    setState(() => _messages.insert(0, optimistic));
 
     try {
       await _chatRepo.sendMessage(widget.chatId, text);
@@ -361,10 +363,12 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
                             horizontal: 16, vertical: 12),
                         itemCount: _messages.length + (_tripInfo != null ? 1 : 0),
                         itemBuilder: (context, i) {
-                          // With reverse:true, i=0 is the bottom (newest message).
-                          // Messages are stored oldest-first, so we read them backwards.
-                          // The TripInfoCard lives at the last index so it appears
-                          // pinned at the very top when the user scrolls up.
+                          // _messages is newest-first, so _messages[0] = newest.
+                          // reverse:true puts i=0 at the bottom of the screen.
+                          // Therefore: newest message always sits at the bottom,
+                          // no scroll controller logic needed.
+                          // TripInfoCard at the last index = visible at the very
+                          // top when the user scrolls up through history.
                           if (_tripInfo != null && i == _messages.length) {
                             final myId = Supabase.instance.client.auth.currentUser?.id ?? '';
                             return _TripInfoCard(
@@ -381,8 +385,7 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
                               ),
                             );
                           }
-                          final msgIndex = _messages.length - 1 - i;
-                          return _MessageBubble(message: _messages[msgIndex]);
+                          return _MessageBubble(message: _messages[i]);
                         },
                       ),
           ),
