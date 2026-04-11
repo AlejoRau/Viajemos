@@ -2,10 +2,12 @@ import 'dart:math';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/providers/role_provider.dart';
 import '../../../shared/widgets/public_profile_sheet.dart';
 import '../data/history_repository.dart';
+import '../../driver/presentation/create_trip_screen.dart';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -2600,41 +2602,56 @@ class _DriverHistoryBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final async = ref.watch(driverHistoryProvider);
+    final activeAsync = ref.watch(activeDriverTripsProvider);
+    final historyAsync = ref.watch(driverHistoryProvider);
 
-    return async.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => const Center(
-        child: Text('Error al cargar historial',
-            style: TextStyle(color: AppColors.textSecondary)),
-      ),
-      data: (trips) {
-        if (trips.isEmpty) {
-          return const _EmptyHistory(
-            icon: Icons.history_rounded,
-            message: 'Aún no tenés viajes completados.',
-          );
-        }
+    final isLoading = activeAsync.isLoading || historyAsync.isLoading;
+    if (isLoading) return const Center(child: CircularProgressIndicator());
 
-        final totalEarnings = trips.fold(0, (sum, t) => sum + t.earnings);
-        final ratedTrips =
-            trips.where((t) => t.avgTripRating != null).toList();
-        final avgRating = ratedTrips.isEmpty
-            ? 0.0
-            : ratedTrips.fold(0.0, (s, t) => s + t.avgTripRating!) /
-                ratedTrips.length;
+    final activeTrips = activeAsync.valueOrNull ?? [];
+    final completedTrips = historyAsync.valueOrNull ?? [];
 
-        return SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+    if (activeTrips.isEmpty && completedTrips.isEmpty) {
+      return RefreshIndicator(
+        onRefresh: () async {
+          ref.refresh(activeDriverTripsProvider);
+          ref.refresh(driverHistoryProvider);
+        },
+        child: const _EmptyHistory(
+          icon: Icons.history_rounded,
+          message: 'Aún no tenés viajes creados.',
+        ),
+      );
+    }
+
+    final totalEarnings =
+        completedTrips.fold(0, (sum, t) => sum + t.earnings);
+    final ratedTrips =
+        completedTrips.where((t) => t.avgTripRating != null).toList();
+    final avgRating = ratedTrips.isEmpty
+        ? 0.0
+        : ratedTrips.fold(0.0, (s, t) => s + t.avgTripRating!) /
+            ratedTrips.length;
+
+    return RefreshIndicator(
+      onRefresh: () async {
+        ref.refresh(activeDriverTripsProvider);
+        ref.refresh(driverHistoryProvider);
+      },
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── Stats (only when there are completed trips) ──────────────
+            if (completedTrips.isNotEmpty) ...[
               Row(children: [
                 Expanded(
                     child: _StatCard(
                         icon: Icons.directions_car_rounded,
-                        value: '${trips.length}',
-                        label: 'Viajes')),
+                        value: '${completedTrips.length}',
+                        label: 'Completados')),
                 const SizedBox(width: 10),
                 Expanded(
                     child: _StatCard(
@@ -2652,27 +2669,53 @@ class _DriverHistoryBody extends ConsumerWidget {
                         valueFontSize: 20)),
               ]),
               const SizedBox(height: 28),
-              const Text('Viajes realizados',
+            ],
+
+            // ── Upcoming / active trips ───────────────────────────────────
+            if (activeTrips.isNotEmpty) ...[
+              const Text('Próximos',
                   style: TextStyle(
                       fontSize: 17,
                       fontWeight: FontWeight.w600,
                       color: AppColors.textPrimary)),
               const SizedBox(height: 12),
-              ...trips.map((t) => _DriverTripCard(trip: t)),
+              ...activeTrips.map((t) => _ActiveTripHistoryCard(trip: t)),
+              const SizedBox(height: 24),
             ],
-          ),
-        );
-      },
+
+            // ── Completed trips ───────────────────────────────────────────
+            if (completedTrips.isNotEmpty) ...[
+              const Text('Realizados',
+                  style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimary)),
+              const SizedBox(height: 12),
+              ...completedTrips.map((t) => _DriverTripCard(trip: t)),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }
 
-class _DriverTripCard extends StatelessWidget {
-  const _DriverTripCard({required this.trip});
-  final DriverTripHistory trip;
+// Lightweight read-only card for an upcoming (active) trip shown in history tab
+class _ActiveTripHistoryCard extends StatelessWidget {
+  const _ActiveTripHistoryCard({required this.trip});
+  final ActiveDriverTrip trip;
 
   @override
   Widget build(BuildContext context) {
+    final dateStr =
+        '${trip.departureDate.day.toString().padLeft(2, '0')}/${trip.departureDate.month.toString().padLeft(2, '0')}/${trip.departureDate.year}';
+    final timeStr = trip.departureTime ?? '';
+    final statusColor =
+        trip.isFull ? const Color(0xFFDC2626) : AppColors.primary;
+    final statusLabel = trip.isFull ? 'Completo' : 'Activo';
+    final statusBg =
+        trip.isFull ? const Color(0xFFFEE2E2) : AppColors.primaryLight;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
@@ -2688,7 +2731,159 @@ class _DriverTripCard extends StatelessWidget {
       child: Column(children: [
         Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+              Row(children: [
+                Flexible(
+                  child: Text(trip.originAddress,
+                      style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textPrimary),
+                      overflow: TextOverflow.ellipsis),
+                ),
+                const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 6),
+                    child: Text('→',
+                        style: TextStyle(
+                            fontSize: 15,
+                            color: AppColors.primary,
+                            fontWeight: FontWeight.w600))),
+                Flexible(
+                    child: Text(trip.destinationAddress,
+                        style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textPrimary),
+                        overflow: TextOverflow.ellipsis)),
+              ]),
+              const SizedBox(height: 5),
+              Row(children: [
+                const Icon(Icons.calendar_today_rounded,
+                    size: 14, color: AppColors.textSecondary),
+                const SizedBox(width: 4),
+                Text(dateStr,
+                    style: const TextStyle(
+                        fontSize: 13, color: AppColors.textSecondary)),
+                if (timeStr.isNotEmpty) ...[
+                  const SizedBox(width: 10),
+                  const Icon(Icons.access_time_rounded,
+                      size: 14, color: AppColors.textSecondary),
+                  const SizedBox(width: 4),
+                  Text(timeStr,
+                      style: const TextStyle(
+                          fontSize: 13, color: AppColors.textSecondary)),
+                ],
+              ]),
+            ]),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+                color: statusBg,
+                borderRadius: BorderRadius.circular(8)),
+            child: Text(statusLabel,
+                style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: statusColor)),
+          ),
+        ]),
+        const SizedBox(height: 10),
+        const Divider(height: 1, color: AppColors.border),
+        const SizedBox(height: 10),
+        Row(children: [
+          const Icon(Icons.people_rounded,
+              size: 15, color: AppColors.textSecondary),
+          const SizedBox(width: 4),
+          Text(
+              '${trip.seatsTaken}/${trip.availableSeats} asientos ocupados',
+              style: const TextStyle(
+                  fontSize: 13, color: AppColors.textSecondary)),
+          const Spacer(),
+          Text('+\$${_formatNum(trip.pricePerSeat * trip.seatsTaken)}',
+              style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.primary)),
+        ]),
+      ]),
+    );
+  }
+}
+
+class _DriverTripCard extends StatefulWidget {
+  const _DriverTripCard({required this.trip});
+  final DriverTripHistory trip;
+
+  @override
+  State<_DriverTripCard> createState() => _DriverTripCardState();
+}
+
+class _DriverTripCardState extends State<_DriverTripCard> {
+  bool _repeating = false;
+
+  Future<void> _repeatTrip() async {
+    setState(() => _repeating = true);
+    try {
+      final raw =
+          await HistoryRepository().fetchTripForRepeat(widget.trip.id);
+      if (!mounted) return;
+      final prefill = raw == null
+          ? null
+          : CreateTripPrefill(
+              originAddress: raw['origin_address'] as String,
+              destinationAddress: raw['destination_address'] as String,
+              via: (raw['via'] as List?)?.cast<String>() ?? [],
+              stops: (raw['stops'] as List?)?.cast<String>() ?? [],
+              allowsPets: raw['allows_pets'] as bool? ?? false,
+              picksUpAtDoor: raw['picks_up_at_door'] as bool? ?? false,
+              dropsOffAtDoor: raw['drops_off_at_door'] as bool? ?? false,
+              departureTime: _trimTime(raw['departure_time']),
+              description: raw['description'] as String?,
+              vehicleId: raw['vehicle_id'] as String?,
+            );
+      if (!mounted) return;
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+            builder: (_) => CreateTripScreen(prefill: prefill)),
+      );
+    } finally {
+      if (mounted) setState(() => _repeating = false);
+    }
+  }
+
+  String? _trimTime(dynamic v) {
+    final s = v as String?;
+    if (s == null || s.length < 5) return null;
+    return s.substring(0, 5);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final trip = widget.trip;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.background,
+        border: Border.all(color: AppColors.border, width: 1.5),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: const [
+          BoxShadow(
+              color: Color(0x0A000000), blurRadius: 4, offset: Offset(0, 2)),
+        ],
+      ),
+      child: Column(children: [
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Expanded(
+            child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
               Row(children: [
                 Text(trip.originAddress,
                     style: const TextStyle(
@@ -2753,19 +2948,48 @@ class _DriverTripCard extends StatelessWidget {
               '${trip.passengers.length} pasajero${trip.passengers.length != 1 ? 's' : ''}',
               style: const TextStyle(
                   fontSize: 13, color: AppColors.textSecondary)),
-          const Spacer(),
-          GestureDetector(
-            onTap: () => showModalBottomSheet(
-              context: context,
-              isScrollControlled: true,
-              backgroundColor: Colors.transparent,
-              builder: (_) => _DriverTripDetailSheet(trip: trip),
+        ]),
+        const SizedBox(height: 10),
+        Row(children: [
+          Expanded(
+            child: OutlinedButton(
+              onPressed: () => showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                backgroundColor: Colors.transparent,
+                builder: (_) => _DriverTripDetailSheet(trip: trip),
+              ),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                side: const BorderSide(color: AppColors.primary),
+                minimumSize: const Size(0, 40),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
+              ),
+              child: const Text('Ver detalles',
+                  style: TextStyle(fontSize: 13)),
             ),
-            child: const Text('Ver detalles',
-                style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.primary)),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: ElevatedButton(
+              onPressed: _repeating ? null : _repeatTrip,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                minimumSize: const Size(0, 40),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
+              ),
+              child: _repeating
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
+                  : const Text('Repetir viaje',
+                      style: TextStyle(fontSize: 13)),
+            ),
           ),
         ]),
       ]),
@@ -2977,6 +3201,57 @@ class _PassengerCompletedTripCard extends ConsumerWidget {
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                     color: AppColors.primary)),
+          ),
+        ]),
+        const SizedBox(height: 10),
+        Row(children: [
+          if (!trip.hasRated) ...[
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: () => showModalBottomSheet(
+                  context: context,
+                  isScrollControlled: true,
+                  backgroundColor: Colors.transparent,
+                  builder: (_) => _PassengerCompletedTripDetailSheet(
+                      trip: trip,
+                      onRated: () =>
+                          ref.refresh(passengerCompletedTripsProvider)),
+                ),
+                icon: const Icon(Icons.star_rounded, size: 15),
+                label: const Text('Mi opinión',
+                    style: TextStyle(fontSize: 13)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFFEF9C3),
+                  foregroundColor: const Color(0xFF92400E),
+                  minimumSize: const Size(0, 40),
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+          ],
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: () => context.push(
+                '/passenger/search-results',
+                extra: {
+                  'origin': trip.originAddress,
+                  'destination': trip.destinationAddress,
+                },
+              ),
+              icon: const Icon(Icons.search_rounded, size: 15),
+              label: const Text('Buscar viaje',
+                  style: TextStyle(fontSize: 13)),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                side: const BorderSide(color: AppColors.primary),
+                minimumSize: const Size(0, 40),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
           ),
         ]),
       ]),

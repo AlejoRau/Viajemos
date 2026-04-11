@@ -59,8 +59,35 @@ const _routeSuggestions = [
   'Ruta Provincial 74 (Buenos Aires)',
 ];
 
+class CreateTripPrefill {
+  const CreateTripPrefill({
+    required this.originAddress,
+    required this.destinationAddress,
+    required this.via,
+    required this.stops,
+    required this.allowsPets,
+    required this.picksUpAtDoor,
+    required this.dropsOffAtDoor,
+    this.departureTime,
+    this.description,
+    this.vehicleId,
+  });
+
+  final String originAddress;
+  final String destinationAddress;
+  final List<String> via;
+  final List<String> stops;
+  final bool allowsPets;
+  final bool picksUpAtDoor;
+  final bool dropsOffAtDoor;
+  final String? departureTime;
+  final String? description;
+  final String? vehicleId;
+}
+
 class CreateTripScreen extends ConsumerStatefulWidget {
-  const CreateTripScreen({super.key});
+  const CreateTripScreen({super.key, this.prefill});
+  final CreateTripPrefill? prefill;
 
   @override
   ConsumerState<CreateTripScreen> createState() => _CreateTripScreenState();
@@ -90,6 +117,7 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
 
   Vehicle? _selectedVehicle;
   bool _publishing = false;
+  String? _prefillVehicleId;
 
   // Validation state — set true on first publish attempt to show inline errors
   bool _showErrors = false;
@@ -103,6 +131,20 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
     // Rebuild when origin/destination/time change so error hints update live
     _originController.addListener(_onFieldChanged);
     _destinationController.addListener(_onFieldChanged);
+
+    final p = widget.prefill;
+    if (p != null) {
+      _originController.text = p.originAddress;
+      _destinationController.text = p.destinationAddress;
+      if (p.departureTime != null) _timeFromController.text = p.departureTime!;
+      if (p.description != null) _descriptionController.text = p.description!;
+      _acceptsPets = p.allowsPets;
+      _picksUpPassengers = p.picksUpAtDoor;
+      _dropsOffPassengers = p.dropsOffAtDoor;
+      _routes.addAll(p.via);
+      _stops.addAll(p.stops);
+      _prefillVehicleId = p.vehicleId;
+    }
   }
 
   void _onFieldChanged() {
@@ -188,6 +230,46 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
     return h * 60 + m;
   }
 
+  void _applyRaw(Map<String, dynamic> raw) {
+    final timeRaw = raw['departure_time'] as String?;
+    final time =
+        timeRaw != null && timeRaw.length >= 5 ? timeRaw.substring(0, 5) : null;
+
+    setState(() {
+      _originController.text = raw['origin_address'] as String? ?? '';
+      _destinationController.text = raw['destination_address'] as String? ?? '';
+      if (time != null) _timeFromController.text = time;
+      _descriptionController.text = raw['description'] as String? ?? '';
+      _acceptsPets = raw['allows_pets'] as bool? ?? false;
+      _picksUpPassengers = raw['picks_up_at_door'] as bool? ?? false;
+      _dropsOffPassengers = raw['drops_off_at_door'] as bool? ?? false;
+      _routes
+        ..clear()
+        ..addAll((raw['via'] as List?)?.cast<String>() ?? []);
+      _stops
+        ..clear()
+        ..addAll((raw['stops'] as List?)?.cast<String>() ?? []);
+      _prefillVehicleId = raw['vehicle_id'] as String?;
+      // Clear any stale map results since the address changed
+      _originResult = null;
+      _destResult = null;
+    });
+  }
+
+  Future<void> _openHistoryPicker() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _TripHistoryPickerSheet(
+        onSelect: (raw) {
+          Navigator.pop(context);
+          _applyRaw(raw);
+        },
+      ),
+    );
+  }
+
   bool get _hasRequiredErrors {
     if (_originController.text.trim().isEmpty) return true;
     if (_destinationController.text.trim().isEmpty) return true;
@@ -201,6 +283,37 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
     // Trigger inline validation display
     if (_hasRequiredErrors) {
       setState(() => _showErrors = true);
+      return;
+    }
+
+    // Check active trip limit before proceeding to map
+    final activeCount = await TripRepository().countActiveTrips();
+    if (!mounted) return;
+    if (activeCount >= 3) {
+      showDialog<void>(
+        context: context,
+        builder: (_) => AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Row(children: [
+            Icon(Icons.block_rounded, color: Color(0xFFDC2626), size: 22),
+            SizedBox(width: 10),
+            Text('Límite de viajes activos',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+          ]),
+          content: const Text(
+            'Ya tenés 3 viajes activos publicados.\n\n'
+            'Cancelá o completá uno de tus viajes actuales antes de poder publicar uno nuevo.',
+            style: TextStyle(fontSize: 14, height: 1.5),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Entendido'),
+            ),
+          ],
+        ),
+      );
       return;
     }
 
@@ -324,6 +437,20 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
   Widget build(BuildContext context) {
     final vehiclesAsync = ref.watch(vehiclesProvider);
 
+    // Auto-select the prefill vehicle once the list loads
+    if (_prefillVehicleId != null && _selectedVehicle == null) {
+      vehiclesAsync.whenData((vehicles) {
+        try {
+          final match = vehicles.firstWhere((v) => v.id == _prefillVehicleId);
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) setState(() { _selectedVehicle = match; _prefillVehicleId = null; });
+          });
+        } catch (_) {
+          _prefillVehicleId = null;
+        }
+      });
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Crear viaje'),
@@ -331,6 +458,13 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.go('/driver'),
         ),
+        actions: [
+          IconButton(
+            tooltip: 'Usar viaje anterior',
+            icon: const Icon(Icons.history_rounded),
+            onPressed: _openHistoryPicker,
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
@@ -1338,6 +1472,244 @@ class _PreferenceToggle extends StatelessWidget {
     );
   }
 }
+
+// ── Trip History Picker Sheet ─────────────────────────────────────────────
+
+class _TripHistoryPickerSheet extends StatefulWidget {
+  const _TripHistoryPickerSheet({required this.onSelect});
+  final void Function(Map<String, dynamic> raw) onSelect;
+
+  @override
+  State<_TripHistoryPickerSheet> createState() =>
+      _TripHistoryPickerSheetState();
+}
+
+class _TripHistoryPickerSheetState extends State<_TripHistoryPickerSheet> {
+  List<Map<String, dynamic>>? _trips;
+  bool _loading = true;
+  String? _loadingId;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetch();
+  }
+
+  Future<void> _fetch() async {
+    try {
+      final trips = await TripRepository().fetchDriverTripSummaries();
+      if (mounted) setState(() { _trips = trips; _loading = false; });
+    } catch (_) {
+      if (mounted) setState(() { _trips = []; _loading = false; });
+    }
+  }
+
+  Future<void> _select(String tripId) async {
+    setState(() => _loadingId = tripId);
+    try {
+      final raw = await TripRepository().fetchTripForRepeat(tripId);
+      if (!mounted || raw == null) return;
+      widget.onSelect(raw);
+    } finally {
+      if (mounted) setState(() => _loadingId = null);
+    }
+  }
+
+  String _formatDate(String dateStr) {
+    try {
+      final d = DateTime.parse(dateStr);
+      return '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+    } catch (_) {
+      return dateStr;
+    }
+  }
+
+  String? _trimTime(dynamic v) {
+    final s = v as String?;
+    if (s == null || s.length < 5) return null;
+    return s.substring(0, 5);
+  }
+
+  bool _isActive(String? status) =>
+      status == 'active' || status == 'full';
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      initialChildSize: 0.6,
+      minChildSize: 0.4,
+      maxChildSize: 0.92,
+      builder: (_, controller) => Container(
+        decoration: const BoxDecoration(
+          color: AppColors.pageBackground,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(children: [
+          const SizedBox(height: 12),
+          Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+                color: AppColors.border,
+                borderRadius: BorderRadius.circular(2)),
+          ),
+          const SizedBox(height: 16),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Row(children: [
+              const Icon(Icons.history_rounded,
+                  size: 20, color: AppColors.primary),
+              const SizedBox(width: 8),
+              const Text('Mis viajes',
+                  style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimary)),
+              const Spacer(),
+              const Text('Tocá uno para copiar sus datos',
+                  style: TextStyle(
+                      fontSize: 12, color: AppColors.textSecondary)),
+            ]),
+          ),
+          const SizedBox(height: 16),
+          const Divider(height: 1, color: AppColors.border),
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : (_trips == null || _trips!.isEmpty)
+                    ? const Center(
+                        child: Text('No tenés viajes creados',
+                            style: TextStyle(
+                                fontSize: 14,
+                                color: AppColors.textSecondary)))
+                    : ListView.separated(
+                        controller: controller,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 12),
+                        itemCount: _trips!.length,
+                        separatorBuilder: (_, __) =>
+                            const SizedBox(height: 8),
+                        itemBuilder: (_, i) {
+                          final t = _trips![i];
+                          final id = t['id'] as String;
+                          final origin = t['origin_address'] as String;
+                          final destination = t['destination_address'] as String;
+                          final dateStr = t['departure_date'] as String;
+                          final time = _trimTime(t['departure_time']);
+                          final via = (t['via'] as List?)?.cast<String>() ?? [];
+                          final active = _isActive(t['status'] as String?);
+                          final isLoading = _loadingId == id;
+                          return InkWell(
+                            onTap: isLoading || _loadingId != null
+                                ? null
+                                : () => _select(id),
+                            borderRadius: BorderRadius.circular(14),
+                            child: Container(
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: AppColors.background,
+                                border: Border.all(
+                                    color: active
+                                        ? AppColors.primary.withOpacity(0.35)
+                                        : AppColors.border,
+                                    width: 1.5),
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              child: Row(children: [
+                                Expanded(
+                                  child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                    Row(children: [
+                                      Expanded(
+                                        child: Text(
+                                          '$origin  →  $destination',
+                                          style: const TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w600,
+                                              color: AppColors.textPrimary),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      if (active) ...[
+                                        const SizedBox(width: 8),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 7, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: AppColors.primaryLight,
+                                            borderRadius:
+                                                BorderRadius.circular(6),
+                                          ),
+                                          child: const Text('Activo',
+                                              style: TextStyle(
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: AppColors.primary)),
+                                        ),
+                                      ],
+                                    ]),
+                                    const SizedBox(height: 4),
+                                    Row(children: [
+                                      const Icon(
+                                          Icons.calendar_today_rounded,
+                                          size: 12,
+                                          color: AppColors.textSecondary),
+                                      const SizedBox(width: 4),
+                                      Text(_formatDate(dateStr),
+                                          style: const TextStyle(
+                                              fontSize: 12,
+                                              color: AppColors.textSecondary)),
+                                      if (time != null) ...[
+                                        const SizedBox(width: 10),
+                                        const Icon(
+                                            Icons.access_time_rounded,
+                                            size: 12,
+                                            color: AppColors.textSecondary),
+                                        const SizedBox(width: 4),
+                                        Text(time,
+                                            style: const TextStyle(
+                                                fontSize: 12,
+                                                color:
+                                                    AppColors.textSecondary)),
+                                      ],
+                                    ]),
+                                    if (via.isNotEmpty) ...[
+                                      const SizedBox(height: 3),
+                                      Text(
+                                          'Vía: ${via.join(', ')}',
+                                          style: const TextStyle(
+                                              fontSize: 12,
+                                              color: AppColors.textSecondary),
+                                          overflow: TextOverflow.ellipsis),
+                                    ],
+                                  ]),
+                                ),
+                                const SizedBox(width: 12),
+                                isLoading
+                                    ? const SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(
+                                            strokeWidth: 2))
+                                    : const Icon(
+                                        Icons.content_copy_rounded,
+                                        size: 18,
+                                        color: AppColors.primary),
+                              ]),
+                            ),
+                          );
+                        },
+                      ),
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 class _DescriptionField extends StatelessWidget {
   const _DescriptionField({required this.controller});

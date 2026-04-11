@@ -531,6 +531,15 @@ class HistoryRepository {
       'p_comment': comment,
     });
   }
+
+  Future<Map<String, dynamic>?> fetchTripForRepeat(String tripId) async {
+    return await _client
+        .from('trips')
+        .select(
+            'origin_address, destination_address, departure_time, allows_pets, picks_up_at_door, drops_off_at_door, via, stops, description, vehicle_id')
+        .eq('id', tripId)
+        .maybeSingle();
+  }
 }
 
 // ── Providers ──────────────────────────────────────────────────────────────

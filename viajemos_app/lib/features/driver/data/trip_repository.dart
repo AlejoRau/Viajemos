@@ -64,4 +64,35 @@ class TripRepository {
 
     return response['id'] as String;
   }
+
+  Future<List<Map<String, dynamic>>> fetchDriverTripSummaries() async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) return [];
+    final data = await _client
+        .from('trips')
+        .select('id, origin_address, destination_address, departure_date, departure_time, via, status')
+        .eq('owner_id', userId)
+        .order('departure_date', ascending: false) as List;
+    return data.cast<Map<String, dynamic>>();
+  }
+
+  Future<Map<String, dynamic>?> fetchTripForRepeat(String tripId) async {
+    return await _client
+        .from('trips')
+        .select(
+            'origin_address, destination_address, departure_time, allows_pets, picks_up_at_door, drops_off_at_door, via, stops, description, vehicle_id')
+        .eq('id', tripId)
+        .maybeSingle();
+  }
+
+  Future<int> countActiveTrips() async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) return 0;
+    final data = await _client
+        .from('trips')
+        .select('id')
+        .eq('owner_id', userId)
+        .inFilter('status', ['active', 'full']) as List;
+    return data.length;
+  }
 }
