@@ -54,18 +54,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
   late final TabController _tabController;
   final _instagramController = TextEditingController();
   final _facebookController = TextEditingController();
-  final _bioDriverController = TextEditingController();
-  final _bioPassengerController = TextEditingController();
   bool _controllersInitialized = false;
 
-  _SaveStatus _bioSaveStatus = _SaveStatus.idle;
   _SaveStatus _socialSaveStatus = _SaveStatus.idle;
-  Timer? _bioDebounce;
   Timer? _socialDebounce;
 
   // Last saved text — listeners compare against these to ignore pure cursor moves.
-  String _lastBioDriver = '';
-  String _lastBioPassenger = '';
   String _lastInstagram = '';
   String _lastFacebook = '';
 
@@ -84,87 +78,45 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
 
   @override
   void dispose() {
-    _bioDebounce?.cancel();
     _socialDebounce?.cancel();
-    _bioDriverController.removeListener(_onBioChanged);
-    _bioPassengerController.removeListener(_onBioChanged);
     _instagramController.removeListener(_onSocialChanged);
     _facebookController.removeListener(_onSocialChanged);
     _tabController.dispose();
     _instagramController.dispose();
     _facebookController.dispose();
-    _bioDriverController.dispose();
-    _bioPassengerController.dispose();
     super.dispose();
   }
 
   void _initControllers(UserProfile profile) {
     if (_controllersInitialized) return;
     _controllersInitialized = true;
-    _bioDriverController.text = profile.bioDriver ?? '';
-    _bioPassengerController.text = profile.bioPassenger ?? '';
     _instagramController.text = profile.instagram ?? '';
     _facebookController.text = profile.facebook ?? '';
-    // Mirror initial values so listeners can detect real edits vs cursor moves.
-    _lastBioDriver = _bioDriverController.text;
-    _lastBioPassenger = _bioPassengerController.text;
     _lastInstagram = _instagramController.text;
     _lastFacebook = _facebookController.text;
-    // Add listeners AFTER setting initial values.
-    _bioDriverController.addListener(_onBioChanged);
-    _bioPassengerController.addListener(_onBioChanged);
     _instagramController.addListener(_onSocialChanged);
     _facebookController.addListener(_onSocialChanged);
   }
 
-  void _onBioChanged() {
-    // Ignore cursor/selection changes — only act on actual text edits.
-    if (_bioDriverController.text == _lastBioDriver &&
-        _bioPassengerController.text == _lastBioPassenger) return;
-    _lastBioDriver = _bioDriverController.text;
-    _lastBioPassenger = _bioPassengerController.text;
-
-    _bioDebounce?.cancel();
-    if (_bioSaveStatus != _SaveStatus.saving) {
-      setState(() => _bioSaveStatus = _SaveStatus.saving);
-    }
-    _bioDebounce = Timer(const Duration(milliseconds: 800), _saveBio);
-  }
-
   void _onSocialChanged() {
-    // Ignore cursor/selection changes — only act on actual text edits.
     if (_instagramController.text == _lastInstagram &&
         _facebookController.text == _lastFacebook) return;
     _lastInstagram = _instagramController.text;
     _lastFacebook = _facebookController.text;
+
+    // Si ambos están vacíos no hay nada que guardar
+    if (_instagramController.text.trim().isEmpty &&
+        _facebookController.text.trim().isEmpty) {
+      _socialDebounce?.cancel();
+      setState(() => _socialSaveStatus = _SaveStatus.idle);
+      return;
+    }
 
     _socialDebounce?.cancel();
     if (_socialSaveStatus != _SaveStatus.saving) {
       setState(() => _socialSaveStatus = _SaveStatus.saving);
     }
     _socialDebounce = Timer(const Duration(milliseconds: 800), _saveSocial);
-  }
-
-  Future<void> _saveBio() async {
-    try {
-      await ref.read(profileRepositoryProvider).updateBio(
-            bioDriver: _bioDriverController.text.trim().isEmpty
-                ? null
-                : _bioDriverController.text.trim(),
-            bioPassenger: _bioPassengerController.text.trim().isEmpty
-                ? null
-                : _bioPassengerController.text.trim(),
-          );
-      if (!mounted) return;
-      // Refresh the provider so navigating back shows up-to-date data.
-      ref.invalidate(profileProvider);
-      setState(() => _bioSaveStatus = _SaveStatus.saved);
-      Future.delayed(const Duration(seconds: 2), () {
-        if (mounted) setState(() => _bioSaveStatus = _SaveStatus.idle);
-      });
-    } catch (e) {
-      if (mounted) setState(() => _bioSaveStatus = _SaveStatus.idle);
-    }
   }
 
   Future<void> _saveSocial() async {
@@ -244,16 +196,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
             _InfoPersonalTab(
               isDriver: isDriver,
               profile: profile,
+              phone: profile.phone,
               instagramController: _instagramController,
               facebookController: _facebookController,
-              bioController:
-                  isDriver ? _bioDriverController : _bioPassengerController,
               onEditPersonalData: () => _showEditPersonalData(profile),
-              bioSaveStatus: _bioSaveStatus,
               socialSaveStatus: _socialSaveStatus,
+              onGoToAccount: () => _tabController.animateTo(1),
             ),
             _CuentaTab(
               email: profile.email,
+              phone: profile.phone,
               onOpinionsTap: _showOpinions,
               onLogout: () async {
                 await Supabase.instance.client.auth.signOut();
@@ -279,22 +231,22 @@ class _InfoPersonalTab extends StatelessWidget {
   const _InfoPersonalTab({
     required this.isDriver,
     required this.profile,
+    required this.phone,
     required this.instagramController,
     required this.facebookController,
-    required this.bioController,
     required this.onEditPersonalData,
-    required this.bioSaveStatus,
     required this.socialSaveStatus,
+    required this.onGoToAccount,
   });
 
   final bool isDriver;
   final UserProfile profile;
+  final String? phone;
   final TextEditingController instagramController;
   final TextEditingController facebookController;
-  final TextEditingController bioController;
   final VoidCallback onEditPersonalData;
-  final _SaveStatus bioSaveStatus;
   final _SaveStatus socialSaveStatus;
+  final VoidCallback onGoToAccount;
 
   @override
   Widget build(BuildContext context) {
@@ -304,31 +256,70 @@ class _InfoPersonalTab extends StatelessWidget {
         children: [
 
           // ── Hero ──────────────────────────────────────────────────────
-          Stack(
-            clipBehavior: Clip.none,
-            children: [
-              // Banner degradado
-              Container(
-                height: 130,
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Color(0xFF1A73E8), Color(0xFF1248B3)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
+          Container(
+            color: Colors.white,
+            child: SizedBox(
+              width: double.infinity,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(top: 28, bottom: 8),
+                    child: GestureDetector(
+                      onTap: () => ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Foto de perfil — próximamente disponible')),
+                      ),
+                      child: Stack(
+                        children: [
+                          Container(
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(color: const Color(0xFFC7D2FE), width: 3),
+                              boxShadow: [
+                                BoxShadow(color: AppColors.primary.withValues(alpha: 0.12), blurRadius: 20, offset: const Offset(0, 6)),
+                              ],
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(3),
+                              child: CircleAvatar(
+                                radius: 48,
+                                backgroundColor: AppColors.primaryLight,
+                                child: Text(
+                                  profile.initials,
+                                  style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: AppColors.primary),
+                                ),
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            bottom: 4,
+                            right: 4,
+                            child: Container(
+                              width: 26,
+                              height: 26,
+                              decoration: BoxDecoration(
+                                color: AppColors.primary,
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.white, width: 2),
+                              ),
+                              child: const Icon(Icons.camera_alt_rounded, size: 13, color: Colors.white),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
-                child: Align(
-                  alignment: Alignment.topRight,
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
+                  Positioned(
+                    right: 20,
+                    top: 28,
                     child: GestureDetector(
                       onTap: onEditPersonalData,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
                         decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.15),
+                          color: AppColors.primary,
                           borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
+                          boxShadow: [BoxShadow(color: AppColors.primary.withValues(alpha: 0.30), blurRadius: 8, offset: const Offset(0, 3))],
                         ),
                         child: const Row(
                           mainAxisSize: MainAxisSize.min,
@@ -341,102 +332,66 @@ class _InfoPersonalTab extends StatelessWidget {
                       ),
                     ),
                   ),
-                ),
+                ],
               ),
-              // Avatar
-              Positioned(
-                bottom: -50,
-                left: 0,
-                right: 0,
-                child: Center(
-                  child: GestureDetector(
-                    onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Foto de perfil — próximamente disponible')),
-                    ),
-                    child: Stack(
-                      children: [
-                        Container(
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 4),
-                            boxShadow: [
-                              BoxShadow(color: Colors.black.withValues(alpha: 0.12), blurRadius: 16, offset: const Offset(0, 4)),
-                            ],
-                          ),
-                          child: CircleAvatar(
-                            radius: 48,
-                            backgroundColor: AppColors.primaryLight,
-                            child: Text(
-                              profile.initials,
-                              style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: AppColors.primary),
-                            ),
-                          ),
-                        ),
-                        Positioned(
-                          bottom: 2,
-                          right: 2,
-                          child: Container(
-                            width: 26,
-                            height: 26,
-                            decoration: BoxDecoration(
-                              color: AppColors.primary,
-                              shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white, width: 2),
-                            ),
-                            child: const Icon(Icons.camera_alt_rounded, size: 13, color: Colors.white),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
 
           // ── Nombre y rating ───────────────────────────────────────────
-          const SizedBox(height: 62),
-          Center(
+          Container(
+            color: Colors.white,
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
             child: Column(
               children: [
                 Text(
                   profile.fullName,
                   style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                  textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 8),
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.star_rounded, size: 18, color: Color(0xFFFACC15)),
+                    const Icon(Icons.star_rounded, size: 17, color: Color(0xFFFACC15)),
                     const SizedBox(width: 4),
                     Text(
                       profile.avgRating.toStringAsFixed(1),
-                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
                     ),
-                    const SizedBox(width: 6),
-                    Container(width: 3, height: 3, decoration: const BoxDecoration(color: AppColors.border, shape: BoxShape.circle)),
-                    const SizedBox(width: 6),
-                    Text(
-                      isDriver ? 'Conductor' : 'Pasajero',
-                      style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                    const SizedBox(width: 10),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEEF2FF),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: const Color(0xFFC7D2FE)),
+                      ),
+                      child: Text(
+                        isDriver ? 'Conductor' : 'Pasajero',
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.primary),
+                      ),
                     ),
                   ],
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 24),
+
+          const SizedBox(height: 16),
 
           // ── Stats ─────────────────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Container(
               decoration: BoxDecoration(
-                color: Colors.white,
+                gradient: const LinearGradient(
+                  colors: [Color(0xFFEEF2FF), Color(0xFFF5F7FF)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
                 borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 16, offset: const Offset(0, 4)),
-                ],
+                border: Border.all(color: const Color(0xFFC7D2FE)),
               ),
               child: Row(
                 children: [
@@ -455,18 +410,44 @@ class _InfoPersonalTab extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: 28),
+          const SizedBox(height: 20),
 
-          // ── Sobre mí ──────────────────────────────────────────────────
+          // ── Aviso verificación ────────────────────────────────────────
+          if (phone == null || phone!.isEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+              child: GestureDetector(
+                onTap: onGoToAccount,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEF2F2),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: const Color(0xFFFCA5A5)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.shield_outlined, color: Color(0xFFEF4444), size: 20),
+                      const SizedBox(width: 10),
+                      const Expanded(
+                        child: Text(
+                          'Tu perfil no está verificado. Andá a Cuenta para verificar tu teléfono.',
+                          style: TextStyle(fontSize: 13, color: Color(0xFFB91C1C)),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      const Icon(Icons.chevron_right_rounded, color: Color(0xFFEF4444), size: 18),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _ProfileSectionLabel(label: 'Sobre mí', trailing: _AutoSaveIndicator(bioSaveStatus)),
-                const SizedBox(height: 10),
-                _BioField(controller: bioController),
-                const SizedBox(height: 24),
 
                 // ── Redes sociales ─────────────────────────────────────
                 _ProfileSectionLabel(label: 'Redes sociales', trailing: _AutoSaveIndicator(socialSaveStatus)),
@@ -475,16 +456,14 @@ class _InfoPersonalTab extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 3)),
-                    ],
+                    boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 8, offset: const Offset(0, 2))],
                   ),
                   child: Column(
                     children: [
                       _SocialRow(controller: instagramController, hint: 'tu_usuario', icon: _InstagramIcon(), label: 'Instagram'),
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Divider(height: 1, thickness: 1, color: AppColors.border.withValues(alpha: 0.6)),
+                        child: Divider(height: 1, thickness: 1, color: const Color(0xFFEEF2FF)),
                       ),
                       _SocialRow(controller: facebookController, hint: 'tu_usuario', icon: _FacebookIcon(), label: 'Facebook'),
                     ],
@@ -507,23 +486,25 @@ class _InfoPersonalTab extends StatelessWidget {
 // ── Widgets del hero ──────────────────────────────────────────────────────────
 
 class _StatItem extends StatelessWidget {
-  const _StatItem({required this.value, required this.label, required this.icon, this.iconColor});
+  const _StatItem({required this.value, required this.label, required this.icon, this.iconColor, this.textColor});
   final String value;
   final String label;
   final IconData icon;
   final Color? iconColor;
+  final Color? textColor;
 
   @override
   Widget build(BuildContext context) {
+    final color = textColor ?? AppColors.textPrimary;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 8),
+      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
       child: Column(
         children: [
           Icon(icon, size: 20, color: iconColor ?? AppColors.primary),
           const SizedBox(height: 6),
-          Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+          Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: color)),
           const SizedBox(height: 2),
-          Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+          Text(label, textAlign: TextAlign.center, style: TextStyle(fontSize: 11, color: textColor != null ? color.withValues(alpha: 0.7) : AppColors.textSecondary)),
         ],
       ),
     );
@@ -693,8 +674,9 @@ class _ProfileSectionLabel extends StatelessWidget {
 // ── Tab 2: Cuenta ─────────────────────────────────────────────────────────────
 
 class _CuentaTab extends StatefulWidget {
-  const _CuentaTab({required this.email, required this.onOpinionsTap, required this.onLogout});
+  const _CuentaTab({required this.email, required this.phone, required this.onOpinionsTap, required this.onLogout});
   final String email;
+  final String? phone;
   final VoidCallback onOpinionsTap;
   final VoidCallback onLogout;
 
@@ -722,6 +704,15 @@ class _CuentaTabState extends State<_CuentaTab> {
     );
   }
 
+  void _showPhoneVerification() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _PhoneVerificationSheet(currentPhone: widget.phone),
+    ).then((_) => setState(() {}));
+  }
+
   void _showHelp() {
     showModalBottomSheet(
       context: context,
@@ -747,9 +738,64 @@ class _CuentaTabState extends State<_CuentaTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ── Verificación ──────────────────────────────────────────────
+          if (widget.phone == null || widget.phone!.isEmpty) ...[
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEF2F2),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: const Color(0xFFFCA5A5)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.warning_rounded, color: Color(0xFFEF4444), size: 20),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Text(
+                      'Verificá tu teléfono para poder usar todas las funciones de la app.',
+                      style: TextStyle(fontSize: 13, color: Color(0xFFB91C1C)),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: _showPhoneVerification,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEF4444),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Text('Verificar', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+          ],
+
           // ── Datos de cuenta ───────────────────────────────────────────
           const _SectionHeading('Datos de cuenta'),
           const SizedBox(height: 12),
+          _AccountRow(
+            icon: Icons.phone_rounded,
+            label: 'Teléfono',
+            value: widget.phone != null && widget.phone!.isNotEmpty
+                ? widget.phone!
+                : 'Sin verificar',
+            valueColor: widget.phone == null || widget.phone!.isEmpty
+                ? const Color(0xFFEF4444)
+                : null,
+            trailingIcon: widget.phone != null && widget.phone!.isNotEmpty
+                ? Icons.check_circle_rounded
+                : Icons.error_rounded,
+            trailingIconColor: widget.phone != null && widget.phone!.isNotEmpty
+                ? const Color(0xFF16A34A)
+                : const Color(0xFFEF4444),
+            onTap: _showPhoneVerification,
+          ),
+          const SizedBox(height: 8),
           _AccountRow(
             icon: Icons.mail_rounded,
             label: 'Email',
@@ -1247,9 +1293,6 @@ class _EditPersonalDataSheetState
           : '');
   late final _emailController =
       TextEditingController(text: widget.profile.email);
-  late final _phoneController =
-      TextEditingController(text: widget.profile.phone ?? '');
-  final _bioController = TextEditingController();
   late String _birthDate = _formatDate(widget.profile.birthDate);
   DateTime? _selectedBirthDate = null;
 
@@ -1263,8 +1306,6 @@ class _EditPersonalDataSheetState
     _firstNameController.dispose();
     _lastNameController.dispose();
     _emailController.dispose();
-    _phoneController.dispose();
-    _bioController.dispose();
     super.dispose();
   }
 
@@ -1385,18 +1426,6 @@ class _EditPersonalDataSheetState
                       label: 'Email',
                       controller: _emailController,
                       keyboardType: TextInputType.emailAddress),
-                  const SizedBox(height: 14),
-                  _EditField(
-                      label: 'Teléfono',
-                      controller: _phoneController,
-                      keyboardType: TextInputType.phone),
-                  const SizedBox(height: 14),
-                  _EditField(
-                    label: 'Biografía',
-                    controller: _bioController,
-                    maxLines: 4,
-                    maxLength: 300,
-                  ),
                   const SizedBox(height: 24),
                   SizedBox(
                     width: double.infinity,
@@ -1410,7 +1439,6 @@ class _EditPersonalDataSheetState
                               _firstNameController.text.trim(),
                           lastName:
                               _lastNameController.text.trim(),
-                          phone: _phoneController.text.trim(),
                           birthDate: _selectedBirthDate ??
                               widget.profile.birthDate,
                         );
@@ -1619,11 +1647,17 @@ class _AccountRow extends StatelessWidget {
     required this.label,
     required this.value,
     required this.onTap,
+    this.valueColor,
+    this.trailingIcon,
+    this.trailingIconColor,
   });
   final IconData icon;
   final String label;
   final String value;
   final VoidCallback onTap;
+  final Color? valueColor;
+  final IconData? trailingIcon;
+  final Color? trailingIconColor;
 
   @override
   Widget build(BuildContext context) {
@@ -1659,15 +1693,18 @@ class _AccountRow extends StatelessWidget {
                   if (value.isNotEmpty) ...[
                     const SizedBox(height: 2),
                     Text(value,
-                        style: const TextStyle(
+                        style: TextStyle(
                             fontSize: 14,
-                            color: AppColors.textPrimary)),
+                            color: valueColor ?? AppColors.textPrimary)),
                   ],
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right_rounded,
-                color: AppColors.border, size: 22),
+            if (trailingIcon != null)
+              Icon(trailingIcon, color: trailingIconColor, size: 20)
+            else
+              const Icon(Icons.chevron_right_rounded,
+                  color: AppColors.border, size: 22),
           ],
         ),
       ),
@@ -1716,30 +1753,26 @@ class _SocialRowState extends State<_SocialRow> {
                   style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textSecondary, letterSpacing: 0.3),
                 ),
                 const SizedBox(height: 2),
-                Row(
-                  children: [
-                    if (!hasText) ...[
-                      Text('@', style: TextStyle(fontSize: 14, color: AppColors.textSecondary.withValues(alpha: 0.5), fontWeight: FontWeight.w500)),
-                      const SizedBox(width: 2),
-                    ],
-                    Expanded(
-                      child: TextField(
-                        controller: widget.controller,
-                        cursorColor: AppColors.primary,
-                        style: const TextStyle(fontSize: 14, color: AppColors.textPrimary, fontWeight: FontWeight.w500),
-                        decoration: InputDecoration(
-                          hintText: '@${widget.hint}',
-                          hintStyle: TextStyle(color: AppColors.textSecondary.withValues(alpha: 0.4), fontSize: 14),
-                          border: InputBorder.none,
-                          focusedBorder: InputBorder.none,
-                          enabledBorder: InputBorder.none,
-                          isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(vertical: 2),
-                          filled: false,
-                        ),
-                      ),
+                TextField(
+                  controller: widget.controller,
+                  cursorColor: AppColors.primary,
+                  style: const TextStyle(fontSize: 14, color: AppColors.textPrimary, fontWeight: FontWeight.w500),
+                  decoration: InputDecoration(
+                    prefixText: '@',
+                    prefixStyle: TextStyle(
+                      fontSize: 14,
+                      color: hasText ? AppColors.textPrimary : AppColors.textSecondary.withValues(alpha: 0.4),
+                      fontWeight: FontWeight.w500,
                     ),
-                  ],
+                    hintText: widget.hint,
+                    hintStyle: TextStyle(color: AppColors.textSecondary.withValues(alpha: 0.4), fontSize: 14),
+                    border: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 2),
+                    filled: false,
+                  ),
                 ),
               ],
             ),
@@ -2062,3 +2095,113 @@ class _VehicleRow extends ConsumerWidget {
 }
 
 // (Vehicle selector sheet moved to lib/shared/widgets/vehicle_selector_sheet.dart)
+
+// ── Sheet: Verificación de teléfono ───────────────────────────────────────────
+
+class _PhoneVerificationSheet extends ConsumerStatefulWidget {
+  const _PhoneVerificationSheet({this.currentPhone});
+  final String? currentPhone;
+
+  @override
+  ConsumerState<_PhoneVerificationSheet> createState() =>
+      _PhoneVerificationSheetState();
+}
+
+class _PhoneVerificationSheetState
+    extends ConsumerState<_PhoneVerificationSheet> {
+  late final _phoneController =
+      TextEditingController(text: widget.currentPhone ?? '');
+  bool _loading = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _phoneController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final phone = _phoneController.text.trim();
+    if (phone.isEmpty) {
+      setState(() => _error = 'Ingresá un número de teléfono');
+      return;
+    }
+    if (phone.length < 8) {
+      setState(() => _error = 'El número parece muy corto');
+      return;
+    }
+    setState(() { _loading = true; _error = null; });
+    try {
+      await ref.read(profileRepositoryProvider).updatePhone(phone);
+      ref.invalidate(profileProvider);
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      if (mounted) setState(() { _loading = false; _error = 'Error al guardar el teléfono'; });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40, height: 4,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE2E8F0),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'Verificar teléfono',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'Ingresá tu número para que los pasajeros y conductores puedan contactarte.',
+              style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+            ),
+            const SizedBox(height: 20),
+            _EditField(
+              label: 'Número de teléfono',
+              controller: _phoneController,
+              keyboardType: TextInputType.phone,
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 8),
+              Text(_error!, style: const TextStyle(color: Color(0xFFEF4444), fontSize: 13)),
+            ],
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: ElevatedButton(
+                onPressed: _loading ? null : _save,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  elevation: 0,
+                ),
+                child: _loading
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Text('Guardar teléfono', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

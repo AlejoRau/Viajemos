@@ -60,15 +60,21 @@ class ProfileRepository {
   Future<void> updatePersonalData({
     required String firstName,
     required String lastName,
-    required String? phone,
     required DateTime? birthDate,
   }) async {
     final user = _client.auth.currentUser;
     if (user == null) return;
     await _client.from('profiles').update({
       'full_name': '$firstName $lastName'.trim(),
-      'phone': phone?.isEmpty ?? true ? null : phone,
       'birth_date': birthDate?.toIso8601String().substring(0, 10),
+    }).eq('id', user.id);
+  }
+
+  Future<void> updatePhone(String phone) async {
+    final user = _client.auth.currentUser;
+    if (user == null) return;
+    await _client.from('profiles').update({
+      'phone': phone.trim().isEmpty ? null : phone.trim(),
     }).eq('id', user.id);
   }
 
