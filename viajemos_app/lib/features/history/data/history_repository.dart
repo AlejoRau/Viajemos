@@ -19,6 +19,8 @@ class DriverTripHistory {
     required this.seatsTaken,
     required this.via,
     required this.passengers,
+    this.originExactAddress,
+    this.destinationExactAddress,
     this.departureTime,
     this.avgTripRating,
   });
@@ -27,6 +29,8 @@ class DriverTripHistory {
   final DateTime departureDate;
   final String originAddress;
   final String destinationAddress;
+  final String? originExactAddress;
+  final String? destinationExactAddress;
   final int pricePerSeat;
   final int seatsTaken;
   final List<String> via;
@@ -47,6 +51,8 @@ class PassengerTripHistory {
     required this.driverName,
     required this.driverRating,
     required this.status,
+    this.originExactAddress,
+    this.destinationExactAddress,
     this.departureTime,
   });
 
@@ -54,6 +60,8 @@ class PassengerTripHistory {
   final DateTime departureDate;
   final String originAddress;
   final String destinationAddress;
+  final String? originExactAddress;
+  final String? destinationExactAddress;
   final int pricePerSeat;
   final String driverName;
   final double driverRating;
@@ -214,6 +222,8 @@ class ActiveDriverTrip {
     required this.allowsPets,
     required this.picksUpAtDoor,
     required this.dropsOffAtDoor,
+    this.originExactAddress,
+    this.destinationExactAddress,
     this.departureTime,
     this.description,
     this.vehicleBrand,
@@ -225,6 +235,8 @@ class ActiveDriverTrip {
   final DateTime departureDate;
   final String originAddress;
   final String destinationAddress;
+  final String? originExactAddress;
+  final String? destinationExactAddress;
   final int availableSeats;
   final int seatsTaken;
   final int pricePerSeat;
@@ -287,15 +299,39 @@ class HistoryRepository {
     await _client.rpc('update_own_past_trip_statuses');
   }
 
+  Future<Map<String, Map<String, String?>>> _fetchExactAddresses(List<String> ids) async {
+    if (ids.isEmpty) return {};
+    try {
+      final rows = await _client
+          .from('trips')
+          .select('id, pickup_address, dropoff_address')
+          .inFilter('id', ids) as List;
+      return {
+        for (final r in rows)
+          r['id'] as String: {
+            'pickup_address': r['pickup_address'] as String?,
+            'dropoff_address': r['dropoff_address'] as String?,
+          }
+      };
+    } catch (_) {
+      return {};
+    }
+  }
+
   Future<List<ActiveDriverTrip>> fetchActiveDriverTrips() async {
     final data = await _client.rpc('get_driver_active_trips') as List;
+    final ids = data.map((r) => r['id'] as String).toList();
+    final exactAddrs = await _fetchExactAddresses(ids);
     return data.map((row) {
+      final id = row['id'] as String;
       final timeRaw = row['departure_time'] as String?;
       return ActiveDriverTrip(
-        id: row['id'] as String,
+        id: id,
         departureDate: DateTime.parse(row['departure_date'] as String),
         originAddress: row['origin_address'] as String,
         destinationAddress: row['destination_address'] as String,
+        originExactAddress: exactAddrs[id]?['pickup_address'],
+        destinationExactAddress: exactAddrs[id]?['dropoff_address'],
         availableSeats: (row['available_seats'] as int?) ?? 0,
         seatsTaken: (row['seats_taken'] as int?) ?? 0,
         pricePerSeat: (row['price_per_seat'] as num).toInt(),
@@ -375,7 +411,10 @@ class HistoryRepository {
 
   Future<List<DriverTripHistory>> fetchDriverHistory() async {
     final data = await _client.rpc('get_driver_history') as List;
+    final ids = data.map((r) => r['id'] as String).toList();
+    final exactAddrs = await _fetchExactAddresses(ids);
     return data.map((row) {
+      final id = row['id'] as String;
       final passengers = (row['passengers'] as List? ?? [])
           .map((p) => PassengerInTrip(
                 name: p['name'] as String? ?? 'Pasajero',
@@ -384,10 +423,12 @@ class HistoryRepository {
           .toList();
       final timeRaw = row['departure_time'] as String?;
       return DriverTripHistory(
-        id: row['id'] as String,
+        id: id,
         departureDate: DateTime.parse(row['departure_date'] as String),
         originAddress: row['origin_address'] as String,
         destinationAddress: row['destination_address'] as String,
+        originExactAddress: exactAddrs[id]?['pickup_address'],
+        destinationExactAddress: exactAddrs[id]?['dropoff_address'],
         pricePerSeat: (row['price_per_seat'] as num).toInt(),
         seatsTaken: (row['seats_taken'] as int?) ?? 0,
         via: (row['via'] as List?)?.cast<String>() ?? [],
@@ -402,13 +443,21 @@ class HistoryRepository {
 
   Future<List<PassengerTripHistory>> fetchPassengerHistory() async {
     final data = await _client.rpc('get_passenger_history') as List;
+    final tripIds = data
+        .map((r) => r['trip_id'] as String?)
+        .whereType<String>()
+        .toList();
+    final exactAddrs = await _fetchExactAddresses(tripIds);
     return data.map((row) {
+      final tripId = row['trip_id'] as String?;
       final timeRaw = row['departure_time'] as String?;
       return PassengerTripHistory(
         id: row['request_id'] as String,
         departureDate: DateTime.parse(row['departure_date'] as String),
         originAddress: row['origin_address'] as String,
         destinationAddress: row['destination_address'] as String,
+        originExactAddress: tripId == null ? null : (exactAddrs[tripId] ?? {})['pickup_address'],
+        destinationExactAddress: tripId == null ? null : (exactAddrs[tripId] ?? {})['dropoff_address'],
         pricePerSeat: (row['price_per_seat'] as num).toInt(),
         driverName: row['driver_name'] as String? ?? 'Conductor',
         driverRating: (row['driver_rating'] as num?)?.toDouble() ?? 0.0,

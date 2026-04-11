@@ -32,6 +32,12 @@ class TripRepository {
       'owner_id': user.id,
       'origin_address': originAddress,
       'destination_address': destinationAddress,
+      if (pickupAddress != null && pickupAddress.isNotEmpty &&
+          pickupAddress != originAddress)
+        'pickup_address': pickupAddress,
+      if (dropoffAddress != null && dropoffAddress.isNotEmpty &&
+          dropoffAddress != destinationAddress)
+        'dropoff_address': dropoffAddress,
       'available_seats': availableSeats,
       'price_per_seat': pricePerSeat,
       'departure_date': departureDate.toIso8601String().substring(0, 10),
@@ -41,12 +47,7 @@ class TripRepository {
       'via': via,
       'stops': stops,
       'split_costs': splitCosts,
-      if (pickupAddress != null && pickupAddress.isNotEmpty)
-        'pickup_address': pickupAddress,
-      if (dropoffAddress != null && dropoffAddress.isNotEmpty)
-        'dropoff_address': dropoffAddress,
-      if (description != null && description.isNotEmpty)
-        'description': description,
+      if (description != null && description.isNotEmpty) 'description': description,
       if (vehicleId != null) 'vehicle_id': vehicleId,
       if (originLat != null && originLng != null)
         'origin_location': 'POINT($originLng $originLat)',

@@ -376,35 +376,25 @@ class _ActiveTripCardState extends ConsumerState<_ActiveTripCard> {
 
                   // Route
                   Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       Flexible(
-                        child: Text(
-                          trip.originAddress,
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.textPrimary,
-                          ),
-                          overflow: TextOverflow.ellipsis,
+                        child: _RoutePlace(
+                          city: trip.originAddress,
+                          address: trip.originExactAddress,
+                          dotColor: AppColors.primary,
                         ),
                       ),
                       const Padding(
                         padding: EdgeInsets.symmetric(horizontal: 6),
-                        child: Text('→',
-                            style: TextStyle(
-                                fontSize: 15,
-                                color: AppColors.primary,
-                                fontWeight: FontWeight.w700)),
+                        child: Icon(Icons.arrow_forward_rounded,
+                            size: 16, color: AppColors.primary),
                       ),
                       Flexible(
-                        child: Text(
-                          trip.destinationAddress,
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.textPrimary,
-                          ),
-                          overflow: TextOverflow.ellipsis,
+                        child: _RoutePlace(
+                          city: trip.destinationAddress,
+                          address: trip.destinationExactAddress,
+                          dotColor: const Color(0xFF16A34A),
                         ),
                       ),
                     ],
@@ -661,25 +651,26 @@ class _DriverTripDetailsSheetState
 
                   // Route cities
                   Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       Flexible(
-                        child: Text(trip.originAddress,
-                            style: const TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w500,
-                                color: Color(0xFF64748B))),
+                        child: _RoutePlace(
+                          city: trip.originAddress,
+                          address: trip.originExactAddress,
+                          dotColor: AppColors.primary,
+                        ),
                       ),
                       const Padding(
                         padding: EdgeInsets.symmetric(horizontal: 6),
-                        child: Icon(Icons.arrow_forward,
-                            size: 15, color: AppColors.primary),
+                        child: Icon(Icons.arrow_forward_rounded,
+                            size: 16, color: AppColors.primary),
                       ),
                       Flexible(
-                        child: Text(trip.destinationAddress,
-                            style: const TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w500,
-                                color: Color(0xFF64748B))),
+                        child: _RoutePlace(
+                          city: trip.destinationAddress,
+                          address: trip.destinationExactAddress,
+                          dotColor: const Color(0xFF16A34A),
+                        ),
                       ),
                     ],
                   ),
@@ -4032,6 +4023,46 @@ class _StatCard extends StatelessWidget {
             style: const TextStyle(
                 fontSize: 11, color: AppColors.textSecondary)),
       ]),
+    );
+  }
+}
+
+class _RoutePlace extends StatelessWidget {
+  const _RoutePlace({
+    required this.city,
+    required this.dotColor,
+    this.address,
+  });
+
+  final String city;
+  final String? address;
+  final Color dotColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          city,
+          style: const TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+            color: AppColors.textPrimary,
+          ),
+          overflow: TextOverflow.ellipsis,
+        ),
+        if (address != null && address!.isNotEmpty && address != city)
+          Text(
+            address!,
+            style: const TextStyle(
+              fontSize: 11,
+              color: AppColors.textSecondary,
+            ),
+            overflow: TextOverflow.ellipsis,
+          ),
+      ],
     );
   }
 }

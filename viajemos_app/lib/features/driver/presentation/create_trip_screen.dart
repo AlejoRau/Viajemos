@@ -12,6 +12,7 @@ import '../../../shared/services/city_search_service.dart';
 import '../../../shared/widgets/city_autocomplete_field.dart';
 import '../data/trip_repository.dart';
 import 'trip_map_screen.dart';
+import '../../../shared/providers/trip_success_provider.dart';
 
 const _routeSuggestions = [
   // Nacionales principales
@@ -388,11 +389,11 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
     setState(() => _publishing = true);
     try {
       final repo = TripRepository();
-      await repo.createTrip(
-        // City names always used as the trip title (origin/destination)
-        originAddress: _originController.text.trim(),
-        destinationAddress: _destinationController.text.trim(),
-        // Specific street-level addresses from map pin (only when driver set them)
+      final originCity = _originController.text.trim();
+      final destCity = _destinationController.text.trim();
+      final tripId = await repo.createTrip(
+        originAddress: originCity,
+        destinationAddress: destCity,
         pickupAddress: _picksUpPassengers ? null : _originResult?.address,
         dropoffAddress: _dropsOffPassengers ? null : _destResult?.address,
         originLat: _originResult?.lat,
@@ -413,11 +414,29 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
         vehicleId: _selectedVehicle?.id,
       );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('¡Viaje publicado con éxito!'),
-            backgroundColor: Color(0xFF16A34A),
-          ),
+        final originAddr = _picksUpPassengers
+            ? originCity
+            : (_originResult?.address ?? originCity);
+        final destAddr = _dropsOffPassengers
+            ? destCity
+            : (_destResult?.address ?? destCity);
+        ref.read(tripSuccessProvider.notifier).state = (
+          originCity: originCity,
+          originAddress: originAddr,
+          destinationCity: destCity,
+          destinationAddress: destAddr,
+          tripId: tripId,
+          departureDate: _departureDate!,
+          departureTime: _timeFromController.text.trim(),
+          seats: _seats,
+          price: _price,
+          vehicle: _selectedVehicle?.displayName,
+          vehicleColor: _selectedVehicle?.colorHex,
+          acceptsPets: _acceptsPets,
+          picksUpAtDoor: _picksUpPassengers,
+          dropsOffAtDoor: _dropsOffPassengers,
+          routes: List<String>.from(_routes),
+          stops: List<String>.from(_stops),
         );
         context.go('/driver');
       }
