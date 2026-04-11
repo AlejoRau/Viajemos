@@ -87,9 +87,11 @@ class ProfileRepository {
   Future<UserProfile> fetchPublicProfile(String userId) async {
     final data = await _client
         .from('profiles')
-        .select('full_name, avg_rating, trips_driven, trips_taken, cancelled_trips_count, expelled_passengers_count, bio_driver, bio_passenger, instagram, facebook, created_at')
+        .select('full_name, avg_rating, trips_driven, trips_taken, cancelled_trips_count, expelled_passengers_count, bio_driver, bio_passenger, instagram, facebook, created_at, birth_date')
         .eq('id', userId)
         .single();
+
+    final birthDateStr = data['birth_date'] as String?;
 
     return UserProfile(
       id: userId,
@@ -103,6 +105,7 @@ class ProfileRepository {
       cancelledTripsCount: (data['cancelled_trips_count'] as int?) ?? 0,
       expelledPassengersCount: (data['expelled_passengers_count'] as int?) ?? 0,
       memberSince: DateTime.tryParse(data['created_at'] as String? ?? '') ?? DateTime.now(),
+      birthDate: birthDateStr != null ? DateTime.tryParse(birthDateStr) : null,
       bioDriver: data['bio_driver'] as String?,
       bioPassenger: data['bio_passenger'] as String?,
       instagram: data['instagram'] as String?,
