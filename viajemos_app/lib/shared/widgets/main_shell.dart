@@ -142,7 +142,7 @@ class _NavItem extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 4, vertical: 1),
                       decoration: BoxDecoration(
-                        color: Colors.red,
+                        color: const Color(0xFF16A34A),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       constraints: const BoxConstraints(minWidth: 16),

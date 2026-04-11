@@ -314,47 +314,72 @@ class _TripCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    if (trip.splitCosts)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 5),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFEFF6FF),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                              color: const Color(0xFFBFDBFE), width: 1),
+                if (isFull)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEE2E2),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                          color: const Color(0xFFFCA5A5), width: 1),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.lock_rounded,
+                            size: 13, color: Color(0xFFDC2626)),
+                        SizedBox(width: 4),
+                        Text('Lleno',
+                            style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFFDC2626))),
+                      ],
+                    ),
+                  )
+                else
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      if (trip.splitCosts)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEFF6FF),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                                color: const Color(0xFFBFDBFE), width: 1),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.people_alt_outlined,
+                                  size: 13, color: Color(0xFF1D4ED8)),
+                              SizedBox(width: 4),
+                              Text(
+                                'Gastos\ndivididos',
+                                style: TextStyle(
+                                    fontSize: 10,
+                                    color: Color(0xFF1D4ED8),
+                                    fontWeight: FontWeight.w600,
+                                    height: 1.2),
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
+                          ),
+                        )
+                      else
+                        Text(
+                          _formatPrice(trip.pricePerSeat),
+                          style: const TextStyle(
+                              fontSize: 19,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.primary),
                         ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.people_alt_outlined,
-                                size: 13, color: Color(0xFF1D4ED8)),
-                            SizedBox(width: 4),
-                            Text(
-                              'Gastos\ndivididos',
-                              style: TextStyle(
-                                  fontSize: 10,
-                                  color: Color(0xFF1D4ED8),
-                                  fontWeight: FontWeight.w600,
-                                  height: 1.2),
-                              textAlign: TextAlign.center,
-                            ),
-                          ],
-                        ),
-                      )
-                    else
-                      Text(
-                        _formatPrice(trip.pricePerSeat),
-                        style: const TextStyle(
-                            fontSize: 19,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.primary),
-                      ),
-                  ],
-                ),
+                    ],
+                  ),
               ],
             ),
             const SizedBox(height: 12),
@@ -554,28 +579,6 @@ class _TripCard extends StatelessWidget {
           ],
         ),
           ),
-          // Lock badge — only shown when trip is full
-          if (isFull)
-            Positioned(
-              top: -8,
-              right: -8,
-              child: Container(
-                width: 28,
-                height: 28,
-                decoration: const BoxDecoration(
-                  color: Color(0xFF64748B),
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                        color: Color(0x33000000),
-                        blurRadius: 4,
-                        offset: Offset(0, 2)),
-                  ],
-                ),
-                child: const Icon(Icons.lock_rounded,
-                    size: 14, color: Colors.white),
-              ),
-            ),
         ],
       ),
     );

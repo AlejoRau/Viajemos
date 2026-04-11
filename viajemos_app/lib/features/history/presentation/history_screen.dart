@@ -277,14 +277,14 @@ class _ActiveTripCardState extends ConsumerState<_ActiveTripCard> {
               borderRadius: BorderRadius.circular(18),
               border: Border.all(
                 color: hasPending
-                    ? Colors.orange.shade300
+                    ? Colors.green.shade400
                     : AppColors.border,
                 width: hasPending ? 2 : 1.5,
               ),
               boxShadow: [
                 BoxShadow(
                   color: hasPending
-                      ? Colors.orange.withValues(alpha: 0.12)
+                      ? Colors.green.withValues(alpha: 0.12)
                       : const Color(0x0A000000),
                   blurRadius: 8,
                   offset: const Offset(0, 3),
@@ -439,7 +439,7 @@ class _ActiveTripCardState extends ConsumerState<_ActiveTripCard> {
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
                           color: hasPending
-                              ? Colors.orange.shade700
+                              ? Colors.green.shade700
                               : AppColors.primary,
                         ),
                       ),
@@ -448,7 +448,7 @@ class _ActiveTripCardState extends ConsumerState<_ActiveTripCard> {
                         Icons.chevron_right_rounded,
                         size: 18,
                         color: hasPending
-                            ? Colors.orange.shade700
+                            ? Colors.green.shade700
                             : AppColors.primary,
                       ),
                     ],
@@ -904,7 +904,7 @@ class _DriverTripDetailsSheetState
                         color: Colors.white)),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: trip.pendingRequestsCount > 0
-                      ? Colors.orange.shade600
+                      ? Colors.green.shade600
                       : AppColors.primary,
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(27)),

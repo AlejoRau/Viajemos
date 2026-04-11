@@ -140,7 +140,7 @@ class RoleSwitcherTitle extends ConsumerWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
-                color: const Color(0xFFF97316),
+                color: const Color(0xFF16A34A),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Text(

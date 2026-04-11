@@ -93,7 +93,7 @@ class TripRepository {
         .from('trips')
         .select('id')
         .eq('owner_id', userId)
-        .inFilter('status', ['active', 'full']) as List;
+        .inFilter('status', ['open', 'full']) as List;
     return data.length;
   }
 }

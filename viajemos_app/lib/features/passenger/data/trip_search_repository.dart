@@ -33,7 +33,7 @@ class TripSearchRepository {
       profiles!owner_id(full_name, avg_rating, avatar_url),
       vehicles!vehicle_id(brand, model, color),
       trip_requests!trip_id(status, profiles!passenger_id(full_name, avatar_url))
-    ''').eq('status', 'open');
+    ''').inFilter('status', ['open', 'full']);
 
     if (origin.isNotEmpty) {
       query = query.ilike('origin_address', '%$origin%');
@@ -57,13 +57,14 @@ class TripSearchRepository {
         .order('departure_date', ascending: true)
         .order('departure_time', ascending: true, nullsFirst: false);
 
-    return (data as List)
-        // Client-side filter: only show trips with free seats
-        .where((row) =>
-            (row['seats_taken'] as int) < (row['available_seats'] as int))
-        .map((row) =>
-            TripSearchResult.fromJson(row as Map<String, dynamic>))
-        .toList();
+    // Sort: available trips first, full trips at the bottom
+    final rows = (data as List).cast<Map<String, dynamic>>();
+    rows.sort((a, b) {
+      final aFull = (a['seats_taken'] as int) >= (a['available_seats'] as int);
+      final bFull = (b['seats_taken'] as int) >= (b['available_seats'] as int);
+      return (aFull ? 1 : 0).compareTo(bFull ? 1 : 0);
+    });
+    return rows.map((row) => TripSearchResult.fromJson(row)).toList();
   }
 
   Future<List<Map<String, String?>>> fetchTripPassengers(String tripId) async {
