@@ -58,6 +58,7 @@ class _LoginScreenState extends State<LoginScreen> {
         authScreenLaunchMode: kIsWeb
             ? LaunchMode.platformDefault
             : LaunchMode.externalApplication,
+        queryParams: {'prompt': 'select_account'},
       );
       // La página redirige a Google → cuando vuelve, Supabase detecta la sesión.
     } on AuthException catch (e) {

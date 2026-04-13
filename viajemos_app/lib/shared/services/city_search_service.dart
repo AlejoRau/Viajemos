@@ -65,15 +65,40 @@ class CitySearchService {
 
   void cancel() => _debounce?.cancel();
 
+  // ── Cache ─────────────────────────────────────────────────────────────────
+  // Stores the last 20 unique queries so repeated or re-typed searches never
+  // hit the network again.
+  static const _cacheMaxSize = 20;
+  final _cache = <String, List<CitySuggestion>>{};
+
+  String _cacheKey(String query, CitySearchSource src) =>
+      '${src.name}:${query.trim().toLowerCase()}';
+
   // ── Public search ─────────────────────────────────────────────────────────
   /// [overrideSource] lets a single call use a different source than the global default.
   Future<List<CitySuggestion>> search(String query,
       {CitySearchSource? overrideSource}) async {
-    if (query.trim().isEmpty) return [];
-    return switch (overrideSource ?? source) {
-      CitySearchSource.photon => _searchPhoton(query),
-      CitySearchSource.georef => _searchGeoref(query),
+    final q = query.trim();
+    if (q.isEmpty) return [];
+    // Minimum 3 characters — avoids burning requests on single letters.
+    if (q.length < 3) return [];
+
+    final src = overrideSource ?? source;
+    final key = _cacheKey(q, src);
+
+    if (_cache.containsKey(key)) return _cache[key]!;
+
+    final results = await switch (src) {
+      CitySearchSource.photon => _searchPhoton(q),
+      CitySearchSource.georef => _searchGeoref(q),
     };
+
+    // Evict oldest entry when cache is full.
+    if (_cache.length >= _cacheMaxSize) {
+      _cache.remove(_cache.keys.first);
+    }
+    _cache[key] = results;
+    return results;
   }
 
   // ── Photon (komoot) ───────────────────────────────────────────────────────

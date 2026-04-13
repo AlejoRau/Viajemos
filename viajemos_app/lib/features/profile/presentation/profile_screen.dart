@@ -14,6 +14,7 @@ import '../domain/user_profile.dart';
 import '../../../features/vehicles/data/vehicles_provider.dart';
 import '../../../features/vehicles/domain/vehicle.dart';
 import '../../../shared/widgets/vehicle_selector_sheet.dart';
+import '../../../shared/services/push_notification_service.dart';
 
 // ── Auto-save ─────────────────────────────────────────────────────────────────
 
@@ -308,6 +309,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
               phone: profile.phone,
               onOpinionsTap: _showOpinions,
               onLogout: () async {
+                await PushNotificationService.deleteToken();
                 await Supabase.instance.client.auth.signOut();
                 // Reset all in-memory providers so the next user starts clean.
                 ref.invalidate(profileProvider);

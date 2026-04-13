@@ -1,14 +1,21 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/config/supabase_config.dart';
+import 'shared/services/push_notification_service.dart';
 import 'app.dart';
 
 void main() async {
   final binding = WidgetsFlutterBinding.ensureInitialized();
   FlutterNativeSplash.preserve(widgetsBinding: binding);
+
+  // Firebase debe inicializarse antes que Supabase.
+  if (!kIsWeb) {
+    await Firebase.initializeApp();
+  }
 
   await Supabase.initialize(
     url: SupabaseConfig.url,
@@ -29,6 +36,11 @@ void main() async {
         print('[Auth] getSessionFromUrl falló: $e');
       }
     }
+  }
+
+  // Inicializar push notifications (pide permisos, registra token FCM).
+  if (!kIsWeb) {
+    await PushNotificationService.initialize();
   }
 
   FlutterNativeSplash.remove();
