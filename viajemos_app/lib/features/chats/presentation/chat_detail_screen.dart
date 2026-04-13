@@ -141,17 +141,23 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
           _participantNames = {for (final p in participants) p.userId: p.fullName};
         });
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('Error loading group participants: $e');
+    }
   }
 
-  void _showGroupMembers() {
+  Future<void> _showGroupMembers() async {
+    if (_groupParticipants.isEmpty) {
+      await _loadGroupParticipants();
+    }
+    if (!mounted) return;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => _GroupMembersSheet(
         participants: _groupParticipants,
-        onRefresh: _loadGroupParticipants,
+        loader: () => _chatRepo.fetchGroupParticipants(widget.chatId),
       ),
     );
   }
@@ -941,16 +947,46 @@ class _MessageBubble extends StatelessWidget {
 
 // ── Group Members Sheet ───────────────────────────────────────────────────────
 
-class _GroupMembersSheet extends StatelessWidget {
+class _GroupMembersSheet extends StatefulWidget {
   const _GroupMembersSheet({
     required this.participants,
-    required this.onRefresh,
+    required this.loader,
   });
   final List<GroupParticipant> participants;
-  final VoidCallback onRefresh;
+  final Future<List<GroupParticipant>> Function() loader;
+
+  @override
+  State<_GroupMembersSheet> createState() => _GroupMembersSheetState();
+}
+
+class _GroupMembersSheetState extends State<_GroupMembersSheet> {
+  late List<GroupParticipant> _participants;
+  bool _loading = false;
+  bool _hasError = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _participants = widget.participants;
+    if (_participants.isEmpty) {
+      _load();
+    }
+  }
+
+  Future<void> _load() async {
+    setState(() { _loading = true; _hasError = false; });
+    try {
+      final result = await widget.loader();
+      if (mounted) setState(() { _participants = result; _loading = false; });
+    } catch (e) {
+      debugPrint('GroupMembersSheet load error: $e');
+      if (mounted) setState(() { _loading = false; _hasError = true; });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final participants = _participants;
     return Container(
       decoration: const BoxDecoration(
         color: Colors.white,
@@ -1002,13 +1038,30 @@ class _GroupMembersSheet extends StatelessWidget {
             constraints: BoxConstraints(
               maxHeight: MediaQuery.of(context).size.height * 0.5,
             ),
-            child: participants.isEmpty
+            child: _loading
                 ? const Padding(
                     padding: EdgeInsets.all(32),
-                    child: Center(
-                      child: CircularProgressIndicator(),
-                    ),
+                    child: Center(child: CircularProgressIndicator()),
                   )
+                : _hasError
+                    ? Padding(
+                        padding: const EdgeInsets.all(32),
+                        child: Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Text('No se pudieron cargar los integrantes'),
+                              const SizedBox(height: 12),
+                              TextButton(onPressed: _load, child: const Text('Reintentar')),
+                            ],
+                          ),
+                        ),
+                      )
+                : participants.isEmpty
+                    ? const Padding(
+                        padding: EdgeInsets.all(32),
+                        child: Center(child: Text('No hay integrantes')),
+                      )
                 : ListView.separated(
                     shrinkWrap: true,
                     padding: const EdgeInsets.symmetric(vertical: 8),

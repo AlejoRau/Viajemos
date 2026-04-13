@@ -834,7 +834,7 @@ class _DriverTripDetailsSheetState
 
                   // Route cities
                   Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Flexible(
                         child: _RoutePlace(
@@ -844,7 +844,7 @@ class _DriverTripDetailsSheetState
                         ),
                       ),
                       const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 6),
+                        padding: EdgeInsets.only(top: 2, left: 6, right: 6),
                         child: Icon(Icons.arrow_forward_rounded,
                             size: 16, color: AppColors.primary),
                       ),

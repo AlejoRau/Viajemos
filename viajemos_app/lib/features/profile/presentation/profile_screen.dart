@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/providers/role_provider.dart';
@@ -54,7 +56,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
   late final TabController _tabController;
   final _instagramController = TextEditingController();
   final _facebookController = TextEditingController();
+  final _instagramFocusNode = FocusNode();
+  final _facebookFocusNode = FocusNode();
   bool _controllersInitialized = false;
+
+  UserProfile? _currentProfile;
 
   _SaveStatus _socialSaveStatus = _SaveStatus.idle;
   Timer? _socialDebounce;
@@ -84,10 +90,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     _tabController.dispose();
     _instagramController.dispose();
     _facebookController.dispose();
+    _instagramFocusNode.dispose();
+    _facebookFocusNode.dispose();
     super.dispose();
   }
 
   void _initControllers(UserProfile profile) {
+    _currentProfile = profile;
     if (_controllersInitialized) return;
     _controllersInitialized = true;
     _instagramController.text = profile.instagram ?? '';
@@ -159,6 +168,93 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     );
   }
 
+  Future<void> _pickAvatar(ImageSource source) async {
+    final picker = ImagePicker();
+    final file = await picker.pickImage(source: source, imageQuality: 85, maxWidth: 800);
+    if (file == null || !mounted) return;
+    try {
+      await ref.read(profileRepositoryProvider).uploadAvatar(file);
+      ref.invalidate(profileProvider);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No se pudo actualizar la foto de perfil')),
+        );
+      }
+    }
+  }
+
+  void _showAvatarOptions() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 36, height: 4,
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(2)),
+            ),
+            const Text('Foto de perfil', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+            const SizedBox(height: 16),
+            ListTile(
+              leading: const Icon(Icons.photo_library_rounded, color: AppColors.primary),
+              title: const Text('Elegir de la galería'),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              onTap: () {
+                Navigator.pop(context);
+                _pickAvatar(ImageSource.gallery);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.camera_alt_rounded, color: AppColors.primary),
+              title: const Text('Tomar una foto'),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              onTap: () {
+                Navigator.pop(context);
+                _pickAvatar(ImageSource.camera);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showEditBio(UserProfile profile) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _EditBioSheet(profile: profile),
+    );
+  }
+
+  void _onCompletenessAction(ProfileCompletenessItem item) {
+    final profile = _currentProfile;
+    switch (item) {
+      case ProfileCompletenessItem.avatar:
+        _showAvatarOptions();
+      case ProfileCompletenessItem.phone:
+        _tabController.animateTo(1);
+      case ProfileCompletenessItem.birthDate:
+        if (profile != null) _showEditPersonalData(profile);
+      case ProfileCompletenessItem.bio:
+        if (profile != null) _showEditBio(profile);
+      case ProfileCompletenessItem.instagram:
+        _instagramFocusNode.requestFocus();
+      case ProfileCompletenessItem.facebook:
+        _facebookFocusNode.requestFocus();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final role = ref.watch(roleProvider);
@@ -199,7 +295,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
               phone: profile.phone,
               instagramController: _instagramController,
               facebookController: _facebookController,
+              instagramFocusNode: _instagramFocusNode,
+              facebookFocusNode: _facebookFocusNode,
               onEditPersonalData: () => _showEditPersonalData(profile),
+              onAvatarTap: _showAvatarOptions,
+              onCompletenessAction: _onCompletenessAction,
               socialSaveStatus: _socialSaveStatus,
               onGoToAccount: () => _tabController.animateTo(1),
             ),
@@ -234,7 +334,11 @@ class _InfoPersonalTab extends StatelessWidget {
     required this.phone,
     required this.instagramController,
     required this.facebookController,
+    required this.instagramFocusNode,
+    required this.facebookFocusNode,
     required this.onEditPersonalData,
+    required this.onAvatarTap,
+    required this.onCompletenessAction,
     required this.socialSaveStatus,
     required this.onGoToAccount,
   });
@@ -244,9 +348,19 @@ class _InfoPersonalTab extends StatelessWidget {
   final String? phone;
   final TextEditingController instagramController;
   final TextEditingController facebookController;
+  final FocusNode instagramFocusNode;
+  final FocusNode facebookFocusNode;
   final VoidCallback onEditPersonalData;
+  final VoidCallback onAvatarTap;
+  final void Function(ProfileCompletenessItem) onCompletenessAction;
   final _SaveStatus socialSaveStatus;
   final VoidCallback onGoToAccount;
+
+  Widget _initialsCircle(UserProfile p) => CircleAvatar(
+        radius: 48,
+        backgroundColor: AppColors.primaryLight,
+        child: Text(p.initials, style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: AppColors.primary)),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -266,9 +380,7 @@ class _InfoPersonalTab extends StatelessWidget {
                   Padding(
                     padding: const EdgeInsets.only(top: 28, bottom: 8),
                     child: GestureDetector(
-                      onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Foto de perfil — próximamente disponible')),
-                      ),
+                      onTap: onAvatarTap,
                       child: Stack(
                         children: [
                           Container(
@@ -281,13 +393,17 @@ class _InfoPersonalTab extends StatelessWidget {
                             ),
                             child: Padding(
                               padding: const EdgeInsets.all(3),
-                              child: CircleAvatar(
-                                radius: 48,
-                                backgroundColor: AppColors.primaryLight,
-                                child: Text(
-                                  profile.initials,
-                                  style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: AppColors.primary),
-                                ),
+                              child: ClipOval(
+                                child: profile.avatarUrl != null
+                                    ? CachedNetworkImage(
+                                        imageUrl: profile.avatarUrl!,
+                                        width: 96,
+                                        height: 96,
+                                        fit: BoxFit.cover,
+                                        placeholder: (_, __) => _initialsCircle(profile),
+                                        errorWidget: (_, __, ___) => _initialsCircle(profile),
+                                      )
+                                    : _initialsCircle(profile),
                               ),
                             ),
                           ),
@@ -337,7 +453,7 @@ class _InfoPersonalTab extends StatelessWidget {
             ),
           ),
 
-          // ── Nombre y rating ───────────────────────────────────────────
+          // ── Nombre, rating y nivel de confianza ───────────────────────
           Container(
             color: Colors.white,
             width: double.infinity,
@@ -374,6 +490,9 @@ class _InfoPersonalTab extends StatelessWidget {
                     ),
                   ],
                 ),
+                const SizedBox(height: 10),
+                // Trust level badge
+                _TrustBadge(level: profile.trustLevel),
               ],
             ),
           ),
@@ -412,34 +531,13 @@ class _InfoPersonalTab extends StatelessWidget {
           ),
           const SizedBox(height: 20),
 
-          // ── Aviso verificación ────────────────────────────────────────
-          if (phone == null || phone!.isEmpty)
+          // ── Completeness card ─────────────────────────────────────────
+          if (profile.completenessScore < 6)
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-              child: GestureDetector(
-                onTap: onGoToAccount,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFEF2F2),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: const Color(0xFFFCA5A5)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.shield_outlined, color: Color(0xFFEF4444), size: 20),
-                      const SizedBox(width: 10),
-                      const Expanded(
-                        child: Text(
-                          'Tu perfil no está verificado. Andá a Cuenta para verificar tu teléfono.',
-                          style: TextStyle(fontSize: 13, color: Color(0xFFB91C1C)),
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      const Icon(Icons.chevron_right_rounded, color: Color(0xFFEF4444), size: 18),
-                    ],
-                  ),
-                ),
+              child: _ProfileCompletenessCard(
+                profile: profile,
+                onAction: onCompletenessAction,
               ),
             ),
 
@@ -460,12 +558,12 @@ class _InfoPersonalTab extends StatelessWidget {
                   ),
                   child: Column(
                     children: [
-                      _SocialRow(controller: instagramController, hint: 'tu_usuario', icon: _InstagramIcon(), label: 'Instagram'),
+                      _SocialRow(controller: instagramController, focusNode: instagramFocusNode, hint: 'tu_usuario', icon: _InstagramIcon(), label: 'Instagram'),
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
                         child: Divider(height: 1, thickness: 1, color: const Color(0xFFEEF2FF)),
                       ),
-                      _SocialRow(controller: facebookController, hint: 'tu_usuario', icon: _FacebookIcon(), label: 'Facebook'),
+                      _SocialRow(controller: facebookController, focusNode: facebookFocusNode, hint: 'tu_usuario', icon: _FacebookIcon(), label: 'Facebook'),
                     ],
                   ),
                 ),
@@ -478,6 +576,352 @@ class _InfoPersonalTab extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ── Trust badge ───────────────────────────────────────────────────────────────
+
+class _TrustBadge extends StatelessWidget {
+  const _TrustBadge({required this.level});
+  final ProfileTrustLevel level;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = level.color;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(level.icon, size: 14, color: color),
+          const SizedBox(width: 5),
+          Text(
+            level.spanishName,
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: color),
+          ),
+          const SizedBox(width: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(
+              'Nivel ${level.levelNumber}',
+              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Completeness card ─────────────────────────────────────────────────────────
+
+class _ProfileCompletenessCard extends StatefulWidget {
+  const _ProfileCompletenessCard({required this.profile, required this.onAction});
+  final UserProfile profile;
+  final void Function(ProfileCompletenessItem) onAction;
+
+  @override
+  State<_ProfileCompletenessCard> createState() => _ProfileCompletenessCardState();
+}
+
+class _ProfileCompletenessCardState extends State<_ProfileCompletenessCard>
+    with SingleTickerProviderStateMixin {
+  bool _expanded = false;
+
+  late final AnimationController _animController;
+  late final Animation<double> _arrowTurn;
+  late final Animation<double> _expandAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _animController = AnimationController(
+      duration: const Duration(milliseconds: 250),
+      vsync: this,
+    );
+    _arrowTurn  = Tween<double>(begin: 0, end: 0.5).animate(
+      CurvedAnimation(parent: _animController, curve: Curves.easeInOut),
+    );
+    _expandAnim = CurvedAnimation(parent: _animController, curve: Curves.easeInOut);
+  }
+
+  @override
+  void dispose() {
+    _animController.dispose();
+    super.dispose();
+  }
+
+  void _toggle() {
+    setState(() => _expanded = !_expanded);
+    if (_expanded) {
+      _animController.forward();
+    } else {
+      _animController.reverse();
+    }
+  }
+
+  String get _cardTitle {
+    final s = widget.profile.completenessScore;
+    if (s == 0) return 'Completá tu perfil para generar confianza';
+    if (s <= 2) return 'Vas bien — seguí completando tu perfil';
+    if (s <= 4) return 'Casi listo — te falta poco';
+    return 'Un paso más para tener el perfil completo';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final score = widget.profile.completenessScore;
+    final pct   = (score / 6 * 100).round();
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFC7D2FE)),
+        boxShadow: [
+          BoxShadow(color: AppColors.primary.withValues(alpha: 0.07), blurRadius: 16, offset: const Offset(0, 4)),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Tappable header ──────────────────────────────────────────
+          InkWell(
+            onTap: _toggle,
+            borderRadius: BorderRadius.circular(20),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 12, 10),
+              child: Row(
+                children: [
+                  Container(
+                    width: 32, height: 32,
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryLight,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.shield_rounded, size: 17, color: AppColors.primary),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      _cardTitle,
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    '$score/6 · $pct%',
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
+                  ),
+                  const SizedBox(width: 4),
+                  RotationTransition(
+                    turns: _arrowTurn,
+                    child: const Icon(Icons.keyboard_arrow_down_rounded, size: 20, color: AppColors.textSecondary),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          // ── Progress bar (always visible) ────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: score / 6,
+                minHeight: 6,
+                backgroundColor: const Color(0xFFEEF2FF),
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  score == 6 ? const Color(0xFF15803D) : AppColors.primary,
+                ),
+              ),
+            ),
+          ),
+          // ── Expandable items list ────────────────────────────────────
+          SizeTransition(
+            sizeFactor: _expandAnim,
+            child: Column(
+              children: [
+                const Divider(height: 1, color: Color(0xFFEEF2FF)),
+                ...ProfileCompletenessItem.values.map((item) {
+                  final done = widget.profile.itemDone(item);
+                  return _CompletenessItemRow(
+                    item: item,
+                    done: done,
+                    onTap: done ? null : () => widget.onAction(item),
+                  );
+                }),
+                const SizedBox(height: 4),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CompletenessItemRow extends StatelessWidget {
+  const _CompletenessItemRow({required this.item, required this.done, this.onTap});
+  final ProfileCompletenessItem item;
+  final bool done;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Row(
+        children: [
+          Icon(
+            done ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+            size: 20,
+            color: done ? const Color(0xFF15803D) : const Color(0xFFCBD5E1),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.label,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: done ? AppColors.textSecondary : AppColors.textPrimary,
+                    decoration: done ? TextDecoration.lineThrough : null,
+                    decorationColor: AppColors.textSecondary,
+                  ),
+                ),
+                if (!done)
+                  Text(
+                    item.subtitle,
+                    style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                  ),
+              ],
+            ),
+          ),
+          if (!done)
+            TextButton(
+              onPressed: onTap,
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: const Text(
+                'Completar →',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.primary),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Edit Bio Sheet ────────────────────────────────────────────────────────────
+
+class _EditBioSheet extends ConsumerStatefulWidget {
+  const _EditBioSheet({required this.profile});
+  final UserProfile profile;
+
+  @override
+  ConsumerState<_EditBioSheet> createState() => _EditBioSheetState();
+}
+
+class _EditBioSheetState extends ConsumerState<_EditBioSheet> {
+  late final TextEditingController _controller;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final existing = widget.profile.bioDriver?.isNotEmpty == true
+        ? widget.profile.bioDriver!
+        : (widget.profile.bioPassenger ?? '');
+    _controller = TextEditingController(text: existing);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final text = _controller.text.trim();
+    setState(() => _saving = true);
+    try {
+      await ref.read(profileRepositoryProvider).updateBio(
+            bioDriver: text.isEmpty ? null : text,
+            bioPassenger: text.isEmpty ? null : text,
+          );
+      ref.invalidate(profileProvider);
+      if (mounted) Navigator.pop(context);
+    } catch (_) {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 36, height: 4,
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(2)),
+              ),
+            ),
+            const Text('Tu descripción', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+            const SizedBox(height: 4),
+            const Text(
+              'Contales a los demás quién sos. Aparece en tu perfil público.',
+              style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 16),
+            _BioField(controller: _controller),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _saving ? null : _save,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+                child: _saving
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Text('Guardar', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Colors.white)),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1718,11 +2162,13 @@ class _SocialRow extends StatefulWidget {
     required this.hint,
     required this.icon,
     required this.label,
+    this.focusNode,
   });
   final TextEditingController controller;
   final String hint;
   final Widget icon;
   final String label;
+  final FocusNode? focusNode;
 
   @override
   State<_SocialRow> createState() => _SocialRowState();
@@ -1755,6 +2201,7 @@ class _SocialRowState extends State<_SocialRow> {
                 const SizedBox(height: 2),
                 TextField(
                   controller: widget.controller,
+                  focusNode: widget.focusNode,
                   cursorColor: AppColors.primary,
                   style: const TextStyle(fontSize: 14, color: AppColors.textPrimary, fontWeight: FontWeight.w500),
                   decoration: InputDecoration(

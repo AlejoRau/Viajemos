@@ -88,8 +88,7 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
       return 'El origen y el destino no pueden ser iguales';
     }
     if (_dateFrom == null) return 'Seleccioná la fecha de inicio';
-    if (_dateTo == null) return 'Seleccioná la fecha de fin';
-    if (_dateTo!.isBefore(_dateFrom!)) return 'La fecha de fin debe ser igual o posterior al inicio';
+    if (_dateTo != null && _dateTo!.isBefore(_dateFrom!)) return 'La fecha de fin debe ser igual o posterior al inicio';
     final tf = _timeFromController.text.trim();
     final tt = _timeToController.text.trim();
     if (tf.isNotEmpty && tt.isNotEmpty) {
@@ -123,7 +122,7 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
         originAddress: _originController.text.trim(),
         destinationAddress: _destinationController.text.trim(),
         dateFrom: _dateFrom!,
-        dateTo: _dateTo!,
+        dateTo: _dateTo,
         seatsNeeded: _seats,
         hasPet: _hasPet,
         isSmoker: false,
@@ -260,7 +259,7 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
                 ),
                 Expanded(
                   child: _DatePickerInput(
-                    label: 'Hasta',
+                    label: 'Hasta (opcional)',
                     value: _dateTo,
                     onPicked: (d) => setState(() => _dateTo = d),
                     firstDate: _dateFrom,

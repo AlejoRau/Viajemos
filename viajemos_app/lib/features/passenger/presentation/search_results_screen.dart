@@ -1,11 +1,37 @@
+import 'dart:async';
+import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/widgets/public_profile_sheet.dart';
 import '../data/trip_search_repository.dart';
 import '../domain/trip_search_result.dart';
+
+String _mapRequestError(Object e) {
+  final msg = e.toString().toLowerCase();
+  if (e is SocketException || msg.contains('socketexception') || msg.contains('network') || msg.contains('connection')) {
+    return 'Sin conexión a internet. Revisá tu red e intentá de nuevo.';
+  }
+  if (msg.contains('own_trip') || msg.contains('no podés unirte a tu propio viaje')) {
+    return 'No podés enviarte una solicitud a tu propio viaje.';
+  }
+  if (msg.contains('already_requested') || msg.contains('duplicate') || msg.contains('unique') || msg.contains('ya tenés')) {
+    return 'Ya tenés una solicitud pendiente para este viaje.';
+  }
+  if (msg.contains('trip_full') || msg.contains('no hay lugares') || msg.contains('seats')) {
+    return 'El viaje ya no tiene lugares disponibles.';
+  }
+  if (msg.contains('not authenticated') || msg.contains('jwt') || msg.contains('auth')) {
+    return 'Tu sesión expiró. Por favor, volvé a iniciar sesión.';
+  }
+  if (e is TimeoutException || msg.contains('timeout')) {
+    return 'La solicitud tardó demasiado. Revisá tu conexión e intentá de nuevo.';
+  }
+  return 'No se pudo enviar la solicitud. Intentá de nuevo.';
+}
 
 // ── Passenger avatar helper ───────────────────────────────────────────────────
 
@@ -654,8 +680,8 @@ class _TripDetailsSheetState extends State<_TripDetailsSheet> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Error al enviar la solicitud'),
+          SnackBar(
+            content: Text(_mapRequestError(e)),
             backgroundColor: Colors.red,
           ),
         );
@@ -1016,29 +1042,53 @@ class _TripDetailsSheetState extends State<_TripDetailsSheet> {
                 SizedBox(
                   width: double.infinity,
                   height: 54,
-                  child: trip.freeSeats == 0
+                  child: trip.driverId ==
+                          Supabase.instance.client.auth.currentUser?.id
                       ? Container(
                           decoration: BoxDecoration(
-                            color: const Color(0xFFF1F5F9),
+                            color: const Color(0xFFFFF3CD),
                             borderRadius: BorderRadius.circular(27),
+                            border: Border.all(color: const Color(0xFFF59E0B)),
                           ),
                           child: const Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.lock_rounded,
-                                  size: 18, color: Color(0xFF94A3B8)),
+                              Icon(Icons.info_outline_rounded,
+                                  size: 18, color: Color(0xFFF59E0B)),
                               SizedBox(width: 8),
                               Text(
-                                'Sin lugares disponibles',
+                                'Este es tu viaje',
                                 style: TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.w600,
-                                    color: Color(0xFF94A3B8)),
+                                    color: Color(0xFFF59E0B)),
                               ),
                             ],
                           ),
                         )
-                      : ElevatedButton(
+                      : trip.freeSeats == 0
+                          ? Container(
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF1F5F9),
+                                borderRadius: BorderRadius.circular(27),
+                              ),
+                              child: const Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.lock_rounded,
+                                      size: 18, color: Color(0xFF94A3B8)),
+                                  SizedBox(width: 8),
+                                  Text(
+                                    'Sin lugares disponibles',
+                                    style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w600,
+                                        color: Color(0xFF94A3B8)),
+                                  ),
+                                ],
+                              ),
+                            )
+                          : ElevatedButton(
                           onPressed: _sending ? null : _sendRequest,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF1A73E8),
