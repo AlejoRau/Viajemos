@@ -29,8 +29,47 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
   int _price = 4500;
   bool _publishing = false;
 
+  // Last city name confirmed via autocomplete selection (null = not validated)
+  String? _lastValidatedOrigin;
+  String? _lastValidatedDest;
+
+  bool get _originValidated =>
+      _lastValidatedOrigin != null &&
+      _lastValidatedOrigin!.toLowerCase() ==
+          _originController.text.trim().toLowerCase();
+
+  bool get _destValidated =>
+      _lastValidatedDest != null &&
+      _lastValidatedDest!.toLowerCase() ==
+          _destinationController.text.trim().toLowerCase();
+
+  @override
+  void initState() {
+    super.initState();
+    _originController.addListener(_onOriginChanged);
+    _destinationController.addListener(_onDestChanged);
+  }
+
+  void _onOriginChanged() {
+    if (_lastValidatedOrigin != null &&
+        _lastValidatedOrigin!.toLowerCase() !=
+            _originController.text.trim().toLowerCase()) {
+      setState(() => _lastValidatedOrigin = null);
+    }
+  }
+
+  void _onDestChanged() {
+    if (_lastValidatedDest != null &&
+        _lastValidatedDest!.toLowerCase() !=
+            _destinationController.text.trim().toLowerCase()) {
+      setState(() => _lastValidatedDest = null);
+    }
+  }
+
   @override
   void dispose() {
+    _originController.removeListener(_onOriginChanged);
+    _destinationController.removeListener(_onDestChanged);
     _originController.dispose();
     _destinationController.dispose();
     _timeFromController.dispose();
@@ -42,6 +81,12 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
   String? _validate() {
     if (_originController.text.trim().isEmpty) return 'Ingresá el origen';
     if (_destinationController.text.trim().isEmpty) return 'Ingresá el destino';
+    if (!_originValidated) return 'Seleccioná el origen de la lista de ciudades';
+    if (!_destValidated) return 'Seleccioná el destino de la lista de ciudades';
+    if (_originController.text.trim().toLowerCase() ==
+        _destinationController.text.trim().toLowerCase()) {
+      return 'El origen y el destino no pueden ser iguales';
+    }
     if (_dateFrom == null) return 'Seleccioná la fecha de inicio';
     if (_dateTo == null) return 'Seleccioná la fecha de fin';
     if (_dateTo!.isBefore(_dateFrom!)) return 'La fecha de fin debe ser igual o posterior al inicio';
@@ -120,6 +165,7 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
     required TextEditingController controller,
     required String placeholder,
     required IconData icon,
+    required ValueChanged<String> onSelected,
   }) {
     return CityAutocompleteField(
       controller: controller,
@@ -127,6 +173,7 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
       icon: icon,
       defaultSuggestions: popularArgentineCities,
       citySearchSource: CitySearchSource.georef,
+      onSelected: onSelected,
     );
   }
 
@@ -170,12 +217,16 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
                           controller: _originController,
                           placeholder: 'Origen',
                           icon: Icons.search,
+                          onSelected: (name) =>
+                              setState(() => _lastValidatedOrigin = name),
                         ),
                         const SizedBox(height: 12),
                         _buildLocationInput(
                           controller: _destinationController,
                           placeholder: 'Destino',
                           icon: Icons.near_me_rounded,
+                          onSelected: (name) =>
+                              setState(() => _lastValidatedDest = name),
                         ),
                       ],
                     ),
@@ -650,7 +701,11 @@ class _DatePickerInput extends StatelessWidget {
               context: context,
               initialDate: initial.isBefore(earliest) ? earliest : initial,
               firstDate: earliest,
-              lastDate: DateTime.now().add(const Duration(days: 365)),
+              lastDate: DateTime(
+                DateTime.now().year,
+                DateTime.now().month + 1,
+                DateTime.now().day,
+              ),
             );
             if (picked != null) onPicked(picked);
           },
