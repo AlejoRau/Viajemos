@@ -1,9 +1,16 @@
+class TripPassengerPreview {
+  const TripPassengerPreview({required this.name, this.avatarUrl});
+  final String name;
+  final String? avatarUrl;
+}
+
 class TripSearchResult {
   const TripSearchResult({
     required this.id,
     required this.driverId,
     required this.driverName,
     required this.driverRating,
+    this.driverAvatarUrl,
     required this.originAddress,
     required this.destinationAddress,
     required this.departureDate,
@@ -20,12 +27,19 @@ class TripSearchResult {
     this.vehicleBrand,
     this.vehicleModel,
     this.vehicleColor,
+    this.passengers = const [],
+    this.splitCosts = false,
+    this.pickupAddress,
+    this.dropoffAddress,
+    this.boardingStop,
+    this.alightingStop,
   });
 
   final String id;
   final String driverId;
   final String driverName;
   final double driverRating;
+  final String? driverAvatarUrl;
   final String originAddress;
   final String destinationAddress;
   final String departureDate; // ISO "YYYY-MM-DD"
@@ -42,6 +56,14 @@ class TripSearchResult {
   final String? vehicleBrand;
   final String? vehicleModel;
   final String? vehicleColor;
+  final List<TripPassengerPreview> passengers;
+  final bool splitCosts;
+  final String? pickupAddress;
+  final String? dropoffAddress;
+  /// Non-null when the passenger boards at an intermediate stop (not at the trip origin).
+  final String? boardingStop;
+  /// Non-null when the passenger alights at an intermediate stop (not at the final destination).
+  final String? alightingStop;
 
   int get freeSeats => availableSeats - seatsTaken;
 
@@ -102,6 +124,38 @@ class TripSearchResult {
     return driverName.isNotEmpty ? driverName[0].toUpperCase() : '?';
   }
 
+  TripSearchResult copyWith({String? boardingStop, String? alightingStop}) {
+    return TripSearchResult(
+      id: id,
+      driverId: driverId,
+      driverName: driverName,
+      driverRating: driverRating,
+      driverAvatarUrl: driverAvatarUrl,
+      originAddress: originAddress,
+      destinationAddress: destinationAddress,
+      departureDate: departureDate,
+      departureTime: departureTime,
+      availableSeats: availableSeats,
+      seatsTaken: seatsTaken,
+      pricePerSeat: pricePerSeat,
+      allowsPets: allowsPets,
+      picksUpAtDoor: picksUpAtDoor,
+      dropsOffAtDoor: dropsOffAtDoor,
+      via: via,
+      stops: stops,
+      description: description,
+      vehicleBrand: vehicleBrand,
+      vehicleModel: vehicleModel,
+      vehicleColor: vehicleColor,
+      passengers: passengers,
+      splitCosts: splitCosts,
+      pickupAddress: pickupAddress,
+      dropoffAddress: dropoffAddress,
+      boardingStop: boardingStop ?? this.boardingStop,
+      alightingStop: alightingStop ?? this.alightingStop,
+    );
+  }
+
   factory TripSearchResult.fromJson(Map<String, dynamic> json) {
     final profile = json['profiles'] as Map<String, dynamic>? ?? {};
     final vehicle = json['vehicles'] as Map<String, dynamic>?;
@@ -109,8 +163,8 @@ class TripSearchResult {
       id: json['id'] as String,
       driverId: json['owner_id'] as String,
       driverName: (profile['full_name'] as String?) ?? 'Conductor',
-      driverRating:
-          (profile['avg_rating'] as num?)?.toDouble() ?? 0.0,
+      driverRating: (profile['avg_rating'] as num?)?.toDouble() ?? 0.0,
+      driverAvatarUrl: profile['avatar_url'] as String?,
       originAddress: json['origin_address'] as String,
       destinationAddress: json['destination_address'] as String,
       departureDate: json['departure_date'] as String,
@@ -133,6 +187,19 @@ class TripSearchResult {
       vehicleBrand: vehicle?['brand'] as String?,
       vehicleModel: vehicle?['model'] as String?,
       vehicleColor: vehicle?['color'] as String?,
+      splitCosts: json['split_costs'] as bool? ?? false,
+      pickupAddress: json['pickup_address'] as String?,
+      dropoffAddress: json['dropoff_address'] as String?,
+      passengers: ((json['trip_requests'] as List?) ?? [])
+          .where((r) => r['status'] == 'accepted')
+          .map((r) {
+            final p = r['profiles'] as Map<String, dynamic>? ?? {};
+            return TripPassengerPreview(
+              name: p['full_name'] as String? ?? 'Pasajero',
+              avatarUrl: p['avatar_url'] as String?,
+            );
+          })
+          .toList(),
     );
   }
 }

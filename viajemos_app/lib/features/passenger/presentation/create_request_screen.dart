@@ -6,10 +6,22 @@ import '../../../core/theme/app_theme.dart';
 import '../../../shared/formatters/date_formatter.dart';
 import '../../../shared/services/city_search_service.dart';
 import '../../../shared/widgets/city_autocomplete_field.dart';
+import '../../../shared/widgets/app_toast.dart';
 import '../data/passenger_request_repository.dart';
 
 class CreateRequestScreen extends ConsumerStatefulWidget {
-  const CreateRequestScreen({super.key});
+  const CreateRequestScreen({
+    super.key,
+    this.prefillOrigin,
+    this.prefillDestination,
+    this.prefillDateFrom,
+    this.prefillDateTo,
+  });
+
+  final String? prefillOrigin;
+  final String? prefillDestination;
+  final DateTime? prefillDateFrom;
+  final DateTime? prefillDateTo;
 
   @override
   ConsumerState<CreateRequestScreen> createState() => _CreateRequestScreenState();
@@ -29,8 +41,58 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
   int _price = 4500;
   bool _publishing = false;
 
+  // Last city name confirmed via autocomplete selection (null = not validated)
+  String? _lastValidatedOrigin;
+  String? _lastValidatedDest;
+
+  bool get _originValidated =>
+      _lastValidatedOrigin != null &&
+      _lastValidatedOrigin!.toLowerCase() ==
+          _originController.text.trim().toLowerCase();
+
+  bool get _destValidated =>
+      _lastValidatedDest != null &&
+      _lastValidatedDest!.toLowerCase() ==
+          _destinationController.text.trim().toLowerCase();
+
+  @override
+  void initState() {
+    super.initState();
+    _originController.addListener(_onOriginChanged);
+    _destinationController.addListener(_onDestChanged);
+    // Pre-fill from search if coming from empty results
+    if (widget.prefillOrigin != null && widget.prefillOrigin!.isNotEmpty) {
+      _originController.text = widget.prefillOrigin!;
+      _lastValidatedOrigin = widget.prefillOrigin;
+    }
+    if (widget.prefillDestination != null && widget.prefillDestination!.isNotEmpty) {
+      _destinationController.text = widget.prefillDestination!;
+      _lastValidatedDest = widget.prefillDestination;
+    }
+    if (widget.prefillDateFrom != null) _dateFrom = widget.prefillDateFrom;
+    if (widget.prefillDateTo != null) _dateTo = widget.prefillDateTo;
+  }
+
+  void _onOriginChanged() {
+    if (_lastValidatedOrigin != null &&
+        _lastValidatedOrigin!.toLowerCase() !=
+            _originController.text.trim().toLowerCase()) {
+      setState(() => _lastValidatedOrigin = null);
+    }
+  }
+
+  void _onDestChanged() {
+    if (_lastValidatedDest != null &&
+        _lastValidatedDest!.toLowerCase() !=
+            _destinationController.text.trim().toLowerCase()) {
+      setState(() => _lastValidatedDest = null);
+    }
+  }
+
   @override
   void dispose() {
+    _originController.removeListener(_onOriginChanged);
+    _destinationController.removeListener(_onDestChanged);
     _originController.dispose();
     _destinationController.dispose();
     _timeFromController.dispose();
@@ -42,9 +104,14 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
   String? _validate() {
     if (_originController.text.trim().isEmpty) return 'Ingresá el origen';
     if (_destinationController.text.trim().isEmpty) return 'Ingresá el destino';
+    if (!_originValidated) return 'Seleccioná el origen de la lista de ciudades';
+    if (!_destValidated) return 'Seleccioná el destino de la lista de ciudades';
+    if (_originController.text.trim().toLowerCase() ==
+        _destinationController.text.trim().toLowerCase()) {
+      return 'El origen y el destino no pueden ser iguales';
+    }
     if (_dateFrom == null) return 'Seleccioná la fecha de inicio';
-    if (_dateTo == null) return 'Seleccioná la fecha de fin';
-    if (_dateTo!.isBefore(_dateFrom!)) return 'La fecha de fin debe ser igual o posterior al inicio';
+    if (_dateTo != null && _dateTo!.isBefore(_dateFrom!)) return 'La fecha de fin debe ser igual o posterior al inicio';
     final tf = _timeFromController.text.trim();
     final tt = _timeToController.text.trim();
     if (tf.isNotEmpty && tt.isNotEmpty) {
@@ -66,9 +133,7 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
   Future<void> _publish() async {
     final error = _validate();
     if (error != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error), backgroundColor: Colors.red.shade600),
-      );
+      AppToast.show(context, message: error);
       return;
     }
 
@@ -78,7 +143,7 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
         originAddress: _originController.text.trim(),
         destinationAddress: _destinationController.text.trim(),
         dateFrom: _dateFrom!,
-        dateTo: _dateTo!,
+        dateTo: _dateTo,
         seatsNeeded: _seats,
         hasPet: _hasPet,
         isSmoker: false,
@@ -94,22 +159,12 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
             : _descriptionController.text.trim(),
       );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('¡Pedido publicado con éxito!'),
-            backgroundColor: Color(0xFF16A34A),
-          ),
-        );
+        AppToast.show(context, message: '¡Pedido publicado con éxito!', type: ToastType.success);
         context.go('/passenger');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error al publicar: $e'),
-            backgroundColor: Colors.red.shade600,
-          ),
-        );
+        AppToast.show(context, message: 'Error al publicar: $e');
       }
     } finally {
       if (mounted) setState(() => _publishing = false);
@@ -120,6 +175,7 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
     required TextEditingController controller,
     required String placeholder,
     required IconData icon,
+    required ValueChanged<String> onSelected,
   }) {
     return CityAutocompleteField(
       controller: controller,
@@ -127,6 +183,7 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
       icon: icon,
       defaultSuggestions: popularArgentineCities,
       citySearchSource: CitySearchSource.georef,
+      onSelected: onSelected,
     );
   }
 
@@ -170,12 +227,16 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
                           controller: _originController,
                           placeholder: 'Origen',
                           icon: Icons.search,
+                          onSelected: (name) =>
+                              setState(() => _lastValidatedOrigin = name),
                         ),
                         const SizedBox(height: 12),
                         _buildLocationInput(
                           controller: _destinationController,
                           placeholder: 'Destino',
                           icon: Icons.near_me_rounded,
+                          onSelected: (name) =>
+                              setState(() => _lastValidatedDest = name),
                         ),
                       ],
                     ),
@@ -209,7 +270,7 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
                 ),
                 Expanded(
                   child: _DatePickerInput(
-                    label: 'Hasta',
+                    label: 'Hasta (opcional)',
                     value: _dateTo,
                     onPicked: (d) => setState(() => _dateTo = d),
                     firstDate: _dateFrom,
@@ -650,7 +711,11 @@ class _DatePickerInput extends StatelessWidget {
               context: context,
               initialDate: initial.isBefore(earliest) ? earliest : initial,
               firstDate: earliest,
-              lastDate: DateTime.now().add(const Duration(days: 365)),
+              lastDate: DateTime(
+                DateTime.now().year,
+                DateTime.now().month + 1,
+                DateTime.now().day,
+              ),
             );
             if (picked != null) onPicked(picked);
           },

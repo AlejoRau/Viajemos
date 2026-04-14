@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -53,8 +54,11 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       await Supabase.instance.client.auth.signInWithOAuth(
         OAuthProvider.google,
-        redirectTo: 'com.example.viajemos_app://login-callback/',
-        authScreenLaunchMode: LaunchMode.externalApplication,
+        redirectTo: kIsWeb ? Uri.base.origin : 'io.viajemos.app://login-callback/',
+        authScreenLaunchMode: kIsWeb
+            ? LaunchMode.platformDefault
+            : LaunchMode.externalApplication,
+        queryParams: {'prompt': 'select_account'},
       );
       // La página redirige a Google → cuando vuelve, Supabase detecta la sesión.
     } on AuthException catch (e) {

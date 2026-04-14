@@ -9,9 +9,11 @@ import '../../../features/vehicles/data/vehicles_provider.dart';
 import '../../../features/vehicles/domain/vehicle.dart';
 import '../../../shared/widgets/vehicle_selector_sheet.dart';
 import '../../../shared/services/city_search_service.dart';
+import '../../../shared/widgets/app_toast.dart';
 import '../../../shared/widgets/city_autocomplete_field.dart';
 import '../data/trip_repository.dart';
 import 'trip_map_screen.dart';
+import '../../../shared/providers/trip_success_provider.dart';
 
 const _routeSuggestions = [
   // Nacionales principales
@@ -59,8 +61,35 @@ const _routeSuggestions = [
   'Ruta Provincial 74 (Buenos Aires)',
 ];
 
+class CreateTripPrefill {
+  const CreateTripPrefill({
+    required this.originAddress,
+    required this.destinationAddress,
+    required this.via,
+    required this.stops,
+    required this.allowsPets,
+    required this.picksUpAtDoor,
+    required this.dropsOffAtDoor,
+    this.departureTime,
+    this.description,
+    this.vehicleId,
+  });
+
+  final String originAddress;
+  final String destinationAddress;
+  final List<String> via;
+  final List<String> stops;
+  final bool allowsPets;
+  final bool picksUpAtDoor;
+  final bool dropsOffAtDoor;
+  final String? departureTime;
+  final String? description;
+  final String? vehicleId;
+}
+
 class CreateTripScreen extends ConsumerStatefulWidget {
-  const CreateTripScreen({super.key});
+  const CreateTripScreen({super.key, this.prefill});
+  final CreateTripPrefill? prefill;
 
   @override
   ConsumerState<CreateTripScreen> createState() => _CreateTripScreenState();
@@ -82,19 +111,74 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
 
   int _seats = 3;
   int _price = 4500;
+  bool _splitCosts = false;
 
   DateTime? _departureDate;
   MapResult? _originResult;
   MapResult? _destResult;
 
+  // Last city name confirmed via autocomplete selection (null = not validated)
+  String? _lastValidatedOrigin;
+  String? _lastValidatedDest;
+
+  bool get _originValidated =>
+      _lastValidatedOrigin != null &&
+      _lastValidatedOrigin!.toLowerCase() ==
+          _originController.text.trim().toLowerCase();
+
+  bool get _destValidated =>
+      _lastValidatedDest != null &&
+      _lastValidatedDest!.toLowerCase() ==
+          _destinationController.text.trim().toLowerCase();
+
   Vehicle? _selectedVehicle;
   bool _publishing = false;
+  String? _prefillVehicleId;
+
+  // Validation state — set true on first publish attempt to show inline errors
+  bool _showErrors = false;
 
   @override
   void initState() {
     super.initState();
     _timeFromController.addListener(_onTimeChanged);
+    _timeFromController.addListener(_onFieldChanged);
     _timeToController.addListener(_onTimeChanged);
+    // Rebuild when origin/destination/time change so error hints update live
+    _originController.addListener(_onFieldChanged);
+    _destinationController.addListener(_onFieldChanged);
+
+    final p = widget.prefill;
+    if (p != null) {
+      _originController.text = p.originAddress;
+      _destinationController.text = p.destinationAddress;
+      if (p.departureTime != null) _timeFromController.text = p.departureTime!;
+      if (p.description != null) _descriptionController.text = p.description!;
+      _acceptsPets = p.allowsPets;
+      _picksUpPassengers = p.picksUpAtDoor;
+      _dropsOffPassengers = p.dropsOffAtDoor;
+      _routes.addAll(p.via);
+      _stops.addAll(p.stops);
+      _prefillVehicleId = p.vehicleId;
+      // Prefilled values came from a previously validated trip
+      if (p.originAddress.isNotEmpty) _lastValidatedOrigin = p.originAddress;
+      if (p.destinationAddress.isNotEmpty) _lastValidatedDest = p.destinationAddress;
+    }
+  }
+
+  void _onFieldChanged() {
+    // Reset city validation when the user manually edits the field
+    if (_lastValidatedOrigin != null &&
+        _lastValidatedOrigin!.toLowerCase() !=
+            _originController.text.trim().toLowerCase()) {
+      _lastValidatedOrigin = null;
+    }
+    if (_lastValidatedDest != null &&
+        _lastValidatedDest!.toLowerCase() !=
+            _destinationController.text.trim().toLowerCase()) {
+      _lastValidatedDest = null;
+    }
+    if (_showErrors) setState(() {});
   }
 
   @override
@@ -116,6 +200,41 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
       error = 'La hora de fin debe ser mayor que la de inicio';
     }
     if (error != _timeError) setState(() => _timeError = error);
+  }
+
+  /// Geocodes origin, stop, and destination and shows a warning snackbar
+  /// if the stop adds more than 40% to the direct route distance.
+  Future<void> _warnIfStopOffRoute(String stopName) async {
+    final origin = _originController.text.trim();
+    final destination = _destinationController.text.trim();
+    if (origin.isEmpty || destination.isEmpty) return;
+
+    try {
+      final svc = CitySearchService.instance;
+      final results = await Future.wait([
+        svc.geocodeCity(origin),
+        svc.geocodeCity(stopName),
+        svc.geocodeCity(destination),
+      ]);
+      final o = results[0];
+      final s = results[1];
+      final d = results[2];
+      if (o == null || s == null || d == null) return;
+
+      final ratio = CitySearchService.detourRatio(
+        o.$1, o.$2, s.$1, s.$2, d.$1, d.$2,
+      );
+
+      if (ratio > 1.4 && mounted) {
+        AppToast.show(
+          context,
+          message: '$stopName parece estar muy lejos de tu ruta. Verificá que sea una parada válida.',
+          type: ToastType.warning,
+        );
+      }
+    } catch (_) {
+      // Geocoding failed silently — don't block the user
+    }
   }
 
   String get _dateDisplayText {
@@ -154,9 +273,7 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
             setState(() => _selectedVehicle = newVehicle);
           } catch (e) {
             if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Error al guardar el vehículo: $e')),
-              );
+              AppToast.show(context, message: 'Error al guardar el vehículo: $e');
             }
           }
         },
@@ -176,85 +293,206 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
     return h * 60 + m;
   }
 
+  void _applyRaw(Map<String, dynamic> raw) {
+    final timeRaw = raw['departure_time'] as String?;
+    final time =
+        timeRaw != null && timeRaw.length >= 5 ? timeRaw.substring(0, 5) : null;
+
+    setState(() {
+      _originController.text = raw['origin_address'] as String? ?? '';
+      _destinationController.text = raw['destination_address'] as String? ?? '';
+      if (time != null) _timeFromController.text = time;
+      _descriptionController.text = raw['description'] as String? ?? '';
+      _acceptsPets = raw['allows_pets'] as bool? ?? false;
+      _picksUpPassengers = raw['picks_up_at_door'] as bool? ?? false;
+      _dropsOffPassengers = raw['drops_off_at_door'] as bool? ?? false;
+      _routes
+        ..clear()
+        ..addAll((raw['via'] as List?)?.cast<String>() ?? []);
+      _stops
+        ..clear()
+        ..addAll((raw['stops'] as List?)?.cast<String>() ?? []);
+      _prefillVehicleId = raw['vehicle_id'] as String?;
+      // Clear any stale map results since the address changed
+      _originResult = null;
+      _destResult = null;
+      // History entries came from previously validated trips
+      final histOrigin = raw['origin_address'] as String? ?? '';
+      final histDest = raw['destination_address'] as String? ?? '';
+      _lastValidatedOrigin = histOrigin.isNotEmpty ? histOrigin : null;
+      _lastValidatedDest = histDest.isNotEmpty ? histDest : null;
+    });
+  }
+
+  Future<void> _openHistoryPicker() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _TripHistoryPickerSheet(
+        onSelect: (raw) {
+          Navigator.pop(context);
+          _applyRaw(raw);
+        },
+      ),
+    );
+  }
+
+  bool get _hasRequiredErrors {
+    if (_originController.text.trim().isEmpty) return true;
+    if (_destinationController.text.trim().isEmpty) return true;
+    if (_departureDate == null) return true;
+    if (_timeFromController.text.trim().isEmpty) return true;
+    if (_selectedVehicle == null) return true;
+    return false;
+  }
+
+  bool get _hasSameOriginDest {
+    final origin = _originController.text.trim().toLowerCase();
+    final dest = _destinationController.text.trim().toLowerCase();
+    return origin.isNotEmpty && dest.isNotEmpty && origin == dest;
+  }
+
   Future<void> _onNext() async {
-    if (_originController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Completá el origen del viaje')),
-      );
+    // Trigger inline validation display
+    if (_hasRequiredErrors) {
+      setState(() => _showErrors = true);
       return;
     }
-    if (_destinationController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Completá el destino del viaje')),
-      );
+
+    if (!_originValidated) {
+      setState(() => _showErrors = true);
+      AppToast.show(context, message: 'Seleccioná el origen de la lista de ciudades');
       return;
     }
-    if (_departureDate == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Seleccioná la fecha de salida')),
+
+    if (!_destValidated) {
+      setState(() => _showErrors = true);
+      AppToast.show(context, message: 'Seleccioná el destino de la lista de ciudades');
+      return;
+    }
+
+    if (_hasSameOriginDest) {
+      AppToast.show(context, message: 'El origen y el destino no pueden ser iguales');
+      return;
+    }
+
+    // Check active trip limit before proceeding to map
+    final activeCount = await TripRepository().countActiveTrips();
+    if (!mounted) return;
+    if (activeCount >= 3) {
+      showDialog<void>(
+        context: context,
+        builder: (_) => AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Row(children: [
+            Icon(Icons.block_rounded, color: Color(0xFFDC2626), size: 22),
+            SizedBox(width: 10),
+            Text('Límite de viajes activos',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+          ]),
+          content: const Text(
+            'Ya tenés 3 viajes activos publicados.\n\n'
+            'Cancelá o completá uno de tus viajes actuales antes de poder publicar uno nuevo.',
+            style: TextStyle(fontSize: 14, height: 1.5),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Entendido'),
+            ),
+          ],
+        ),
       );
       return;
     }
 
-    // Validate time
+    // Validate time format
     final fromText = _timeFromController.text.trim();
     final toText = _timeToController.text.trim();
-    if (fromText.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Completá la hora de salida')),
-      );
-      return;
-    }
     final fromMin = _parseMinutes(fromText);
     if (fromMin == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Formato de hora inválido (usá HH:mm)')),
-      );
+      AppToast.show(context, message: 'Formato de hora inválido (usá HH:mm)');
       return;
     }
     if (toText.isNotEmpty) {
       final toMin = _parseMinutes(toText);
       if (toMin == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text('Formato de hora de fin inválido (usá HH:mm)')),
-        );
+        AppToast.show(context, message: 'Formato de hora de fin inválido (usá HH:mm)');
         return;
       }
       if (toMin <= fromMin) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text(
-                  'La hora de fin debe ser mayor que la hora de inicio')),
-        );
+        AppToast.show(context, message: 'La hora de fin debe ser mayor que la hora de inicio');
         return;
       }
     }
 
+    final needsOrigin = !_picksUpPassengers;
+    final needsDest = !_dropsOffPassengers;
+
     // Origin map (only if driver does NOT pick up at door)
-    if (!_picksUpPassengers) {
+    if (needsOrigin) {
       final origin = await Navigator.push<MapResult>(
         context,
         MaterialPageRoute(
-          builder: (_) => const TripMapScreen(title: 'Punto de salida'),
+          builder: (_) => TripMapScreen(
+            title: 'Punto de salida',
+            initialCity: _originController.text.trim().isEmpty
+                ? null
+                : _originController.text.trim(),
+            initialResult: _originResult,
+          ),
         ),
       );
-      if (origin == null) return;
+      if (origin == null) return; // volvió al formulario
       _originResult = origin;
     }
 
-    // Destination map (only if driver does NOT drop off at door)
-    if (!_dropsOffPassengers && mounted) {
-      final dest = await Navigator.push<MapResult>(
-        context,
-        MaterialPageRoute(
-          builder: (_) => const TripMapScreen(title: 'Punto de llegada'),
-        ),
-      );
-      if (dest == null) return;
-      _destResult = dest;
+    // Destination map (only if driver does NOT drop off at door).
+    // Si el usuario vuelve atrás desde el destino y había mapa de origen,
+    // se reabre el mapa de origen con el pin ya guardado.
+    if (needsDest) {
+      while (mounted) {
+        final dest = await Navigator.push<MapResult>(
+          context,
+          MaterialPageRoute(
+            builder: (_) => TripMapScreen(
+              title: 'Punto de llegada',
+              initialCity: _destinationController.text.trim().isEmpty
+                  ? null
+                  : _destinationController.text.trim(),
+              initialResult: _destResult,
+            ),
+          ),
+        );
+
+        if (dest != null) {
+          _destResult = dest;
+          break; // continúa a publicar
+        }
+
+        // El usuario presionó atrás desde el mapa de destino
+        if (!needsOrigin || !mounted) return;
+
+        // Reabre el mapa de origen con el pin previo ya colocado
+        final origin = await Navigator.push<MapResult>(
+          context,
+          MaterialPageRoute(
+            builder: (_) => TripMapScreen(
+              title: 'Punto de salida',
+              initialCity: _originController.text.trim().isEmpty
+                  ? null
+                  : _originController.text.trim(),
+              initialResult: _originResult,
+            ),
+          ),
+        );
+
+        if (origin == null) return; // volvió al formulario desde el origen
+        _originResult = origin;
+        // loop: vuelve a mostrar el mapa de destino
+      }
     }
 
     if (mounted) await _publish();
@@ -264,19 +502,19 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
     setState(() => _publishing = true);
     try {
       final repo = TripRepository();
-      await repo.createTrip(
-        originAddress: _picksUpPassengers
-            ? _originController.text.trim()
-            : (_originResult?.address ?? _originController.text.trim()),
-        destinationAddress: _dropsOffPassengers
-            ? _destinationController.text.trim()
-            : (_destResult?.address ?? _destinationController.text.trim()),
+      final originCity = _originController.text.trim();
+      final destCity = _destinationController.text.trim();
+      final tripId = await repo.createTrip(
+        originAddress: originCity,
+        destinationAddress: destCity,
+        pickupAddress: _picksUpPassengers ? null : _originResult?.address,
+        dropoffAddress: _dropsOffPassengers ? null : _destResult?.address,
         originLat: _originResult?.lat,
         originLng: _originResult?.lng,
         destLat: _destResult?.lat,
         destLng: _destResult?.lng,
         availableSeats: _seats,
-        pricePerSeat: _price,
+        pricePerSeat: _splitCosts ? 0 : _price,
         departureDate: _departureDate!,
         departureTimeFrom: _timeFromController.text.trim(),
         allowsPets: _acceptsPets,
@@ -284,23 +522,40 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
         dropsOffAtDoor: _dropsOffPassengers,
         via: _routes,
         stops: _stops,
+        splitCosts: _splitCosts,
         description: _descriptionController.text.trim(),
         vehicleId: _selectedVehicle?.id,
       );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('¡Viaje publicado con éxito!'),
-            backgroundColor: Color(0xFF16A34A),
-          ),
+        final originAddr = _picksUpPassengers
+            ? originCity
+            : (_originResult?.address ?? originCity);
+        final destAddr = _dropsOffPassengers
+            ? destCity
+            : (_destResult?.address ?? destCity);
+        ref.read(tripSuccessProvider.notifier).state = (
+          originCity: originCity,
+          originAddress: originAddr,
+          destinationCity: destCity,
+          destinationAddress: destAddr,
+          tripId: tripId,
+          departureDate: _departureDate!,
+          departureTime: _timeFromController.text.trim(),
+          seats: _seats,
+          price: _price,
+          vehicle: _selectedVehicle?.displayName,
+          vehicleColor: _selectedVehicle?.colorHex,
+          acceptsPets: _acceptsPets,
+          picksUpAtDoor: _picksUpPassengers,
+          dropsOffAtDoor: _dropsOffPassengers,
+          routes: List<String>.from(_routes),
+          stops: List<String>.from(_stops),
         );
         context.go('/driver');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al publicar: $e')),
-        );
+        AppToast.show(context, message: 'Error al publicar: $e');
       }
     } finally {
       if (mounted) setState(() => _publishing = false);
@@ -312,6 +567,20 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
   Widget build(BuildContext context) {
     final vehiclesAsync = ref.watch(vehiclesProvider);
 
+    // Auto-select the prefill vehicle once the list loads
+    if (_prefillVehicleId != null && _selectedVehicle == null) {
+      vehiclesAsync.whenData((vehicles) {
+        try {
+          final match = vehicles.firstWhere((v) => v.id == _prefillVehicleId);
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) setState(() { _selectedVehicle = match; _prefillVehicleId = null; });
+          });
+        } catch (_) {
+          _prefillVehicleId = null;
+        }
+      });
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Crear viaje'),
@@ -319,6 +588,13 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.go('/driver'),
         ),
+        actions: [
+          IconButton(
+            tooltip: 'Usar viaje anterior',
+            icon: const Icon(Icons.history_rounded),
+            onPressed: _openHistoryPicker,
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
@@ -351,6 +627,7 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
                   ),
                   Expanded(
                     child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         CityAutocompleteField(
                           controller: _originController,
@@ -358,7 +635,33 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
                           icon: Icons.search,
                           defaultSuggestions: popularArgentineCities,
                           citySearchSource: CitySearchSource.georef,
+                          onSelected: (name) =>
+                              setState(() => _lastValidatedOrigin = name),
                         ),
+                        if (_showErrors &&
+                            _originController.text.trim().isEmpty)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 4, left: 4),
+                            child: Text(
+                              'Este campo es obligatorio',
+                              style: TextStyle(
+                                  color: Color(0xFFDC2626),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500),
+                            ),
+                          )
+                        else if (_showErrors &&
+                            !_originValidated)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 4, left: 4),
+                            child: Text(
+                              'Seleccioná una ciudad de la lista',
+                              style: TextStyle(
+                                  color: Color(0xFFDC2626),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500),
+                            ),
+                          ),
                         const SizedBox(height: 12),
                         CityAutocompleteField(
                           controller: _destinationController,
@@ -366,7 +669,33 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
                           icon: Icons.near_me_rounded,
                           defaultSuggestions: popularArgentineCities,
                           citySearchSource: CitySearchSource.georef,
+                          onSelected: (name) =>
+                              setState(() => _lastValidatedDest = name),
                         ),
+                        if (_showErrors &&
+                            _destinationController.text.trim().isEmpty)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 4, left: 4),
+                            child: Text(
+                              'Este campo es obligatorio',
+                              style: TextStyle(
+                                  color: Color(0xFFDC2626),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500),
+                            ),
+                          )
+                        else if (_showErrors &&
+                            !_destValidated)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 4, left: 4),
+                            child: Text(
+                              'Seleccioná una ciudad de la lista',
+                              style: TextStyle(
+                                  color: Color(0xFFDC2626),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500),
+                            ),
+                          ),
                       ],
                     ),
                   ),
@@ -419,7 +748,10 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
               label: 'Ciudades (Opcional)',
               hint: 'Buscar ciudad...',
               chips: _stops,
-              onAdd: (v) => setState(() => _stops.add(v)),
+              onAdd: (v) {
+                setState(() => _stops.add(v));
+                _warnIfStopOffRoute(v);
+              },
               onRemove: (i) => setState(() => _stops.removeAt(i)),
               prefixIcon: Icons.add_location_alt_outlined,
               asyncSearch: (query) async {
@@ -436,7 +768,19 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
             // ── VEHÍCULO ───────────────────────────────────────────────────
             const _SectionHeader(
                 icon: Icons.directions_car_rounded, title: 'Vehículo'),
-            const SizedBox(height: 16),
+            const SizedBox(height: 4),
+            if (_showErrors && _selectedVehicle == null)
+              const Padding(
+                padding: EdgeInsets.only(bottom: 6),
+                child: Text(
+                  'Este campo es obligatorio',
+                  style: TextStyle(
+                      color: Color(0xFFDC2626),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500),
+                ),
+              ),
+            const SizedBox(height: 8),
             vehiclesAsync.when(
               loading: () => const Center(
                   child: CircularProgressIndicator()),
@@ -445,6 +789,7 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
               data: (vehicles) => _VehicleSelector(
                 vehicles: vehicles,
                 selected: _selectedVehicle,
+                hasError: _showErrors && _selectedVehicle == null,
                 onTap: () => _openVehicleSelector(vehicles),
               ),
             ),
@@ -473,7 +818,21 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
                 icon: Icons.calendar_today_rounded,
                 title: 'Fecha y hora'),
             const SizedBox(height: 16),
-            const _MedLabel('FECHA DE SALIDA'),
+            Row(
+              children: [
+                const _MedLabel('FECHA DE SALIDA'),
+                if (_showErrors && _departureDate == null) ...[
+                  const SizedBox(width: 8),
+                  const Text(
+                    '— Este campo es obligatorio',
+                    style: TextStyle(
+                        color: Color(0xFFDC2626),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500),
+                  ),
+                ],
+              ],
+            ),
             const SizedBox(height: 8),
             GestureDetector(
               onTap: () async {
@@ -481,8 +840,11 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
                   context: context,
                   initialDate: DateTime.now(),
                   firstDate: DateTime.now(),
-                  lastDate:
-                      DateTime.now().add(const Duration(days: 365)),
+                  lastDate: DateTime(
+                      DateTime.now().year,
+                      DateTime.now().month + 1,
+                      DateTime.now().day,
+                    ),
                 );
                 if (picked != null) {
                   setState(() => _departureDate = picked);
@@ -516,7 +878,21 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            const _MedLabel('HORA DE SALIDA'),
+            Row(
+              children: [
+                const _MedLabel('HORA DE SALIDA'),
+                if (_showErrors && _timeFromController.text.trim().isEmpty) ...[
+                  const SizedBox(width: 8),
+                  const Text(
+                    '— Este campo es obligatorio',
+                    style: TextStyle(
+                        color: Color(0xFFDC2626),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500),
+                  ),
+                ],
+              ],
+            ),
             const SizedBox(height: 8),
             _RangeInputRow(
               label1: 'Salgo a las',
@@ -554,8 +930,10 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
             _SeatsAndPriceCard(
               seats: _seats,
               price: _price,
+              splitCosts: _splitCosts,
               onSeatsChanged: (v) => setState(() => _seats = v),
               onPriceChanged: (v) => setState(() => _price = v),
+              onSplitCostsChanged: (v) => setState(() => _splitCosts = v),
             ),
 
             const SizedBox(height: 32),
@@ -596,6 +974,36 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
             _DescriptionField(controller: _descriptionController),
 
             const SizedBox(height: 40),
+
+            // ── ERROR BANNER ──────────────────────────────────────────────
+            if (_showErrors && _hasRequiredErrors) ...[
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEE2E2),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFFCA5A5)),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.error_outline_rounded,
+                        color: Color(0xFFDC2626), size: 20),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Hay campos obligatorios sin completar. Revisá los campos marcados en rojo.',
+                        style: TextStyle(
+                            color: Color(0xFFDC2626),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
 
             // ── BOTÓN PUBLICAR ────────────────────────────────────────────
             SizedBox(
@@ -642,11 +1050,13 @@ class _VehicleSelector extends StatelessWidget {
     required this.vehicles,
     required this.selected,
     required this.onTap,
+    this.hasError = false,
   });
 
   final List<Vehicle> vehicles;
   final Vehicle? selected;
   final VoidCallback onTap;
+  final bool hasError;
 
   @override
   Widget build(BuildContext context) {
@@ -656,11 +1066,13 @@ class _VehicleSelector extends StatelessWidget {
         padding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
-          color: const Color(0xFFF1F5F9),
+          color: hasError ? const Color(0xFFFFF5F5) : const Color(0xFFF1F5F9),
           borderRadius: BorderRadius.circular(12),
-          border: selected != null
-              ? Border.all(color: AppColors.primary, width: 1.5)
-              : null,
+          border: hasError
+              ? Border.all(color: const Color(0xFFDC2626), width: 1.5)
+              : selected != null
+                  ? Border.all(color: AppColors.primary, width: 1.5)
+                  : null,
         ),
         child: Row(
           children: [
@@ -934,23 +1346,58 @@ class _RangeInputRow extends StatelessWidget {
   }
 }
 
-class _SeatsAndPriceCard extends StatelessWidget {
+class _SeatsAndPriceCard extends StatefulWidget {
   const _SeatsAndPriceCard({
     required this.seats,
     required this.price,
+    required this.splitCosts,
     required this.onSeatsChanged,
     required this.onPriceChanged,
+    required this.onSplitCostsChanged,
   });
 
   final int seats;
   final int price;
+  final bool splitCosts;
   final ValueChanged<int> onSeatsChanged;
   final ValueChanged<int> onPriceChanged;
+  final ValueChanged<bool> onSplitCostsChanged;
+
+  @override
+  State<_SeatsAndPriceCard> createState() => _SeatsAndPriceCardState();
+}
+
+class _SeatsAndPriceCardState extends State<_SeatsAndPriceCard> {
+  late final TextEditingController _priceController;
+
+  @override
+  void initState() {
+    super.initState();
+    _priceController = TextEditingController(text: widget.price.toString());
+  }
+
+  @override
+  void didUpdateWidget(_SeatsAndPriceCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Update text only when price changed externally (not from our own editing)
+    if (oldWidget.price != widget.price) {
+      final cursor = _priceController.selection;
+      _priceController.text = widget.price.toString();
+      // Restore cursor if still valid
+      if (cursor.start <= _priceController.text.length) {
+        _priceController.selection = cursor;
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _priceController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final priceController =
-        TextEditingController(text: price.toString());
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -989,24 +1436,24 @@ class _SeatsAndPriceCard extends StatelessWidget {
                   children: [
                     IconButton(
                       onPressed: () {
-                        if (seats > 1) onSeatsChanged(seats - 1);
+                        if (widget.seats > 1) widget.onSeatsChanged(widget.seats - 1);
                       },
                       icon: const Icon(Icons.remove,
                           color: AppColors.primary),
                     ),
                     Text(
-                      '$seats',
+                      '${widget.seats}',
                       style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
                           color: Color(0xFF1E293B)),
                     ),
                     IconButton(
-                      onPressed: seats < 5
-                          ? () => onSeatsChanged(seats + 1)
+                      onPressed: widget.seats < 5
+                          ? () => widget.onSeatsChanged(widget.seats + 1)
                           : null,
                       icon: Icon(Icons.add,
-                          color: seats < 5
+                          color: widget.seats < 5
                               ? AppColors.primary
                               : const Color(0xFFCBD5E1)),
                     ),
@@ -1041,39 +1488,93 @@ class _SeatsAndPriceCard extends StatelessWidget {
                   ),
                 ],
               ),
-              Container(
-                width: 120,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: TextField(
-                  controller: priceController,
-                  keyboardType: TextInputType.number,
-                  textAlign: TextAlign.right,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.digitsOnly
-                  ],
-                  style: const TextStyle(
-                      fontWeight: FontWeight.bold, fontSize: 16),
-                  onChanged: (v) =>
-                      onPriceChanged(int.tryParse(v) ?? 0),
-                  decoration: const InputDecoration(
-                    prefixIcon: Padding(
-                      padding: EdgeInsets.only(left: 12, top: 12),
-                      child: Text(
-                        'ARS',
-                        style: TextStyle(
-                            color: AppColors.primary,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13),
-                      ),
-                    ),
-                    border: InputBorder.none,
-                    contentPadding: EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 12),
+              Opacity(
+                opacity: widget.splitCosts ? 0.4 : 1.0,
+                child: Container(
+                  width: 130,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
                   ),
+                  child: widget.splitCosts
+                      ? const Padding(
+                          padding: EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 14),
+                          child: Text(
+                            'Se dividirán',
+                            style: TextStyle(
+                                color: Color(0xFF94A3B8),
+                                fontSize: 13,
+                                fontStyle: FontStyle.italic),
+                            textAlign: TextAlign.center,
+                          ),
+                        )
+                      : TextField(
+                          controller: _priceController,
+                          keyboardType: TextInputType.number,
+                          textAlign: TextAlign.right,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly
+                          ],
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 16),
+                          onChanged: (v) =>
+                              widget.onPriceChanged(int.tryParse(v) ?? 0),
+                          decoration: const InputDecoration(
+                            prefixIcon: Padding(
+                              padding: EdgeInsets.only(left: 12, top: 12),
+                              child: Text(
+                                'ARS',
+                                style: TextStyle(
+                                    color: AppColors.primary,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13),
+                              ),
+                            ),
+                            border: InputBorder.none,
+                            contentPadding: EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 12),
+                          ),
+                        ),
                 ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 16),
+          const Divider(color: Color(0xFFE2E8F0)),
+          const SizedBox(height: 4),
+
+          // Dividir gastos
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Dividir gastos',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 15,
+                          color: Color(0xFF1E293B)),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Activa esta opción si el precio del viaje será la división de los gastos totales del mismo',
+                      style: const TextStyle(
+                          fontSize: 11,
+                          color: Color(0xFF64748B),
+                          height: 1.4),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Switch(
+                value: widget.splitCosts,
+                onChanged: widget.onSplitCostsChanged,
+                activeColor: AppColors.primary,
               ),
             ],
           ),
@@ -1135,6 +1636,244 @@ class _PreferenceToggle extends StatelessWidget {
     );
   }
 }
+
+// ── Trip History Picker Sheet ─────────────────────────────────────────────
+
+class _TripHistoryPickerSheet extends StatefulWidget {
+  const _TripHistoryPickerSheet({required this.onSelect});
+  final void Function(Map<String, dynamic> raw) onSelect;
+
+  @override
+  State<_TripHistoryPickerSheet> createState() =>
+      _TripHistoryPickerSheetState();
+}
+
+class _TripHistoryPickerSheetState extends State<_TripHistoryPickerSheet> {
+  List<Map<String, dynamic>>? _trips;
+  bool _loading = true;
+  String? _loadingId;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetch();
+  }
+
+  Future<void> _fetch() async {
+    try {
+      final trips = await TripRepository().fetchDriverTripSummaries();
+      if (mounted) setState(() { _trips = trips; _loading = false; });
+    } catch (_) {
+      if (mounted) setState(() { _trips = []; _loading = false; });
+    }
+  }
+
+  Future<void> _select(String tripId) async {
+    setState(() => _loadingId = tripId);
+    try {
+      final raw = await TripRepository().fetchTripForRepeat(tripId);
+      if (!mounted || raw == null) return;
+      widget.onSelect(raw);
+    } finally {
+      if (mounted) setState(() => _loadingId = null);
+    }
+  }
+
+  String _formatDate(String dateStr) {
+    try {
+      final d = DateTime.parse(dateStr);
+      return '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+    } catch (_) {
+      return dateStr;
+    }
+  }
+
+  String? _trimTime(dynamic v) {
+    final s = v as String?;
+    if (s == null || s.length < 5) return null;
+    return s.substring(0, 5);
+  }
+
+  bool _isActive(String? status) =>
+      status == 'active' || status == 'full';
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      initialChildSize: 0.6,
+      minChildSize: 0.4,
+      maxChildSize: 0.92,
+      builder: (_, controller) => Container(
+        decoration: const BoxDecoration(
+          color: AppColors.pageBackground,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(children: [
+          const SizedBox(height: 12),
+          Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+                color: AppColors.border,
+                borderRadius: BorderRadius.circular(2)),
+          ),
+          const SizedBox(height: 16),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Row(children: [
+              const Icon(Icons.history_rounded,
+                  size: 20, color: AppColors.primary),
+              const SizedBox(width: 8),
+              const Text('Mis viajes',
+                  style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimary)),
+              const Spacer(),
+              const Text('Tocá uno para copiar sus datos',
+                  style: TextStyle(
+                      fontSize: 12, color: AppColors.textSecondary)),
+            ]),
+          ),
+          const SizedBox(height: 16),
+          const Divider(height: 1, color: AppColors.border),
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : (_trips == null || _trips!.isEmpty)
+                    ? const Center(
+                        child: Text('No tenés viajes creados',
+                            style: TextStyle(
+                                fontSize: 14,
+                                color: AppColors.textSecondary)))
+                    : ListView.separated(
+                        controller: controller,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 12),
+                        itemCount: _trips!.length,
+                        separatorBuilder: (_, __) =>
+                            const SizedBox(height: 8),
+                        itemBuilder: (_, i) {
+                          final t = _trips![i];
+                          final id = t['id'] as String;
+                          final origin = t['origin_address'] as String;
+                          final destination = t['destination_address'] as String;
+                          final dateStr = t['departure_date'] as String;
+                          final time = _trimTime(t['departure_time']);
+                          final via = (t['via'] as List?)?.cast<String>() ?? [];
+                          final active = _isActive(t['status'] as String?);
+                          final isLoading = _loadingId == id;
+                          return InkWell(
+                            onTap: isLoading || _loadingId != null
+                                ? null
+                                : () => _select(id),
+                            borderRadius: BorderRadius.circular(14),
+                            child: Container(
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: AppColors.background,
+                                border: Border.all(
+                                    color: active
+                                        ? AppColors.primary.withOpacity(0.35)
+                                        : AppColors.border,
+                                    width: 1.5),
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              child: Row(children: [
+                                Expanded(
+                                  child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                    Row(children: [
+                                      Expanded(
+                                        child: Text(
+                                          '$origin  →  $destination',
+                                          style: const TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w600,
+                                              color: AppColors.textPrimary),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      if (active) ...[
+                                        const SizedBox(width: 8),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 7, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: AppColors.primaryLight,
+                                            borderRadius:
+                                                BorderRadius.circular(6),
+                                          ),
+                                          child: const Text('Activo',
+                                              style: TextStyle(
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: AppColors.primary)),
+                                        ),
+                                      ],
+                                    ]),
+                                    const SizedBox(height: 4),
+                                    Row(children: [
+                                      const Icon(
+                                          Icons.calendar_today_rounded,
+                                          size: 12,
+                                          color: AppColors.textSecondary),
+                                      const SizedBox(width: 4),
+                                      Text(_formatDate(dateStr),
+                                          style: const TextStyle(
+                                              fontSize: 12,
+                                              color: AppColors.textSecondary)),
+                                      if (time != null) ...[
+                                        const SizedBox(width: 10),
+                                        const Icon(
+                                            Icons.access_time_rounded,
+                                            size: 12,
+                                            color: AppColors.textSecondary),
+                                        const SizedBox(width: 4),
+                                        Text(time,
+                                            style: const TextStyle(
+                                                fontSize: 12,
+                                                color:
+                                                    AppColors.textSecondary)),
+                                      ],
+                                    ]),
+                                    if (via.isNotEmpty) ...[
+                                      const SizedBox(height: 3),
+                                      Text(
+                                          'Vía: ${via.join(', ')}',
+                                          style: const TextStyle(
+                                              fontSize: 12,
+                                              color: AppColors.textSecondary),
+                                          overflow: TextOverflow.ellipsis),
+                                    ],
+                                  ]),
+                                ),
+                                const SizedBox(width: 12),
+                                isLoading
+                                    ? const SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(
+                                            strokeWidth: 2))
+                                    : const Icon(
+                                        Icons.content_copy_rounded,
+                                        size: 18,
+                                        color: AppColors.primary),
+                              ]),
+                            ),
+                          );
+                        },
+                      ),
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 class _DescriptionField extends StatelessWidget {
   const _DescriptionField({required this.controller});

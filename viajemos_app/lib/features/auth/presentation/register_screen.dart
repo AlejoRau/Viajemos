@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -70,8 +71,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
     try {
       await Supabase.instance.client.auth.signInWithOAuth(
         OAuthProvider.google,
-        redirectTo: Uri.base.origin,
-        authScreenLaunchMode: LaunchMode.externalApplication,
+        redirectTo: kIsWeb ? Uri.base.origin : 'io.viajemos.app://login-callback/',
+        authScreenLaunchMode: kIsWeb
+            ? LaunchMode.platformDefault
+            : LaunchMode.externalApplication,
       );
     } on AuthException catch (e) {
       if (mounted) setState(() { _error = _mapError(e.message); _loading = false; _googleLoading = false; });

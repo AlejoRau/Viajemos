@@ -70,6 +70,9 @@ final _router = GoRouter(
           chatId: state.pathParameters['id']!,
           contactName: extra['contactName'] as String? ?? 'Conversación',
           contactId: extra['contactId'] as String?,
+          tripId: extra['tripId'] as String?,
+          isGroupChat: extra['isGroupChat'] as bool? ?? false,
+          participantsCount: extra['participantsCount'] as int? ?? 2,
         );
       },
     ),
@@ -108,7 +111,18 @@ final _router = GoRouter(
             );
           },
         ),
-        GoRoute(path: '/passenger/create-request', builder: (_, __) => const CreateRequestScreen()),
+        GoRoute(
+          path: '/passenger/create-request',
+          builder: (_, state) {
+            final extra = (state.extra as Map?)?.cast<String, dynamic>() ?? {};
+            return CreateRequestScreen(
+              prefillOrigin: extra['origin'] as String?,
+              prefillDestination: extra['destination'] as String?,
+              prefillDateFrom: extra['dateFrom'] as DateTime?,
+              prefillDateTo: extra['dateTo'] as DateTime?,
+            );
+          },
+        ),
         GoRoute(path: '/history', builder: (_, __) => const HistoryScreen()),
         GoRoute(path: '/chats', builder: (_, __) => const ChatsScreen()),
         GoRoute(path: '/profile', builder: (_, __) => const ProfileScreen()),

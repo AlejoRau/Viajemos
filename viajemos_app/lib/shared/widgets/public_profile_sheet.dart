@@ -108,11 +108,31 @@ class _ProfileBody extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(profile.fullName,
+                    RichText(
+                      text: TextSpan(
                         style: const TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
-                            color: Color(0xFF1E293B))),
+                            color: Color(0xFF1E293B)),
+                        children: [
+                          TextSpan(text: profile.fullName),
+                          if (profile.birthDate != null) ...[
+                            const TextSpan(
+                              text: ', ',
+                              style: TextStyle(
+                                  fontWeight: FontWeight.w400,
+                                  color: Color(0xFF94A3B8)),
+                            ),
+                            TextSpan(
+                              text: '${_age(profile.birthDate!)}',
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w500,
+                                  color: Color(0xFF64748B)),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
                     const SizedBox(height: 4),
                     Row(
                       children: [
@@ -163,6 +183,33 @@ class _ProfileBody extends StatelessWidget {
               ),
             ],
           ),
+          if (profile.cancelledTripsCount > 0 ||
+              profile.expelledPassengersCount > 0) ...[
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                if (profile.cancelledTripsCount > 0)
+                  Expanded(
+                    child: _StatBox(
+                        value: '${profile.cancelledTripsCount}',
+                        label: 'Viajes\ncancelados',
+                        icon: Icons.cancel_outlined,
+                        negative: true),
+                  ),
+                if (profile.cancelledTripsCount > 0 &&
+                    profile.expelledPassengersCount > 0)
+                  const SizedBox(width: 12),
+                if (profile.expelledPassengersCount > 0)
+                  Expanded(
+                    child: _StatBox(
+                        value: '${profile.expelledPassengersCount}',
+                        label: 'Pasajeros\nexpulsados',
+                        icon: Icons.person_remove_rounded,
+                        negative: true),
+                  ),
+              ],
+            ),
+          ],
           const SizedBox(height: 20),
 
           // Bio driver
@@ -228,6 +275,16 @@ class _ProfileBody extends StatelessWidget {
     );
   }
 
+  int _age(DateTime birth) {
+    final today = DateTime.now();
+    int age = today.year - birth.year;
+    if (today.month < birth.month ||
+        (today.month == birth.month && today.day < birth.day)) {
+      age--;
+    }
+    return age;
+  }
+
   String _formatYear(DateTime d) {
     const months = [
       'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
@@ -238,32 +295,41 @@ class _ProfileBody extends StatelessWidget {
 }
 
 class _StatBox extends StatelessWidget {
-  const _StatBox(
-      {required this.value, required this.label, required this.icon});
+  const _StatBox({
+    required this.value,
+    required this.label,
+    required this.icon,
+    this.negative = false,
+  });
   final String value;
   final String label;
   final IconData icon;
+  final bool negative;
 
   @override
   Widget build(BuildContext context) {
+    final color = negative ? Colors.red.shade600 : AppColors.primary;
+    final bg = negative
+        ? Colors.red.withValues(alpha: 0.07)
+        : AppColors.inputBackground;
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
       decoration: BoxDecoration(
-        color: AppColors.inputBackground,
+        color: bg,
         borderRadius: BorderRadius.circular(14),
       ),
       child: Row(
         children: [
-          Icon(icon, size: 22, color: AppColors.primary),
+          Icon(icon, size: 22, color: color),
           const SizedBox(width: 10),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(value,
-                  style: const TextStyle(
+                  style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF1E293B))),
+                      color: negative ? color : const Color(0xFF1E293B))),
               Text(label,
                   style: const TextStyle(
                       fontSize: 11,

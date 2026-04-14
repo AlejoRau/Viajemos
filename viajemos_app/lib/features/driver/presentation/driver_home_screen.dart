@@ -1,18 +1,39 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/widgets/role_option_card.dart';
+import '../../../shared/widgets/role_switcher_title.dart';
+import '../../../shared/providers/trip_success_provider.dart';
+import '../../../shared/widgets/trip_success_overlay.dart';
 
-class DriverHomeScreen extends StatelessWidget {
+class DriverHomeScreen extends ConsumerStatefulWidget {
   const DriverHomeScreen({super.key});
+
+  @override
+  ConsumerState<DriverHomeScreen> createState() => _DriverHomeScreenState();
+}
+
+class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkSuccess());
+  }
+
+  void _checkSuccess() {
+    final success = ref.read(tripSuccessProvider);
+    if (success != null && mounted) {
+      ref.read(tripSuccessProvider.notifier).state = null;
+      showTripSuccessOverlay(context, trip: success);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Conductor',
-            style: AppTextStyles.passengerTitle
-                .copyWith(color: AppColors.primary)),
+        title: const RoleSwitcherTitle(),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.go('/'),

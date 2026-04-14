@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/formatters/date_formatter.dart';
 import '../../../shared/services/city_search_service.dart';
 import '../../../shared/widgets/city_autocomplete_field.dart';
+import '../../history/data/history_repository.dart';
 import '../../passenger/data/passenger_request_repository.dart';
 
 // ── Pantalla de filtro ────────────────────────────────────────────────────────
@@ -54,7 +57,7 @@ class _PassengerRequestsFilterScreenState
         ),
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.fromLTRB(24, 48, 24, 24),
         child: Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
@@ -196,7 +199,7 @@ class _PassengerRequestsFilterScreenState
 
 // ── Pantalla de resultados ────────────────────────────────────────────────────
 
-class PassengerRequestsScreen extends StatefulWidget {
+class PassengerRequestsScreen extends ConsumerStatefulWidget {
   const PassengerRequestsScreen({
     super.key,
     this.origin = '',
@@ -211,11 +214,12 @@ class PassengerRequestsScreen extends StatefulWidget {
   final String dateTo;
 
   @override
-  State<PassengerRequestsScreen> createState() =>
+  ConsumerState<PassengerRequestsScreen> createState() =>
       _PassengerRequestsScreenState();
 }
 
-class _PassengerRequestsScreenState extends State<PassengerRequestsScreen> {
+class _PassengerRequestsScreenState
+    extends ConsumerState<PassengerRequestsScreen> {
   late Future<List<PassengerRequest>> _requestsFuture;
   DateTime? _filterDate;
 
@@ -263,89 +267,39 @@ class _PassengerRequestsScreenState extends State<PassengerRequestsScreen> {
     return '$dayName ${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}';
   }
 
-  void _showOfferSheet(PassengerRequest request) {
-    final priceController = TextEditingController(
-        text: request.maxPrice?.toString() ?? '');
-    final cityController =
-        TextEditingController(text: request.destinationAddress);
-    final messageController = TextEditingController();
+  Future<void> _showOfferSheet(PassengerRequest request) async {
+    // Load driver's active trips before showing the sheet
+    List<ActiveDriverTrip> driverTrips;
+    try {
+      driverTrips = await ref
+          .read(historyRepositoryProvider)
+          .fetchActiveDriverTrips();
+    } catch (_) {
+      driverTrips = [];
+    }
 
-    showModalBottomSheet(
+    if (!mounted) return;
+
+    // Filter only trips with available seats
+    final availableTrips =
+        driverTrips.where((t) => t.freeSeats > 0).toList();
+
+    if (availableTrips.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text(
+                'No tenés viajes activos con lugares disponibles para ofrecer.')),
+      );
+      return;
+    }
+
+    await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-          top: 20,
-          left: 20,
-          right: 20,
-        ),
-        decoration: const BoxDecoration(
-          color: AppColors.background,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                    color: AppColors.border,
-                    borderRadius: BorderRadius.circular(2)),
-              ),
-            ),
-            const SizedBox(height: 20),
-            Text('Ofrecer viaje a ${request.passengerName}',
-                style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.primary)),
-            const SizedBox(height: 16),
-            TextField(
-              controller: priceController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Tu precio ofrecido (\$)',
-                hintText: 'Ej: 5000',
-                prefixIcon: Icon(Icons.attach_money_rounded),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: cityController,
-              decoration: const InputDecoration(
-                labelText: 'Ciudad de destino',
-                prefixIcon: Icon(Icons.location_on_rounded),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: messageController,
-              maxLines: 4,
-              decoration: const InputDecoration(
-                labelText: 'Mensaje para el pasajero',
-                hintText: 'Escribe algo para convencer al pasajero...',
-                alignLabelWithHint: true,
-              ),
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                      content:
-                          Text('Oferta enviada a ${request.passengerName}')),
-                );
-              },
-              child: const Text('Confirmar oferta'),
-            ),
-          ],
-        ),
+      builder: (ctx) => _OfferSheet(
+        request: request,
+        availableTrips: availableTrips,
       ),
     );
   }
@@ -443,9 +397,10 @@ class _PassengerRequestsScreenState extends State<PassengerRequestsScreen> {
                 if (_filterDate != null) {
                   final fd = _filterDate!;
                   requests = requests.where((r) {
+                    final effectiveTo = r.dateTo ?? r.dateFrom;
                     return !r.dateFrom.isAfter(
                             DateTime(fd.year, fd.month, fd.day, 23, 59)) &&
-                        !r.dateTo.isBefore(
+                        !effectiveTo.isBefore(
                             DateTime(fd.year, fd.month, fd.day));
                   }).toList();
                 }
@@ -717,6 +672,222 @@ class _RequestCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ── Offer Sheet ───────────────────────────────────────────────────────────────
+
+class _OfferSheet extends StatefulWidget {
+  const _OfferSheet({
+    required this.request,
+    required this.availableTrips,
+  });
+  final PassengerRequest request;
+  final List<ActiveDriverTrip> availableTrips;
+
+  @override
+  State<_OfferSheet> createState() => _OfferSheetState();
+}
+
+class _OfferSheetState extends State<_OfferSheet> {
+  final _messageController = TextEditingController();
+  ActiveDriverTrip? _selectedTrip;
+  bool _sending = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.availableTrips.length == 1) {
+      _selectedTrip = widget.availableTrips.first;
+    }
+  }
+
+  @override
+  void dispose() {
+    _messageController.dispose();
+    super.dispose();
+  }
+
+  String _tripLabel(ActiveDriverTrip t) {
+    String cityOf(String addr) {
+      final parts = addr.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+      if (parts.length <= 1) return addr.trim();
+      if (RegExp(r'^\d').hasMatch(parts.first)) return parts.last;
+      return parts.first;
+    }
+
+    final date =
+        '${t.departureDate.day.toString().padLeft(2, '0')}/${t.departureDate.month.toString().padLeft(2, '0')}';
+    return '${cityOf(t.originAddress)} → ${cityOf(t.destinationAddress)}  ·  $date  ·  ${t.freeSeats} lugar${t.freeSeats != 1 ? 'es' : ''}';
+  }
+
+  Future<void> _send() async {
+    if (_selectedTrip == null || _sending) return;
+    setState(() => _sending = true);
+    try {
+      await Supabase.instance.client.rpc('send_trip_invitation', params: {
+        'p_trip_alert_id': widget.request.id,
+        'p_trip_id': _selectedTrip!.id,
+        'p_message': _messageController.text.trim().isEmpty
+            ? null
+            : _messageController.text.trim(),
+      });
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+                'Oferta enviada a ${widget.request.passengerName}'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _sending = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text('Error al enviar oferta: $e'),
+              backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+        top: 20,
+        left: 20,
+        right: 20,
+      ),
+      decoration: const BoxDecoration(
+        color: AppColors.background,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                  color: AppColors.border,
+                  borderRadius: BorderRadius.circular(2)),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            'Ofrecer viaje a ${widget.request.passengerName}',
+            style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: AppColors.primary),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '${widget.request.originAddress} → ${widget.request.destinationAddress}',
+            style: const TextStyle(
+                fontSize: 13, color: AppColors.textSecondary),
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 20),
+
+          // Trip selector
+          const Text(
+            'SELECCIONÁ TU VIAJE',
+            style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            decoration: BoxDecoration(
+              color: AppColors.inputBackground,
+              border: Border.all(color: AppColors.border, width: 2),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<ActiveDriverTrip>(
+                value: _selectedTrip,
+                isExpanded: true,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12),
+                hint: const Text('Elegí un viaje',
+                    style: TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 14)),
+                items: widget.availableTrips
+                    .map((t) => DropdownMenuItem(
+                          value: t,
+                          child: Text(
+                            _tripLabel(t),
+                            style: const TextStyle(fontSize: 13),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ))
+                    .toList(),
+                onChanged: (v) => setState(() => _selectedTrip = v),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Message
+          const Text(
+            'MENSAJE (OPCIONAL)',
+            style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _messageController,
+            maxLines: 3,
+            maxLength: 300,
+            decoration: InputDecoration(
+              hintText: 'Ej: Hola, paso cerca de tu zona!',
+              hintStyle: const TextStyle(
+                  color: AppColors.textSecondary, fontSize: 13),
+              border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12)),
+              contentPadding: const EdgeInsets.all(14),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          SizedBox(
+            width: double.infinity,
+            height: 52,
+            child: ElevatedButton(
+              onPressed: _selectedTrip == null || _sending ? null : _send,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14)),
+                elevation: 0,
+              ),
+              child: _sending
+                  ? const SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
+                  : const Text('Enviar oferta',
+                      style: TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.w600)),
+            ),
+          ),
+        ],
       ),
     );
   }
