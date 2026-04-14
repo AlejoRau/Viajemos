@@ -40,20 +40,11 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
   int _seats = 1;
   int _price = 4500;
   bool _publishing = false;
+  bool _showErrors = false;
 
   // Last city name confirmed via autocomplete selection (null = not validated)
   String? _lastValidatedOrigin;
   String? _lastValidatedDest;
-
-  bool get _originValidated =>
-      _lastValidatedOrigin != null &&
-      _lastValidatedOrigin!.toLowerCase() ==
-          _originController.text.trim().toLowerCase();
-
-  bool get _destValidated =>
-      _lastValidatedDest != null &&
-      _lastValidatedDest!.toLowerCase() ==
-          _destinationController.text.trim().toLowerCase();
 
   @override
   void initState() {
@@ -73,20 +64,70 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
     if (widget.prefillDateTo != null) _dateTo = widget.prefillDateTo;
   }
 
+  bool get _originValidated =>
+      _lastValidatedOrigin != null &&
+      _lastValidatedOrigin!.toLowerCase() ==
+          _originController.text.trim().toLowerCase();
+
+  bool get _destValidated =>
+      _lastValidatedDest != null &&
+      _lastValidatedDest!.toLowerCase() ==
+          _destinationController.text.trim().toLowerCase();
+
+  bool get _hasRequiredErrors =>
+      _originController.text.trim().isEmpty ||
+      _destinationController.text.trim().isEmpty ||
+      _dateFrom == null;
+
+  bool get _hasAnyData =>
+      _originController.text.trim().isNotEmpty ||
+      _destinationController.text.trim().isNotEmpty ||
+      _dateFrom != null;
+
   void _onOriginChanged() {
     if (_lastValidatedOrigin != null &&
         _lastValidatedOrigin!.toLowerCase() !=
             _originController.text.trim().toLowerCase()) {
-      setState(() => _lastValidatedOrigin = null);
+      _lastValidatedOrigin = null;
     }
+    if (_showErrors) setState(() {});
   }
 
   void _onDestChanged() {
     if (_lastValidatedDest != null &&
         _lastValidatedDest!.toLowerCase() !=
             _destinationController.text.trim().toLowerCase()) {
-      setState(() => _lastValidatedDest = null);
+      _lastValidatedDest = null;
     }
+    if (_showErrors) setState(() {});
+  }
+
+  Future<bool> _confirmDiscard() async {
+    if (!_hasAnyData) return true;
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('¿Salir sin guardar?',
+            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+        content: const Text(
+          'Si salís ahora, los cambios que hiciste se van a perder.',
+          style: TextStyle(fontSize: 14, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Seguir editando'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: const Color(0xFFDC2626)),
+            child: const Text('Descartar cambios'),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
   }
 
   @override
@@ -102,15 +143,13 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
   }
 
   String? _validate() {
-    if (_originController.text.trim().isEmpty) return 'Ingresá el origen';
-    if (_destinationController.text.trim().isEmpty) return 'Ingresá el destino';
+    if (_hasRequiredErrors) return 'required';
     if (!_originValidated) return 'Seleccioná el origen de la lista de ciudades';
     if (!_destValidated) return 'Seleccioná el destino de la lista de ciudades';
     if (_originController.text.trim().toLowerCase() ==
         _destinationController.text.trim().toLowerCase()) {
       return 'El origen y el destino no pueden ser iguales';
     }
-    if (_dateFrom == null) return 'Seleccioná la fecha de inicio';
     if (_dateTo != null && _dateTo!.isBefore(_dateFrom!)) return 'La fecha de fin debe ser igual o posterior al inicio';
     final tf = _timeFromController.text.trim();
     final tt = _timeToController.text.trim();
@@ -133,7 +172,8 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
   Future<void> _publish() async {
     final error = _validate();
     if (error != null) {
-      AppToast.show(context, message: error);
+      setState(() => _showErrors = true);
+      if (error != 'required') AppToast.show(context, message: error);
       return;
     }
 
@@ -189,12 +229,20 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        if (await _confirmDiscard() && mounted) context.go('/passenger');
+      },
+      child: Scaffold(
       appBar: AppBar(
         title: const Text('Publicar pedido'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.go('/passenger'),
+          onPressed: () async {
+            if (await _confirmDiscard() && mounted) context.go('/passenger');
+          },
         ),
       ),
       body: SingleChildScrollView(
@@ -230,6 +278,24 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
                           onSelected: (name) =>
                               setState(() => _lastValidatedOrigin = name),
                         ),
+                        if (_showErrors && _originController.text.trim().isEmpty)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 4, left: 4),
+                            child: Text('Este campo es obligatorio',
+                                style: TextStyle(
+                                    color: Color(0xFFDC2626),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w500)),
+                          )
+                        else if (_showErrors && !_originValidated)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 4, left: 4),
+                            child: Text('Seleccioná una ciudad de la lista',
+                                style: TextStyle(
+                                    color: Color(0xFFDC2626),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w500)),
+                          ),
                         const SizedBox(height: 12),
                         _buildLocationInput(
                           controller: _destinationController,
@@ -238,6 +304,24 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
                           onSelected: (name) =>
                               setState(() => _lastValidatedDest = name),
                         ),
+                        if (_showErrors && _destinationController.text.trim().isEmpty)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 4, left: 4),
+                            child: Text('Este campo es obligatorio',
+                                style: TextStyle(
+                                    color: Color(0xFFDC2626),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w500)),
+                          )
+                        else if (_showErrors && !_destValidated)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 4, left: 4),
+                            child: Text('Seleccioná una ciudad de la lista',
+                                style: TextStyle(
+                                    color: Color(0xFFDC2626),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w500)),
+                          ),
                       ],
                     ),
                   ),
@@ -255,13 +339,27 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
             Row(
               children: [
                 Expanded(
-                  child: _DatePickerInput(
-                    label: 'Desde',
-                    value: _dateFrom,
-                    onPicked: (d) => setState(() {
-                      _dateFrom = d;
-                      if (_dateTo != null && _dateTo!.isBefore(d)) _dateTo = d;
-                    }),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _DatePickerInput(
+                        label: 'Desde',
+                        value: _dateFrom,
+                        onPicked: (d) => setState(() {
+                          _dateFrom = d;
+                          if (_dateTo != null && _dateTo!.isBefore(d)) _dateTo = d;
+                        }),
+                      ),
+                      if (_showErrors && _dateFrom == null)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 4, left: 4),
+                          child: Text('Este campo es obligatorio',
+                              style: TextStyle(
+                                  color: Color(0xFFDC2626),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500)),
+                        ),
+                    ],
                   ),
                 ),
                 const Padding(
@@ -352,7 +450,7 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
           ],
         ),
       ),
-    );
+    ));
   }
 }
 
