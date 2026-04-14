@@ -15,6 +15,7 @@ import 'features/passenger/presentation/passenger_home_screen.dart';
 import 'features/passenger/presentation/search_trips_screen.dart';
 import 'features/passenger/presentation/create_request_screen.dart';
 import 'features/history/presentation/history_screen.dart';
+import 'features/history/data/history_repository.dart';
 import 'features/chats/presentation/chats_screen.dart';
 import 'features/chats/presentation/chat_detail_screen.dart';
 import 'features/profile/presentation/profile_screen.dart';
@@ -151,6 +152,11 @@ class _ViajemosAppState extends ConsumerState<ViajemosApp> {
       if (data.event == AuthChangeEvent.signedIn) {
         // Invalidate all user-specific providers so they re-fetch with the new session
         ref.invalidate(profileProvider);
+        ref.invalidate(passengerActiveRequestsProvider);
+        ref.invalidate(passengerCompletedTripsProvider);
+        ref.invalidate(myTripAlertsProvider);
+        ref.invalidate(activeDriverTripsProvider);
+        ref.invalidate(driverHistoryProvider);
         ref.read(unreadCountProvider.notifier).refresh();
         ref.read(pendingInvitationsCountProvider.notifier).refresh();
         ref.read(pendingRequestsCountProvider.notifier).refresh();

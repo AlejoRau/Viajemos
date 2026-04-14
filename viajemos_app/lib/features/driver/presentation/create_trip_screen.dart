@@ -418,7 +418,7 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
     if (activeCount >= 3) {
       showDialog<void>(
         context: context,
-        builder: (_) => AlertDialog(
+        builder: (dialogContext) => AlertDialog(
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           title: const Row(children: [
@@ -434,7 +434,7 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: () => Navigator.pop(dialogContext),
               child: const Text('Entendido'),
             ),
           ],
