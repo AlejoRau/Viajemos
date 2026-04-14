@@ -9,6 +9,7 @@ import '../../../features/vehicles/data/vehicles_provider.dart';
 import '../../../features/vehicles/domain/vehicle.dart';
 import '../../../shared/widgets/vehicle_selector_sheet.dart';
 import '../../../shared/services/city_search_service.dart';
+import '../../../shared/widgets/app_toast.dart';
 import '../../../shared/widgets/city_autocomplete_field.dart';
 import '../data/trip_repository.dart';
 import 'trip_map_screen.dart';
@@ -201,6 +202,41 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
     if (error != _timeError) setState(() => _timeError = error);
   }
 
+  /// Geocodes origin, stop, and destination and shows a warning snackbar
+  /// if the stop adds more than 40% to the direct route distance.
+  Future<void> _warnIfStopOffRoute(String stopName) async {
+    final origin = _originController.text.trim();
+    final destination = _destinationController.text.trim();
+    if (origin.isEmpty || destination.isEmpty) return;
+
+    try {
+      final svc = CitySearchService.instance;
+      final results = await Future.wait([
+        svc.geocodeCity(origin),
+        svc.geocodeCity(stopName),
+        svc.geocodeCity(destination),
+      ]);
+      final o = results[0];
+      final s = results[1];
+      final d = results[2];
+      if (o == null || s == null || d == null) return;
+
+      final ratio = CitySearchService.detourRatio(
+        o.$1, o.$2, s.$1, s.$2, d.$1, d.$2,
+      );
+
+      if (ratio > 1.4 && mounted) {
+        AppToast.show(
+          context,
+          message: '$stopName parece estar muy lejos de tu ruta. Verificá que sea una parada válida.',
+          type: ToastType.warning,
+        );
+      }
+    } catch (_) {
+      // Geocoding failed silently — don't block the user
+    }
+  }
+
   String get _dateDisplayText {
     if (_departureDate == null) return '';
     final d = _departureDate!;
@@ -237,9 +273,7 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
             setState(() => _selectedVehicle = newVehicle);
           } catch (e) {
             if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Error al guardar el vehículo: $e')),
-              );
+              AppToast.show(context, message: 'Error al guardar el vehículo: $e');
             }
           }
         },
@@ -328,33 +362,18 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
 
     if (!_originValidated) {
       setState(() => _showErrors = true);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Seleccioná el origen de la lista de ciudades'),
-          backgroundColor: Color(0xFFDC2626),
-        ),
-      );
+      AppToast.show(context, message: 'Seleccioná el origen de la lista de ciudades');
       return;
     }
 
     if (!_destValidated) {
       setState(() => _showErrors = true);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Seleccioná el destino de la lista de ciudades'),
-          backgroundColor: Color(0xFFDC2626),
-        ),
-      );
+      AppToast.show(context, message: 'Seleccioná el destino de la lista de ciudades');
       return;
     }
 
     if (_hasSameOriginDest) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('El origen y el destino no pueden ser iguales'),
-          backgroundColor: Color(0xFFDC2626),
-        ),
-      );
+      AppToast.show(context, message: 'El origen y el destino no pueden ser iguales');
       return;
     }
 
@@ -394,27 +413,17 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
     final toText = _timeToController.text.trim();
     final fromMin = _parseMinutes(fromText);
     if (fromMin == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Formato de hora inválido (usá HH:mm)')),
-      );
+      AppToast.show(context, message: 'Formato de hora inválido (usá HH:mm)');
       return;
     }
     if (toText.isNotEmpty) {
       final toMin = _parseMinutes(toText);
       if (toMin == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text('Formato de hora de fin inválido (usá HH:mm)')),
-        );
+        AppToast.show(context, message: 'Formato de hora de fin inválido (usá HH:mm)');
         return;
       }
       if (toMin <= fromMin) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text(
-                  'La hora de fin debe ser mayor que la hora de inicio')),
-        );
+        AppToast.show(context, message: 'La hora de fin debe ser mayor que la hora de inicio');
         return;
       }
     }
@@ -546,9 +555,7 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al publicar: $e')),
-        );
+        AppToast.show(context, message: 'Error al publicar: $e');
       }
     } finally {
       if (mounted) setState(() => _publishing = false);
@@ -741,7 +748,10 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
               label: 'Ciudades (Opcional)',
               hint: 'Buscar ciudad...',
               chips: _stops,
-              onAdd: (v) => setState(() => _stops.add(v)),
+              onAdd: (v) {
+                setState(() => _stops.add(v));
+                _warnIfStopOffRoute(v);
+              },
               onRemove: (i) => setState(() => _stops.removeAt(i)),
               prefixIcon: Icons.add_location_alt_outlined,
               asyncSearch: (query) async {

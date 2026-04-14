@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 import 'package:http/http.dart' as http;
 
 class CitySuggestion {
@@ -209,5 +210,64 @@ class CitySearchService {
       final display = provincia.isNotEmpty ? '$nombre, $provincia' : nombre;
       return CitySuggestion(name: nombre, displayName: display);
     }).where((s) => s.name.isNotEmpty).toList();
+  }
+
+  // ── Geocoding ─────────────────────────────────────────────────────────────
+  /// Returns the (lat, lon) centroid of a city name using Georef.
+  /// Returns null if not found or on error.
+  Future<(double lat, double lon)?> geocodeCity(String cityName) async {
+    final q = cityName.trim();
+    if (q.isEmpty) return null;
+    for (final endpoint in ['municipios', 'localidades']) {
+      try {
+        final uri = Uri.https('apis.datos.gob.ar', '/georef/api/$endpoint', {
+          'nombre': q,
+          'campos': 'nombre,centroide.lat,centroide.lon',
+          'max': '1',
+        });
+        final response = await http
+            .get(uri, headers: {'Accept': 'application/json'})
+            .timeout(const Duration(seconds: 6));
+        if (response.statusCode != 200) continue;
+        final json = jsonDecode(response.body) as Map<String, dynamic>;
+        final items = (json[endpoint] as List?) ?? [];
+        if (items.isEmpty) continue;
+        final centroide = items.first['centroide'] as Map<String, dynamic>?;
+        if (centroide == null) continue;
+        final lat = (centroide['lat'] as num?)?.toDouble();
+        final lon = (centroide['lon'] as num?)?.toDouble();
+        if (lat != null && lon != null) return (lat, lon);
+      } catch (_) {
+        continue;
+      }
+    }
+    return null;
+  }
+
+  // ── Distance helpers ──────────────────────────────────────────────────────
+  /// Haversine distance in km between two lat/lon points.
+  static double distanceKm(double lat1, double lon1, double lat2, double lon2) {
+    const r = 6371.0;
+    final dLat = _rad(lat2 - lat1);
+    final dLon = _rad(lon2 - lon1);
+    final a = sin(dLat / 2) * sin(dLat / 2) +
+        cos(_rad(lat1)) * cos(_rad(lat2)) * sin(dLon / 2) * sin(dLon / 2);
+    return r * 2 * atan2(sqrt(a), sqrt(1 - a));
+  }
+
+  static double _rad(double deg) => deg * pi / 180;
+
+  /// Detour ratio: (origin→stop + stop→dest) / (origin→dest).
+  /// Values >> 1.0 mean the stop is far off route.
+  static double detourRatio(
+    double oLat, double oLon,
+    double sLat, double sLon,
+    double dLat, double dLon,
+  ) {
+    final direct = distanceKm(oLat, oLon, dLat, dLon);
+    if (direct < 1) return 1.0; // origin ≈ destination, skip check
+    final withStop =
+        distanceKm(oLat, oLon, sLat, sLon) + distanceKm(sLat, sLon, dLat, dLon);
+    return withStop / direct;
   }
 }

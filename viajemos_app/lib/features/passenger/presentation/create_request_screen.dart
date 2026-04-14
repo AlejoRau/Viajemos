@@ -6,6 +6,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../shared/formatters/date_formatter.dart';
 import '../../../shared/services/city_search_service.dart';
 import '../../../shared/widgets/city_autocomplete_field.dart';
+import '../../../shared/widgets/app_toast.dart';
 import '../data/passenger_request_repository.dart';
 
 class CreateRequestScreen extends ConsumerStatefulWidget {
@@ -110,9 +111,7 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
   Future<void> _publish() async {
     final error = _validate();
     if (error != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error), backgroundColor: Colors.red.shade600),
-      );
+      AppToast.show(context, message: error);
       return;
     }
 
@@ -138,22 +137,12 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
             : _descriptionController.text.trim(),
       );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('¡Pedido publicado con éxito!'),
-            backgroundColor: Color(0xFF16A34A),
-          ),
-        );
+        AppToast.show(context, message: '¡Pedido publicado con éxito!', type: ToastType.success);
         context.go('/passenger');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error al publicar: $e'),
-            backgroundColor: Colors.red.shade600,
-          ),
-        );
+        AppToast.show(context, message: 'Error al publicar: $e');
       }
     } finally {
       if (mounted) setState(() => _publishing = false);

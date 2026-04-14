@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/widgets/public_profile_sheet.dart';
+import '../../../shared/widgets/app_toast.dart';
 import '../data/trip_search_repository.dart';
 import '../domain/trip_search_result.dart';
 
@@ -640,10 +641,11 @@ class _TripDetailsSheetState extends State<_TripDetailsSheet> {
         message: fullMessage,
       );
       if (mounted) {
-        final messenger = ScaffoldMessenger.of(context);
         Navigator.of(context).pop();
-        messenger.showSnackBar(
-          SnackBar(content: Text('Solicitud enviada a ${trip.driverName}')),
+        AppToast.show(
+          context,
+          message: 'Solicitud enviada a ${trip.driverName}',
+          type: ToastType.success,
         );
       }
     } catch (e) {
@@ -653,9 +655,7 @@ class _TripDetailsSheetState extends State<_TripDetailsSheet> {
             : e.toString().contains('own')
                 ? 'No podés unirte a tu propio viaje'
                 : 'Error: $e';
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(msg), backgroundColor: Colors.red),
-        );
+        AppToast.show(context, message: msg);
       }
     } finally {
       if (mounted) setState(() => _sending = false);
