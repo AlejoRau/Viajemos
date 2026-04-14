@@ -63,6 +63,6 @@ class DefaultFirebaseOptions {
     messagingSenderId: '147494018448',
     projectId: 'viajemos-bb840',
     storageBucket: 'viajemos-bb840.firebasestorage.app',
-    iosBundleId: 'com.example.viajemosApp',
+    iosBundleId: 'com.viajemos.app',
   );
 }
