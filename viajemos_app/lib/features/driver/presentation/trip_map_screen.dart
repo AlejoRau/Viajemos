@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-// ignore: avoid_web_libraries_in_flutter
-import 'dart:html' as html;
+import 'package:geolocator/geolocator.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:http/http.dart' as http;
@@ -312,10 +311,12 @@ class _TripMapScreenState extends State<TripMapScreen>
   void _getMyLocation() async {
     setState(() => _locating = true);
     try {
-      final pos = await html.window.navigator.geolocation.getCurrentPosition();
-      final lat = pos.coords!.latitude!.toDouble();
-      final lng = pos.coords!.longitude!.toDouble();
-      if (mounted) _dropPin(LatLng(lat, lng));
+      final permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        await Geolocator.requestPermission();
+      }
+      final pos = await Geolocator.getCurrentPosition();
+      if (mounted) _dropPin(LatLng(pos.latitude, pos.longitude));
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

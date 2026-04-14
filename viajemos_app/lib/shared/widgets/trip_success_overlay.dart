@@ -1,6 +1,5 @@
-// ignore: avoid_web_libraries_in_flutter
-import 'dart:html' as html;
 import 'dart:ui';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../providers/trip_success_provider.dart';
@@ -68,7 +67,7 @@ class _TripSuccessOverlayState extends State<_TripSuccessOverlay>
     widget.onDismiss();
   }
 
-  void _openUrl(String url) => html.window.open(url, '_blank');
+  void _openUrl(String url) => launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
 
   void _shareWhatsApp() =>
       _openUrl('https://wa.me/?text=${Uri.encodeComponent(_shareText)}');
