@@ -3,6 +3,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/providers/role_provider.dart';
 import '../../../shared/widgets/public_profile_sheet.dart';
@@ -160,6 +161,101 @@ class _ActiveTripCard extends ConsumerStatefulWidget {
 
 class _ActiveTripCardState extends ConsumerState<_ActiveTripCard> {
   bool _deleting = false;
+  bool _togglingPrivacy = false;
+  late bool _isPrivate;
+
+  @override
+  void initState() {
+    super.initState();
+    _isPrivate = widget.trip.isPrivate;
+  }
+
+  @override
+  void didUpdateWidget(_ActiveTripCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.trip.isPrivate != widget.trip.isPrivate) {
+      _isPrivate = widget.trip.isPrivate;
+    }
+  }
+
+  Future<void> _togglePrivacy() async {
+    if (_togglingPrivacy) return;
+    final newValue = !_isPrivate;
+
+    // Confirm before making the trip private
+    if (newValue) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text(
+            '¿Hacer viaje privado?',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+          ),
+          content: const Text(
+            '¿Estás seguro que querés hacer privado tu viaje? Ya no lo mostraremos en la búsqueda de los usuarios.',
+            style: TextStyle(fontSize: 14, height: 1.4),
+          ),
+          actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancelar'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange.shade700,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
+                elevation: 0,
+              ),
+              child: const Text('Sí, hacer privado'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+    }
+
+    setState(() {
+      _isPrivate = newValue;
+      _togglingPrivacy = true;
+    });
+    try {
+      await ref.read(historyRepositoryProvider).toggleTripPrivacy(widget.trip.id, newValue);
+      ref.refresh(activeDriverTripsProvider);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(newValue ? 'Viaje marcado como privado' : 'Viaje marcado como público'),
+          duration: const Duration(seconds: 2),
+        ));
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _isPrivate = !newValue);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Error al cambiar privacidad')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _togglingPrivacy = false);
+    }
+  }
+
+  void _shareTrip() {
+    final trip = widget.trip;
+    final date = _formatDate(trip.departureDate);
+    final time = trip.departureTime != null ? '  ·  ${trip.departureTime}' : '';
+    final seats = trip.freeSeats;
+    final text = '🚗 Viajemos: ${trip.originAddress} → ${trip.destinationAddress}\n'
+        '📅 $date$time\n'
+        '💺 $seats lugar${seats != 1 ? 'es' : ''} disponible${seats != 1 ? 's' : ''}\n'
+        '💰 \$${_formatNum(trip.pricePerSeat)} por asiento\n\n'
+        '¡Sumate al viaje!';
+    Share.share(text);
+  }
 
   void _showPassengerList(BuildContext context, List<String> names,
       List<String> ids, List<String> requestIds) {
@@ -296,7 +392,7 @@ class _ActiveTripCardState extends ConsumerState<_ActiveTripCard> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Header: ACTIVO badge + status
+                  // Header: ACTIVO badge + privacy badge + actions
                   Row(
                     children: [
                       Container(
@@ -304,7 +400,7 @@ class _ActiveTripCardState extends ConsumerState<_ActiveTripCard> {
                             horizontal: 8, vertical: 3),
                         decoration: BoxDecoration(
                           color: trip.isFull
-                              ? Colors.orange.shade100
+                              ? const Color(0xFFDBEAFE)
                               : Colors.green.shade100,
                           borderRadius: BorderRadius.circular(8),
                         ),
@@ -316,7 +412,7 @@ class _ActiveTripCardState extends ConsumerState<_ActiveTripCard> {
                               height: 6,
                               decoration: BoxDecoration(
                                 color: trip.isFull
-                                    ? Colors.orange
+                                    ? const Color(0xFF2563EB)
                                     : Colors.green,
                                 shape: BoxShape.circle,
                               ),
@@ -328,13 +424,37 @@ class _ActiveTripCardState extends ConsumerState<_ActiveTripCard> {
                                 fontSize: 11,
                                 fontWeight: FontWeight.w700,
                                 color: trip.isFull
-                                    ? Colors.orange.shade800
+                                    ? const Color(0xFF2563EB)
                                     : Colors.green.shade800,
                               ),
                             ),
                           ],
                         ),
                       ),
+                      if (_isPrivate) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 7, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.shade100,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.lock_rounded,
+                                  size: 10, color: Colors.orange.shade800),
+                              const SizedBox(width: 3),
+                              Text('PRIVADO',
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.orange.shade800)),
+                            ],
+                          ),
+                        ),
+                      ],
                       const Spacer(),
                       // Accepted passenger avatars (clickable)
                       if (trip.acceptedPassengerNames.isNotEmpty)
@@ -350,7 +470,35 @@ class _ActiveTripCardState extends ConsumerState<_ActiveTripCard> {
                             avatarUrls: trip.acceptedPassengerAvatarUrls,
                           ),
                         ),
-                      const SizedBox(width: 4),
+                      const SizedBox(width: 2),
+                      // Privacy toggle button
+                      SizedBox(
+                        width: 32,
+                        height: 32,
+                        child: _togglingPrivacy
+                            ? Padding(
+                                padding: const EdgeInsets.all(6),
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.orange.shade600),
+                              )
+                            : IconButton(
+                                padding: EdgeInsets.zero,
+                                icon: Icon(
+                                  _isPrivate
+                                      ? Icons.lock_rounded
+                                      : Icons.lock_open_rounded,
+                                  size: 20,
+                                  color: _isPrivate
+                                      ? Colors.orange.shade700
+                                      : AppColors.textSecondary,
+                                ),
+                                onPressed: _togglePrivacy,
+                                tooltip: _isPrivate
+                                    ? 'Privado – toca para abrir'
+                                    : 'Público – toca para privatizar',
+                              ),
+                      ),
                       // Delete button
                       SizedBox(
                         width: 32,
@@ -376,7 +524,7 @@ class _ActiveTripCardState extends ConsumerState<_ActiveTripCard> {
 
                   // Route
                   Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Flexible(
                         child: _RoutePlace(
@@ -386,7 +534,7 @@ class _ActiveTripCardState extends ConsumerState<_ActiveTripCard> {
                         ),
                       ),
                       const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 6),
+                        padding: EdgeInsets.only(top: 2, left: 6, right: 6),
                         child: Icon(Icons.arrow_forward_rounded,
                             size: 16, color: AppColors.primary),
                       ),
@@ -428,28 +576,63 @@ class _ActiveTripCardState extends ConsumerState<_ActiveTripCard> {
                     ),
                   ),
 
-                  // CTA row
+                  // CTA buttons
                   const SizedBox(height: 12),
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      Text(
-                        'Ver detalles',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: hasPending
-                              ? Colors.green.shade700
-                              : AppColors.primary,
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => showModalBottomSheet(
+                            context: context,
+                            isScrollControlled: true,
+                            backgroundColor: Colors.transparent,
+                            builder: (_) => _DriverTripDetailsSheet(
+                                trip: trip, pageContext: context),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: hasPending
+                                ? Colors.green.shade700
+                                : AppColors.primary,
+                            side: BorderSide(
+                                color: hasPending
+                                    ? Colors.green.shade400
+                                    : AppColors.primary),
+                            minimumSize: const Size(0, 42),
+                            padding: EdgeInsets.zero,
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12)),
+                          ),
+                          child: const Text('Ver detalles',
+                              style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600)),
                         ),
                       ),
-                      const SizedBox(width: 4),
-                      Icon(
-                        Icons.chevron_right_rounded,
-                        size: 18,
-                        color: hasPending
-                            ? Colors.green.shade700
-                            : AppColors.primary,
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: _shareTrip,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF2563EB),
+                            foregroundColor: Colors.white,
+                            minimumSize: const Size(0, 42),
+                            padding: EdgeInsets.zero,
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12)),
+                            elevation: 0,
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: const [
+                              Icon(Icons.share_rounded, size: 15),
+                              SizedBox(width: 6),
+                              Text('Compartir',
+                                  style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600)),
+                            ],
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -651,7 +834,7 @@ class _DriverTripDetailsSheetState
 
                   // Route cities
                   Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Flexible(
                         child: _RoutePlace(
@@ -661,7 +844,7 @@ class _DriverTripDetailsSheetState
                         ),
                       ),
                       const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 6),
+                        padding: EdgeInsets.only(top: 2, left: 6, right: 6),
                         child: Icon(Icons.arrow_forward_rounded,
                             size: 16, color: AppColors.primary),
                       ),
@@ -2122,6 +2305,18 @@ class _ActivePassengerRequestCardState
     extends ConsumerState<_ActivePassengerRequestCard> {
   bool _cancelling = false;
 
+  void _shareRequest() {
+    final req = widget.request;
+    final date = _formatDate(req.departureDate);
+    final time = req.departureTime != null ? '  ·  ${req.departureTime}' : '';
+    final text = '🚗 Viajemos: ${req.originAddress} → ${req.destinationAddress}\n'
+        '📅 $date$time\n'
+        '💰 \$${_formatNum(req.pricePerSeat)} por asiento\n'
+        '🚘 ${req.driverName}\n\n'
+        '¡Encontré este viaje en Viajemos!';
+    Share.share(text);
+  }
+
   Future<void> _confirmCancel() async {
     final req = widget.request;
     final isAccepted = req.isAccepted;
@@ -2320,11 +2515,8 @@ class _ActivePassengerRequestCardState
                   ),
                   const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 6),
-                    child: Text('→',
-                        style: TextStyle(
-                            fontSize: 15,
-                            color: AppColors.primary,
-                            fontWeight: FontWeight.w700)),
+                    child: Icon(Icons.arrow_forward_rounded,
+                        size: 15, color: AppColors.primary),
                   ),
                   Flexible(
                     child: Text(
@@ -2384,22 +2576,53 @@ class _ActivePassengerRequestCardState
                 ],
               ),
 
-              // CTA row
+              // CTA buttons
               const SizedBox(height: 12),
               Row(
-                mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  Text(
-                    'Ver detalles',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.primary,
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => showModalBottomSheet(
+                        context: context,
+                        isScrollControlled: true,
+                        backgroundColor: Colors.transparent,
+                        builder: (_) =>
+                            _PassengerRequestDetailSheet(request: req),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.green.shade700,
+                        side: BorderSide(color: Colors.green.shade400),
+                        padding:
+                            const EdgeInsets.symmetric(vertical: 10),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: const Text('Ver detalles',
+                          style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600)),
                     ),
                   ),
-                  const SizedBox(width: 4),
-                  const Icon(Icons.chevron_right_rounded,
-                      size: 18, color: AppColors.primary),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: _shareRequest,
+                      icon: const Icon(Icons.share_rounded, size: 15),
+                      label: const Text('Compartir',
+                          style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF2563EB),
+                        foregroundColor: Colors.white,
+                        padding:
+                            const EdgeInsets.symmetric(vertical: 10),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                        elevation: 0,
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ],
@@ -2736,11 +2959,8 @@ class _ActiveTripHistoryCard extends StatelessWidget {
                 ),
                 const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 6),
-                    child: Text('→',
-                        style: TextStyle(
-                            fontSize: 15,
-                            color: AppColors.primary,
-                            fontWeight: FontWeight.w600))),
+                    child: Icon(Icons.arrow_forward_rounded,
+                        size: 15, color: AppColors.primary)),
                 Flexible(
                     child: Text(trip.destinationAddress,
                         style: const TextStyle(
@@ -2876,18 +3096,17 @@ class _DriverTripCardState extends State<_DriverTripCard> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
               Row(children: [
-                Text(trip.originAddress,
-                    style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textPrimary)),
+                Flexible(
+                    child: Text(trip.originAddress,
+                        style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textPrimary),
+                        overflow: TextOverflow.ellipsis)),
                 const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 6),
-                    child: Text('→',
-                        style: TextStyle(
-                            fontSize: 15,
-                            color: AppColors.primary,
-                            fontWeight: FontWeight.w600))),
+                    child: Icon(Icons.arrow_forward_rounded,
+                        size: 15, color: AppColors.primary)),
                 Flexible(
                     child: Text(trip.destinationAddress,
                         style: const TextStyle(
@@ -3095,18 +3314,17 @@ class _PassengerCompletedTripCard extends ConsumerWidget {
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(children: [
-                Text(trip.originAddress,
-                    style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textPrimary)),
+                Flexible(
+                    child: Text(trip.originAddress,
+                        style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textPrimary),
+                        overflow: TextOverflow.ellipsis)),
                 const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 6),
-                    child: Text('→',
-                        style: TextStyle(
-                            fontSize: 15,
-                            color: AppColors.primary,
-                            fontWeight: FontWeight.w600))),
+                    child: Icon(Icons.arrow_forward_rounded,
+                        size: 15, color: AppColors.primary)),
                 Flexible(
                     child: Text(trip.destinationAddress,
                         style: const TextStyle(

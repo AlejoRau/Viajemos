@@ -112,7 +112,7 @@ class _CityAutocompleteFieldState extends State<CityAutocompleteField>
       return;
     }
     if (mounted) setState(() => _loading = true);
-    CitySearchService.instance.debounce(const Duration(milliseconds: 350),
+    CitySearchService.instance.debounce(const Duration(milliseconds: 500),
         () async {
       if (!mounted) return;
       final results = await CitySearchService.instance.search(query,

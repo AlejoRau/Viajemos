@@ -19,8 +19,14 @@ class MapResult {
 class TripMapScreen extends StatefulWidget {
   final String title;
   final String? initialCity;
+  final MapResult? initialResult;
 
-  const TripMapScreen({super.key, required this.title, this.initialCity});
+  const TripMapScreen({
+    super.key,
+    required this.title,
+    this.initialCity,
+    this.initialResult,
+  });
 
   @override
   State<TripMapScreen> createState() => _TripMapScreenState();
@@ -62,7 +68,14 @@ class _TripMapScreenState extends State<TripMapScreen>
     );
     _pinCtrl.forward();
 
-    if (widget.initialCity != null && widget.initialCity!.trim().isNotEmpty) {
+    final ir = widget.initialResult;
+    if (ir != null) {
+      _pin = LatLng(ir.lat, ir.lng);
+      _address = ir.address;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _mapController.move(_pin, 15);
+      });
+    } else if (widget.initialCity != null && widget.initialCity!.trim().isNotEmpty) {
       _centerOnCity(widget.initialCity!.trim());
     }
   }

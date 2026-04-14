@@ -10,6 +10,8 @@ class ConversationSummary {
     this.lastMessageAt,
     this.name,
     this.tripId,
+    this.isGroupChat = false,
+    this.participantsCount = 2,
   });
 
   final String id;
@@ -20,6 +22,8 @@ class ConversationSummary {
   final int unreadCount;
   final String? name;
   final String? tripId;
+  final bool isGroupChat;
+  final int participantsCount;
 }
 
 class ChatMessage {
@@ -30,6 +34,7 @@ class ChatMessage {
     required this.content,
     required this.createdAt,
     required this.isMine,
+    this.senderName,
   });
 
   final String id;
@@ -38,6 +43,24 @@ class ChatMessage {
   final String content;
   final DateTime createdAt;
   final bool isMine;
+  /// Display name of the sender — populated for group chat messages.
+  final String? senderName;
+}
+
+// ── Group participant ─────────────────────────────────────────────────────────
+
+class GroupParticipant {
+  const GroupParticipant({
+    required this.userId,
+    required this.fullName,
+    required this.isDriver,
+    this.avatarUrl,
+  });
+
+  final String userId;
+  final String fullName;
+  final String? avatarUrl;
+  final bool isDriver;
 }
 
 class PendingRequestInfo {
@@ -278,6 +301,8 @@ class ChatRepository {
         unreadCount: (row['unread_count'] as num?)?.toInt() ?? 0,
         name: row['name'] as String?,
         tripId: row['trip_id'] as String?,
+        isGroupChat: row['is_group_chat'] as bool? ?? false,
+        participantsCount: (row['participants_count'] as num?)?.toInt() ?? 2,
       );
     }).toList();
   }
@@ -285,21 +310,38 @@ class ChatRepository {
   Future<List<ChatMessage>> fetchMessages(String conversationId) async {
     final data = await _client
         .from('messages')
-        .select('id, conversation_id, sender_id, content, created_at')
+        .select('id, conversation_id, sender_id, content, created_at, profiles!sender_id(full_name)')
         .eq('conversation_id', conversationId)
         .order('created_at', ascending: false) as List; // newest first
 
     final myId = _myId;
     return data
-        .map((row) => ChatMessage(
-              id: row['id'] as String,
-              conversationId: row['conversation_id'] as String,
-              senderId: row['sender_id'] as String,
-              content: row['content'] as String,
-              createdAt: DateTime.parse(row['created_at'] as String),
-              isMine: row['sender_id'] == myId,
-            ))
+        .map((row) {
+          final profile = row['profiles'] as Map<String, dynamic>?;
+          return ChatMessage(
+            id: row['id'] as String,
+            conversationId: row['conversation_id'] as String,
+            senderId: row['sender_id'] as String,
+            content: row['content'] as String,
+            createdAt: DateTime.parse(row['created_at'] as String),
+            isMine: row['sender_id'] == myId,
+            senderName: profile?['full_name'] as String?,
+          );
+        })
         .toList();
+  }
+
+  Future<List<GroupParticipant>> fetchGroupParticipants(String conversationId) async {
+    final data = await _client.rpc(
+      'get_group_participants',
+      params: {'p_conversation_id': conversationId},
+    ) as List;
+    return data.map((row) => GroupParticipant(
+          userId: row['user_id'] as String,
+          fullName: row['full_name'] as String? ?? 'Usuario',
+          avatarUrl: row['avatar_url'] as String?,
+          isDriver: row['is_driver'] as bool? ?? false,
+        )).toList();
   }
 
   Future<void> sendMessage(String conversationId, String content) async {
@@ -503,6 +545,7 @@ class ChatRepository {
               content: row['content'] as String,
               createdAt: DateTime.parse(row['created_at'] as String),
               isMine: false,
+              // senderName not available in realtime payload; group UI resolves via cached participants
             ));
           },
         )

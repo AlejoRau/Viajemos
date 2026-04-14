@@ -24,6 +24,8 @@ class ChatDetailScreen extends ConsumerStatefulWidget {
   final String contactName;
   final String? contactId;
   final String? tripId;
+  final bool isGroupChat;
+  final int participantsCount;
 
   const ChatDetailScreen({
     super.key,
@@ -31,6 +33,8 @@ class ChatDetailScreen extends ConsumerStatefulWidget {
     required this.contactName,
     this.contactId,
     this.tripId,
+    this.isGroupChat = false,
+    this.participantsCount = 2,
   });
 
   @override
@@ -56,17 +60,26 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
   bool _invitationBannerDismissed = false;
   bool _processingInvitation = false;
 
+  // Group chat
+  List<GroupParticipant> _groupParticipants = [];
+  // Maps userId → displayName for quick lookup in message bubbles
+  Map<String, String> _participantNames = {};
+
   @override
   void initState() {
     super.initState();
     _loadMessages();
     _subscribe();
-    if (widget.contactId != null) {
-      _loadPendingRequest();
-      _loadPendingInvitation();
-    }
-    if (widget.tripId != null) {
-      _loadTripInfo();
+    if (widget.isGroupChat) {
+      _loadGroupParticipants();
+    } else {
+      if (widget.contactId != null) {
+        _loadPendingRequest();
+        _loadPendingInvitation();
+      }
+      if (widget.tripId != null) {
+        _loadTripInfo();
+      }
     }
   }
 
@@ -117,6 +130,36 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
   Future<void> _loadTripInfo() async {
     final info = await _chatRepo.fetchTripInfo(widget.tripId!);
     if (mounted && info != null) setState(() => _tripInfo = info);
+  }
+
+  Future<void> _loadGroupParticipants() async {
+    try {
+      final participants = await _chatRepo.fetchGroupParticipants(widget.chatId);
+      if (mounted) {
+        setState(() {
+          _groupParticipants = participants;
+          _participantNames = {for (final p in participants) p.userId: p.fullName};
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading group participants: $e');
+    }
+  }
+
+  Future<void> _showGroupMembers() async {
+    if (_groupParticipants.isEmpty) {
+      await _loadGroupParticipants();
+    }
+    if (!mounted) return;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _GroupMembersSheet(
+        participants: _groupParticipants,
+        loader: () => _chatRepo.fetchGroupParticipants(widget.chatId),
+      ),
+    );
   }
 
   void _subscribe() {
@@ -287,44 +330,83 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
           icon: const Icon(Icons.arrow_back_rounded),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Row(
-          children: [
-            CircleAvatar(
-              radius: 18,
-              backgroundColor: AppColors.primaryLight,
-              child: Text(
-                _initials(widget.contactName),
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.primary,
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _tripInfo != null
-                  ? Text(
-                      '${widget.contactName} · ${_tripInfo!.originCity}→${_tripInfo!.destinationCity} ${_tripInfo!.shortDate}',
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textPrimary,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    )
-                  : Text(
-                      widget.contactName,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textPrimary,
-                      ),
-                      overflow: TextOverflow.ellipsis,
+        title: widget.isGroupChat
+            ? GestureDetector(
+                onTap: _showGroupMembers,
+                child: Row(
+                  children: [
+                    const CircleAvatar(
+                      radius: 18,
+                      backgroundColor: Color(0xFFEDE9FE),
+                      child: Icon(Icons.groups_rounded,
+                          size: 20, color: Color(0xFF7C3AED)),
                     ),
-            ),
-          ],
-        ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            widget.contactName,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.textPrimary,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            '${_groupParticipants.isEmpty ? widget.participantsCount : _groupParticipants.length} integrantes · Ver',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Color(0xFF7C3AED),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            : Row(
+                children: [
+                  CircleAvatar(
+                    radius: 18,
+                    backgroundColor: AppColors.primaryLight,
+                    child: Text(
+                      _initials(widget.contactName),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _tripInfo != null
+                        ? Text(
+                            '${widget.contactName} · ${_tripInfo!.originCity}→${_tripInfo!.destinationCity} ${_tripInfo!.shortDate}',
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textPrimary,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          )
+                        : Text(
+                            widget.contactName,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textPrimary,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                  ),
+                ],
+              ),
       ),
       body: Column(
         children: [
@@ -385,7 +467,14 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
                               ),
                             );
                           }
-                          return _MessageBubble(message: _messages[i]);
+                          final msg = _messages[i];
+                          final senderName = widget.isGroupChat && !msg.isMine
+                              ? (msg.senderName ?? _participantNames[msg.senderId])
+                              : null;
+                          return _MessageBubble(
+                            message: msg,
+                            senderName: senderName,
+                          );
                         },
                       ),
           ),
@@ -778,60 +867,266 @@ class _InvitationBanner extends StatelessWidget {
 }
 
 class _MessageBubble extends StatelessWidget {
-  const _MessageBubble({required this.message});
+  const _MessageBubble({required this.message, this.senderName});
   final ChatMessage message;
+  final String? senderName;
 
   @override
   Widget build(BuildContext context) {
     final isMine = message.isMine;
     return Align(
       alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.72,
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: isMine ? AppColors.primary : Colors.white,
-          borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(18),
-            topRight: const Radius.circular(18),
-            bottomLeft: Radius.circular(isMine ? 18 : 4),
-            bottomRight: Radius.circular(isMine ? 4 : 18),
+      child: Column(
+        crossAxisAlignment:
+            isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        children: [
+          if (senderName != null)
+            Padding(
+              padding: const EdgeInsets.only(left: 4, bottom: 2),
+              child: Text(
+                senderName!,
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF7C3AED),
+                ),
+              ),
+            ),
+          Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.of(context).size.width * 0.72,
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: isMine ? AppColors.primary : Colors.white,
+              borderRadius: BorderRadius.only(
+                topLeft: const Radius.circular(18),
+                topRight: const Radius.circular(18),
+                bottomLeft: Radius.circular(isMine ? 18 : 4),
+                bottomRight: Radius.circular(isMine ? 4 : 18),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.06),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment:
+                  isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+              children: [
+                Text(
+                  message.content,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: isMine ? Colors.white : AppColors.textPrimary,
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _formatTime(message.createdAt),
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: isMine
+                        ? Colors.white.withValues(alpha: 0.75)
+                        : AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
           ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.06),
-              blurRadius: 4,
-              offset: const Offset(0, 2),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Group Members Sheet ───────────────────────────────────────────────────────
+
+class _GroupMembersSheet extends StatefulWidget {
+  const _GroupMembersSheet({
+    required this.participants,
+    required this.loader,
+  });
+  final List<GroupParticipant> participants;
+  final Future<List<GroupParticipant>> Function() loader;
+
+  @override
+  State<_GroupMembersSheet> createState() => _GroupMembersSheetState();
+}
+
+class _GroupMembersSheetState extends State<_GroupMembersSheet> {
+  late List<GroupParticipant> _participants;
+  bool _loading = false;
+  bool _hasError = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _participants = widget.participants;
+    if (_participants.isEmpty) {
+      _load();
+    }
+  }
+
+  Future<void> _load() async {
+    setState(() { _loading = true; _hasError = false; });
+    try {
+      final result = await widget.loader();
+      if (mounted) setState(() { _participants = result; _loading = false; });
+    } catch (e) {
+      debugPrint('GroupMembersSheet load error: $e');
+      if (mounted) setState(() { _loading = false; _hasError = true; });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final participants = _participants;
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Handle bar
+          Container(
+            margin: const EdgeInsets.only(top: 12, bottom: 8),
+            width: 36,
+            height: 4,
+            decoration: BoxDecoration(
+              color: AppColors.border,
+              borderRadius: BorderRadius.circular(2),
             ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment:
-              isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-          children: [
-            Text(
-              message.content,
-              style: TextStyle(
-                fontSize: 14,
-                color: isMine ? Colors.white : AppColors.textPrimary,
-                height: 1.4,
-              ),
+          ),
+          // Header
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+            child: Row(
+              children: [
+                const Icon(Icons.groups_rounded,
+                    size: 20, color: Color(0xFF7C3AED)),
+                const SizedBox(width: 8),
+                Text(
+                  'Integrantes (${participants.length})',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const Spacer(),
+                IconButton(
+                  icon: const Icon(Icons.close_rounded,
+                      size: 20, color: AppColors.textSecondary),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
             ),
-            const SizedBox(height: 4),
-            Text(
-              _formatTime(message.createdAt),
-              style: TextStyle(
-                fontSize: 11,
-                color: isMine
-                    ? Colors.white.withValues(alpha: 0.75)
-                    : AppColors.textSecondary,
-              ),
+          ),
+          const Divider(height: 1, color: AppColors.border),
+          // Participant list
+          ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.5,
             ),
-          ],
-        ),
+            child: _loading
+                ? const Padding(
+                    padding: EdgeInsets.all(32),
+                    child: Center(child: CircularProgressIndicator()),
+                  )
+                : _hasError
+                    ? Padding(
+                        padding: const EdgeInsets.all(32),
+                        child: Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Text('No se pudieron cargar los integrantes'),
+                              const SizedBox(height: 12),
+                              TextButton(onPressed: _load, child: const Text('Reintentar')),
+                            ],
+                          ),
+                        ),
+                      )
+                : participants.isEmpty
+                    ? const Padding(
+                        padding: EdgeInsets.all(32),
+                        child: Center(child: Text('No hay integrantes')),
+                      )
+                : ListView.separated(
+                    shrinkWrap: true,
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    itemCount: participants.length,
+                    separatorBuilder: (_, __) =>
+                        const Divider(height: 1, indent: 72, color: AppColors.border),
+                    itemBuilder: (context, i) {
+                      final p = participants[i];
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 10),
+                        child: Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 22,
+                              backgroundColor: p.isDriver
+                                  ? AppColors.primaryLight
+                                  : const Color(0xFFF1F5F9),
+                              child: Text(
+                                _initials(p.fullName),
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: p.isDriver
+                                      ? AppColors.primary
+                                      : AppColors.textSecondary,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Text(
+                                p.fullName,
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w500,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                            ),
+                            if (p.isDriver)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: AppColors.primaryLight,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: const Text(
+                                  'Conductor',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.primary,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+          ),
+          SizedBox(height: MediaQuery.of(context).padding.bottom + 12),
+        ],
       ),
     );
   }

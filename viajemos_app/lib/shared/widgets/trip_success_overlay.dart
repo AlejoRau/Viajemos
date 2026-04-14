@@ -121,49 +121,18 @@ class _TripSuccessOverlayState extends State<_TripSuccessOverlay>
                   child: Padding(
                     padding: EdgeInsets.symmetric(horizontal: isWide ? 0 : 18),
                     child: SingleChildScrollView(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          _MainCard(trip: widget.trip),
-                          const SizedBox(height: 10),
-                          AnimatedSize(
-                            duration: const Duration(milliseconds: 260),
-                            curve: Curves.easeOutCubic,
-                            child: _shareExpanded
-                                ? _ShareGrid(
-                                    copied: _copied,
-                                    onWhatsApp: _shareWhatsApp,
-                                    onFacebook: _shareFacebook,
-                                    onTwitter: _shareTwitter,
-                                    onTelegram: _shareTelegram,
-                                    onInstagram: _shareInstagram,
-                                    onCopy: _copyText,
-                                  )
-                                : const SizedBox.shrink(),
-                          ),
-                          if (_shareExpanded) const SizedBox(height: 10),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: _ActionBtn(
-                                  label: 'Compartir',
-                                  icon: Icons.share_rounded,
-                                  color: const Color(0xFF1A73E8),
-                                  onTap: () => setState(() => _shareExpanded = !_shareExpanded),
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: _ActionBtn(
-                                  label: 'Listo',
-                                  icon: Icons.check_circle_rounded,
-                                  color: const Color(0xFF16A34A),
-                                  onTap: _dismiss,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
+                      child: _MainCard(
+                        trip: widget.trip,
+                        shareExpanded: _shareExpanded,
+                        copied: _copied,
+                        onDismiss: _dismiss,
+                        onToggleShare: () => setState(() => _shareExpanded = !_shareExpanded),
+                        onWhatsApp: _shareWhatsApp,
+                        onFacebook: _shareFacebook,
+                        onTwitter: _shareTwitter,
+                        onTelegram: _shareTelegram,
+                        onInstagram: _shareInstagram,
+                        onCopy: _copyText,
                       ),
                     ),
                   ),
@@ -180,8 +149,25 @@ class _TripSuccessOverlayState extends State<_TripSuccessOverlay>
 // ─── Card principal ─────────────────────────────────────────────────────────────
 
 class _MainCard extends StatefulWidget {
-  const _MainCard({required this.trip});
+  const _MainCard({
+    required this.trip,
+    required this.shareExpanded,
+    required this.copied,
+    required this.onDismiss,
+    required this.onToggleShare,
+    required this.onWhatsApp,
+    required this.onFacebook,
+    required this.onTwitter,
+    required this.onTelegram,
+    required this.onInstagram,
+    required this.onCopy,
+  });
   final TripSuccess trip;
+  final bool shareExpanded;
+  final bool copied;
+  final VoidCallback onDismiss;
+  final VoidCallback onToggleShare;
+  final VoidCallback onWhatsApp, onFacebook, onTwitter, onTelegram, onInstagram, onCopy;
 
   @override
   State<_MainCard> createState() => _MainCardState();
@@ -220,7 +206,7 @@ class _MainCardState extends State<_MainCard> with SingleTickerProviderStateMixi
         filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
         child: Container(
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.95),
+            color: Colors.white.withOpacity(0.97),
             borderRadius: BorderRadius.circular(22),
             border: Border.all(color: Colors.white.withOpacity(0.6), width: 1.2),
             boxShadow: [
@@ -234,7 +220,8 @@ class _MainCardState extends State<_MainCard> with SingleTickerProviderStateMixi
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Check + título
+
+              // ── Check animado + título ──────────────────────────────────────
               ScaleTransition(
                 scale: _checkScale,
                 child: Container(
@@ -245,28 +232,28 @@ class _MainCardState extends State<_MainCard> with SingleTickerProviderStateMixi
                     shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
-                          color: const Color(0xFF16A34A).withOpacity(0.35),
-                          blurRadius: 14,
+                          color: const Color(0xFF16A34A).withOpacity(0.30),
+                          blurRadius: 16,
                           offset: const Offset(0, 5)),
                     ],
                   ),
                   child: const Icon(Icons.check_rounded, color: Colors.white, size: 30),
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
               const Text(
                 '¡Viaje publicado con éxito!',
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                    fontSize: 17, fontWeight: FontWeight.w700, color: Color(0xFF1F2937)),
+                    fontSize: 17, fontWeight: FontWeight.w700, color: Color(0xFF111827)),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 18),
 
-              // Ruta origen → destino
+              // ── Ruta origen → destino ───────────────────────────────────────
               Container(
                 width: double.infinity,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF8FAFC),
+                  color: const Color(0xFFF9FAFB),
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(color: const Color(0xFFE5E7EB)),
                 ),
@@ -296,10 +283,11 @@ class _MainCardState extends State<_MainCard> with SingleTickerProviderStateMixi
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text('Salida', style: TextStyle(fontSize: 10, color: Color(0xFF6B7280), fontWeight: FontWeight.w500)),
+                                const Text('Salida',
+                                    style: TextStyle(fontSize: 10, color: Color(0xFF9CA3AF), fontWeight: FontWeight.w500)),
                                 Text(
                                   t.originCity,
-                                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Color(0xFF1F2937)),
+                                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Color(0xFF111827)),
                                 ),
                                 if (t.originAddress.isNotEmpty && t.originAddress != t.originCity)
                                   Text(
@@ -324,10 +312,11 @@ class _MainCardState extends State<_MainCard> with SingleTickerProviderStateMixi
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text('Llegada', style: TextStyle(fontSize: 10, color: Color(0xFF6B7280), fontWeight: FontWeight.w500)),
+                              const Text('Llegada',
+                                  style: TextStyle(fontSize: 10, color: Color(0xFF9CA3AF), fontWeight: FontWeight.w500)),
                               Text(
                                 t.destinationCity,
-                                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Color(0xFF1F2937)),
+                                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Color(0xFF111827)),
                               ),
                               if (t.destinationAddress.isNotEmpty && t.destinationAddress != t.destinationCity)
                                 Text(
@@ -346,68 +335,88 @@ class _MainCardState extends State<_MainCard> with SingleTickerProviderStateMixi
               ),
               const SizedBox(height: 10),
 
-              // Detalles en grid: fecha, hora, asientos, precio
-              GridView.count(
-                crossAxisCount: 2,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                mainAxisSpacing: 8,
-                crossAxisSpacing: 8,
-                childAspectRatio: 3.0,
+              // ── Info: fecha + hora ──────────────────────────────────────────
+              Row(
                 children: [
-                  _DetailChip(
-                    icon: Icons.calendar_today_rounded,
-                    color: const Color(0xFF7C3AED),
-                    label: dateStr,
+                  Expanded(
+                    child: _InfoItem(
+                      icon: Icons.calendar_today_rounded,
+                      iconColor: const Color(0xFF7C3AED),
+                      label: 'Fecha',
+                      value: dateStr,
+                    ),
                   ),
-                  _DetailChip(
-                    icon: Icons.schedule_rounded,
-                    color: const Color(0xFF0891B2),
-                    label: t.departureTime.isNotEmpty ? t.departureTime : 'Hora flexible',
-                  ),
-                  _DetailChip(
-                    icon: Icons.event_seat_rounded,
-                    color: const Color(0xFF1A73E8),
-                    label: '${t.seats} asiento${t.seats != 1 ? "s" : ""}',
-                  ),
-                  _DetailChip(
-                    icon: Icons.attach_money_rounded,
-                    color: const Color(0xFF16A34A),
-                    label: '\$${t.price} / persona',
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _InfoItem(
+                      icon: Icons.schedule_rounded,
+                      iconColor: const Color(0xFF0891B2),
+                      label: 'Hora',
+                      value: t.departureTime.isNotEmpty ? t.departureTime : 'Flexible',
+                    ),
                   ),
                 ],
               ),
               const SizedBox(height: 8),
 
-              // Vehículo (si tiene)
+              // ── Info: asientos + precio ─────────────────────────────────────
+              Row(
+                children: [
+                  Expanded(
+                    child: _InfoItem(
+                      icon: Icons.event_seat_rounded,
+                      iconColor: const Color(0xFF1A73E8),
+                      label: 'Asientos',
+                      value: '${t.seats} disponible${t.seats != 1 ? "s" : ""}',
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _InfoItem(
+                      icon: Icons.monetization_on_rounded,
+                      iconColor: const Color(0xFF16A34A),
+                      label: 'Precio',
+                      value: '\$${t.price} / persona',
+                    ),
+                  ),
+                ],
+              ),
+
+              // ── Vehículo ────────────────────────────────────────────────────
               if (t.vehicle != null) ...[
-                _DetailChip(
+                const SizedBox(height: 8),
+                _InfoItem(
                   icon: Icons.directions_car_rounded,
-                  color: Color(t.vehicleColor ?? 0xFF6B7280),
-                  label: t.vehicle!,
+                  iconColor: Color(t.vehicleColor ?? 0xFF6B7280),
+                  label: 'Vehículo',
+                  value: t.vehicle!,
                   full: true,
                 ),
-                const SizedBox(height: 8),
               ],
 
-              // Extras: mascotas, puerta a puerta
-              if (t.acceptsPets || t.picksUpAtDoor || t.dropsOffAtDoor)
+              // ── Extras: mascotas, puerta a puerta ──────────────────────────
+              if (t.acceptsPets || t.picksUpAtDoor || t.dropsOffAtDoor) ...[
+                const SizedBox(height: 10),
                 Wrap(
                   spacing: 6,
                   runSpacing: 6,
                   children: [
                     if (t.acceptsPets)
-                      _Tag(label: 'Acepta mascotas', icon: Icons.pets_rounded, color: const Color(0xFFD97706)),
+                      _Tag(label: 'Acepta mascotas', icon: Icons.pets_rounded,
+                          color: const Color(0xFFD97706)),
                     if (t.picksUpAtDoor)
-                      _Tag(label: 'Recoge en puerta', icon: Icons.home_rounded, color: const Color(0xFF1A73E8)),
+                      _Tag(label: 'Recoge en puerta', icon: Icons.home_rounded,
+                          color: const Color(0xFF1A73E8)),
                     if (t.dropsOffAtDoor)
-                      _Tag(label: 'Deja en puerta', icon: Icons.home_work_rounded, color: const Color(0xFF7C3AED)),
+                      _Tag(label: 'Deja en puerta', icon: Icons.home_work_rounded,
+                          color: const Color(0xFF7C3AED)),
                   ],
                 ),
+              ],
 
-              // Rutas intermedias
+              // ── Rutas intermedias ───────────────────────────────────────────
               if (t.routes.isNotEmpty) ...[
-                const SizedBox(height: 8),
+                const SizedBox(height: 10),
                 _ListSection(
                   icon: Icons.route_rounded,
                   color: const Color(0xFF0891B2),
@@ -416,7 +425,7 @@ class _MainCardState extends State<_MainCard> with SingleTickerProviderStateMixi
                 ),
               ],
 
-              // Paradas
+              // ── Paradas ─────────────────────────────────────────────────────
               if (t.stops.isNotEmpty) ...[
                 const SizedBox(height: 6),
                 _ListSection(
@@ -426,6 +435,56 @@ class _MainCardState extends State<_MainCard> with SingleTickerProviderStateMixi
                   items: t.stops,
                 ),
               ],
+
+              // ── Share grid (dentro de la card) ──────────────────────────────
+              AnimatedSize(
+                duration: const Duration(milliseconds: 260),
+                curve: Curves.easeOutCubic,
+                child: widget.shareExpanded
+                    ? Padding(
+                        padding: const EdgeInsets.only(top: 14),
+                        child: _ShareGrid(
+                          copied: widget.copied,
+                          onWhatsApp: widget.onWhatsApp,
+                          onFacebook: widget.onFacebook,
+                          onTwitter: widget.onTwitter,
+                          onTelegram: widget.onTelegram,
+                          onInstagram: widget.onInstagram,
+                          onCopy: widget.onCopy,
+                        ),
+                      )
+                    : const SizedBox.shrink(),
+              ),
+
+              // ── Divider + botones ────────────────────────────────────────────
+              const SizedBox(height: 16),
+              const Divider(height: 1, thickness: 1, color: Color(0xFFF3F4F6)),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  // Listo — primario, a la izquierda
+                  Expanded(
+                    child: _ActionBtn(
+                      label: 'Listo',
+                      icon: Icons.check_circle_rounded,
+                      color: const Color(0xFF16A34A),
+                      filled: true,
+                      onTap: widget.onDismiss,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  // Compartir — secundario (outlined), a la derecha
+                  Expanded(
+                    child: _ActionBtn(
+                      label: widget.shareExpanded ? 'Ocultar' : 'Compartir',
+                      icon: Icons.share_rounded,
+                      color: const Color(0xFF1A73E8),
+                      filled: false,
+                      onTap: widget.onToggleShare,
+                    ),
+                  ),
+                ],
+              ),
             ],
           ),
         ),
@@ -434,40 +493,63 @@ class _MainCardState extends State<_MainCard> with SingleTickerProviderStateMixi
   }
 }
 
-// ─── Widgets auxiliares de la card ─────────────────────────────────────────────
+// ─── Info item ──────────────────────────────────────────────────────────────────
+// Neutral background + colored icon + dark text = buen contraste
 
-class _DetailChip extends StatelessWidget {
-  const _DetailChip({
+class _InfoItem extends StatelessWidget {
+  const _InfoItem({
     required this.icon,
-    required this.color,
+    required this.iconColor,
     required this.label,
+    required this.value,
     this.full = false,
   });
 
   final IconData icon;
-  final Color color;
+  final Color iconColor;
   final String label;
+  final String value;
   final bool full;
 
   @override
   Widget build(BuildContext context) {
     final child = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(9),
-        border: Border.all(color: color.withOpacity(0.2)),
+        color: const Color(0xFFF3F4F6),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
       ),
       child: Row(
         mainAxisSize: full ? MainAxisSize.max : MainAxisSize.min,
         children: [
-          Icon(icon, size: 13, color: color),
-          const SizedBox(width: 6),
+          Container(
+            padding: const EdgeInsets.all(5),
+            decoration: BoxDecoration(
+              color: iconColor.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Icon(icon, size: 13, color: iconColor),
+          ),
+          const SizedBox(width: 8),
           Flexible(
-            child: Text(
-              label,
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: color),
-              overflow: TextOverflow.ellipsis,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(label,
+                    style: const TextStyle(
+                        fontSize: 10,
+                        color: Color(0xFF9CA3AF),
+                        fontWeight: FontWeight.w500)),
+                Text(value,
+                    style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF111827)),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1),
+              ],
             ),
           ),
         ],
@@ -476,6 +558,8 @@ class _DetailChip extends StatelessWidget {
     return full ? SizedBox(width: double.infinity, child: child) : child;
   }
 }
+
+// ─── Tag ────────────────────────────────────────────────────────────────────────
 
 class _Tag extends StatelessWidget {
   const _Tag({required this.label, required this.icon, required this.color});
@@ -488,21 +572,25 @@ class _Tag extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.08),
+        color: const Color(0xFFF3F4F6),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withOpacity(0.25)),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon, size: 12, color: color),
           const SizedBox(width: 5),
-          Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: color)),
+          Text(label,
+              style: const TextStyle(
+                  fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF374151))),
         ],
       ),
     );
   }
 }
+
+// ─── List section ───────────────────────────────────────────────────────────────
 
 class _ListSection extends StatelessWidget {
   const _ListSection({
@@ -520,11 +608,11 @@ class _ListSection extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.06),
-        borderRadius: BorderRadius.circular(9),
-        border: Border.all(color: color.withOpacity(0.18)),
+        color: const Color(0xFFF3F4F6),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -532,19 +620,22 @@ class _ListSection extends StatelessWidget {
           Row(children: [
             Icon(icon, size: 12, color: color),
             const SizedBox(width: 5),
-            Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: color)),
+            Text(label,
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: color)),
           ]),
-          const SizedBox(height: 4),
+          const SizedBox(height: 5),
           Wrap(
             spacing: 5,
             runSpacing: 4,
             children: items.map((item) => Container(
               padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
               decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
+                color: color.withOpacity(0.10),
                 borderRadius: BorderRadius.circular(6),
               ),
-              child: Text(item, style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w500)),
+              child: Text(item,
+                  style: TextStyle(
+                      fontSize: 11, color: color, fontWeight: FontWeight.w600)),
             )).toList(),
           ),
         ],
@@ -585,30 +676,21 @@ class _ShareGrid extends StatelessWidget {
       ),
     ];
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(16),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-        child: Container(
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.92),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.white.withOpacity(0.6), width: 1),
-            boxShadow: [
-              BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 16, offset: const Offset(0, 4)),
-            ],
-          ),
-          padding: const EdgeInsets.all(12),
-          child: GridView.count(
-            crossAxisCount: 3,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            mainAxisSpacing: 8,
-            crossAxisSpacing: 8,
-            childAspectRatio: 2.4,
-            children: options.map((o) => _ShareChip(opt: o)).toList(),
-          ),
-        ),
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFFF9FAFB),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+      ),
+      padding: const EdgeInsets.all(10),
+      child: GridView.count(
+        crossAxisCount: 3,
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        mainAxisSpacing: 7,
+        crossAxisSpacing: 7,
+        childAspectRatio: 2.4,
+        children: options.map((o) => _ShareChip(opt: o)).toList(),
       ),
     );
   }
@@ -630,18 +712,19 @@ class _ShareChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: opt.color.withOpacity(0.10),
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(9),
       child: InkWell(
         onTap: opt.onTap,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(9),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(opt.icon, color: opt.color, size: 14),
+            Icon(opt.icon, color: opt.color, size: 13),
             const SizedBox(width: 5),
             Flexible(
               child: Text(opt.label,
-                  style: TextStyle(color: opt.color, fontSize: 11, fontWeight: FontWeight.w600),
+                  style: TextStyle(
+                      color: opt.color, fontSize: 11, fontWeight: FontWeight.w600),
                   overflow: TextOverflow.ellipsis),
             ),
           ],
@@ -658,32 +741,42 @@ class _ActionBtn extends StatelessWidget {
     required this.label,
     required this.icon,
     required this.color,
+    required this.filled,
     required this.onTap,
   });
 
   final String label;
   final IconData icon;
   final Color color;
+  final bool filled;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: color,
+      color: filled ? color : Colors.transparent,
       borderRadius: BorderRadius.circular(10),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(10),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+          decoration: filled
+              ? null
+              : BoxDecoration(
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: color, width: 1.5),
+                ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, color: Colors.white, size: 14),
+              Icon(icon, color: filled ? Colors.white : color, size: 14),
               const SizedBox(width: 5),
               Text(label,
-                  style: const TextStyle(
-                      color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
+                  style: TextStyle(
+                      color: filled ? Colors.white : color,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600)),
             ],
           ),
         ),

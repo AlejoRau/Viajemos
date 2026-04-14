@@ -397,9 +397,10 @@ class _PassengerRequestsScreenState
                 if (_filterDate != null) {
                   final fd = _filterDate!;
                   requests = requests.where((r) {
+                    final effectiveTo = r.dateTo ?? r.dateFrom;
                     return !r.dateFrom.isAfter(
                             DateTime(fd.year, fd.month, fd.day, 23, 59)) &&
-                        !r.dateTo.isBefore(
+                        !effectiveTo.isBefore(
                             DateTime(fd.year, fd.month, fd.day));
                   }).toList();
                 }

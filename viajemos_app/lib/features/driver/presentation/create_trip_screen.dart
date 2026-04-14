@@ -116,6 +116,20 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
   MapResult? _originResult;
   MapResult? _destResult;
 
+  // Last city name confirmed via autocomplete selection (null = not validated)
+  String? _lastValidatedOrigin;
+  String? _lastValidatedDest;
+
+  bool get _originValidated =>
+      _lastValidatedOrigin != null &&
+      _lastValidatedOrigin!.toLowerCase() ==
+          _originController.text.trim().toLowerCase();
+
+  bool get _destValidated =>
+      _lastValidatedDest != null &&
+      _lastValidatedDest!.toLowerCase() ==
+          _destinationController.text.trim().toLowerCase();
+
   Vehicle? _selectedVehicle;
   bool _publishing = false;
   String? _prefillVehicleId;
@@ -145,10 +159,24 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
       _routes.addAll(p.via);
       _stops.addAll(p.stops);
       _prefillVehicleId = p.vehicleId;
+      // Prefilled values came from a previously validated trip
+      if (p.originAddress.isNotEmpty) _lastValidatedOrigin = p.originAddress;
+      if (p.destinationAddress.isNotEmpty) _lastValidatedDest = p.destinationAddress;
     }
   }
 
   void _onFieldChanged() {
+    // Reset city validation when the user manually edits the field
+    if (_lastValidatedOrigin != null &&
+        _lastValidatedOrigin!.toLowerCase() !=
+            _originController.text.trim().toLowerCase()) {
+      _lastValidatedOrigin = null;
+    }
+    if (_lastValidatedDest != null &&
+        _lastValidatedDest!.toLowerCase() !=
+            _destinationController.text.trim().toLowerCase()) {
+      _lastValidatedDest = null;
+    }
     if (_showErrors) setState(() {});
   }
 
@@ -254,6 +282,11 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
       // Clear any stale map results since the address changed
       _originResult = null;
       _destResult = null;
+      // History entries came from previously validated trips
+      final histOrigin = raw['origin_address'] as String? ?? '';
+      final histDest = raw['destination_address'] as String? ?? '';
+      _lastValidatedOrigin = histOrigin.isNotEmpty ? histOrigin : null;
+      _lastValidatedDest = histDest.isNotEmpty ? histDest : null;
     });
   }
 
@@ -280,10 +313,48 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
     return false;
   }
 
+  bool get _hasSameOriginDest {
+    final origin = _originController.text.trim().toLowerCase();
+    final dest = _destinationController.text.trim().toLowerCase();
+    return origin.isNotEmpty && dest.isNotEmpty && origin == dest;
+  }
+
   Future<void> _onNext() async {
     // Trigger inline validation display
     if (_hasRequiredErrors) {
       setState(() => _showErrors = true);
+      return;
+    }
+
+    if (!_originValidated) {
+      setState(() => _showErrors = true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Seleccioná el origen de la lista de ciudades'),
+          backgroundColor: Color(0xFFDC2626),
+        ),
+      );
+      return;
+    }
+
+    if (!_destValidated) {
+      setState(() => _showErrors = true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Seleccioná el destino de la lista de ciudades'),
+          backgroundColor: Color(0xFFDC2626),
+        ),
+      );
+      return;
+    }
+
+    if (_hasSameOriginDest) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('El origen y el destino no pueden ser iguales'),
+          backgroundColor: Color(0xFFDC2626),
+        ),
+      );
       return;
     }
 
@@ -348,8 +419,11 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
       }
     }
 
+    final needsOrigin = !_picksUpPassengers;
+    final needsDest = !_dropsOffPassengers;
+
     // Origin map (only if driver does NOT pick up at door)
-    if (!_picksUpPassengers) {
+    if (needsOrigin) {
       final origin = await Navigator.push<MapResult>(
         context,
         MaterialPageRoute(
@@ -358,28 +432,58 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
             initialCity: _originController.text.trim().isEmpty
                 ? null
                 : _originController.text.trim(),
+            initialResult: _originResult,
           ),
         ),
       );
-      if (origin == null) return;
+      if (origin == null) return; // volvió al formulario
       _originResult = origin;
     }
 
-    // Destination map (only if driver does NOT drop off at door)
-    if (!_dropsOffPassengers && mounted) {
-      final dest = await Navigator.push<MapResult>(
-        context,
-        MaterialPageRoute(
-          builder: (_) => TripMapScreen(
-            title: 'Punto de llegada',
-            initialCity: _destinationController.text.trim().isEmpty
-                ? null
-                : _destinationController.text.trim(),
+    // Destination map (only if driver does NOT drop off at door).
+    // Si el usuario vuelve atrás desde el destino y había mapa de origen,
+    // se reabre el mapa de origen con el pin ya guardado.
+    if (needsDest) {
+      while (mounted) {
+        final dest = await Navigator.push<MapResult>(
+          context,
+          MaterialPageRoute(
+            builder: (_) => TripMapScreen(
+              title: 'Punto de llegada',
+              initialCity: _destinationController.text.trim().isEmpty
+                  ? null
+                  : _destinationController.text.trim(),
+              initialResult: _destResult,
+            ),
           ),
-        ),
-      );
-      if (dest == null) return;
-      _destResult = dest;
+        );
+
+        if (dest != null) {
+          _destResult = dest;
+          break; // continúa a publicar
+        }
+
+        // El usuario presionó atrás desde el mapa de destino
+        if (!needsOrigin || !mounted) return;
+
+        // Reabre el mapa de origen con el pin previo ya colocado
+        final origin = await Navigator.push<MapResult>(
+          context,
+          MaterialPageRoute(
+            builder: (_) => TripMapScreen(
+              title: 'Punto de salida',
+              initialCity: _originController.text.trim().isEmpty
+                  ? null
+                  : _originController.text.trim(),
+              initialResult: _originResult,
+            ),
+          ),
+        );
+
+        if (origin == null) return; // volvió al formulario desde el origen
+        _originResult = origin;
+        // loop: vuelve a mostrar el mapa de destino
+      }
     }
 
     if (mounted) await _publish();
@@ -524,6 +628,8 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
                           icon: Icons.search,
                           defaultSuggestions: popularArgentineCities,
                           citySearchSource: CitySearchSource.georef,
+                          onSelected: (name) =>
+                              setState(() => _lastValidatedOrigin = name),
                         ),
                         if (_showErrors &&
                             _originController.text.trim().isEmpty)
@@ -531,6 +637,18 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
                             padding: EdgeInsets.only(top: 4, left: 4),
                             child: Text(
                               'Este campo es obligatorio',
+                              style: TextStyle(
+                                  color: Color(0xFFDC2626),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500),
+                            ),
+                          )
+                        else if (_showErrors &&
+                            !_originValidated)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 4, left: 4),
+                            child: Text(
+                              'Seleccioná una ciudad de la lista',
                               style: TextStyle(
                                   color: Color(0xFFDC2626),
                                   fontSize: 11,
@@ -544,6 +662,8 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
                           icon: Icons.near_me_rounded,
                           defaultSuggestions: popularArgentineCities,
                           citySearchSource: CitySearchSource.georef,
+                          onSelected: (name) =>
+                              setState(() => _lastValidatedDest = name),
                         ),
                         if (_showErrors &&
                             _destinationController.text.trim().isEmpty)
@@ -551,6 +671,18 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
                             padding: EdgeInsets.only(top: 4, left: 4),
                             child: Text(
                               'Este campo es obligatorio',
+                              style: TextStyle(
+                                  color: Color(0xFFDC2626),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500),
+                            ),
+                          )
+                        else if (_showErrors &&
+                            !_destValidated)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 4, left: 4),
+                            child: Text(
+                              'Seleccioná una ciudad de la lista',
                               style: TextStyle(
                                   color: Color(0xFFDC2626),
                                   fontSize: 11,
@@ -698,8 +830,11 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
                   context: context,
                   initialDate: DateTime.now(),
                   firstDate: DateTime.now(),
-                  lastDate:
-                      DateTime.now().add(const Duration(days: 365)),
+                  lastDate: DateTime(
+                      DateTime.now().year,
+                      DateTime.now().month + 1,
+                      DateTime.now().day,
+                    ),
                 );
                 if (picked != null) {
                   setState(() => _departureDate = picked);

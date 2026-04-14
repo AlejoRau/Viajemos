@@ -222,6 +222,7 @@ class ActiveDriverTrip {
     required this.allowsPets,
     required this.picksUpAtDoor,
     required this.dropsOffAtDoor,
+    required this.isPrivate,
     this.originExactAddress,
     this.destinationExactAddress,
     this.departureTime,
@@ -251,6 +252,7 @@ class ActiveDriverTrip {
   final bool allowsPets;
   final bool picksUpAtDoor;
   final bool dropsOffAtDoor;
+  final bool isPrivate;
   final String? departureTime;
   final String? description;
   final String? vehicleBrand;
@@ -350,6 +352,7 @@ class HistoryRepository {
         allowsPets: row['allows_pets'] as bool? ?? false,
         picksUpAtDoor: row['picks_up_at_door'] as bool? ?? false,
         dropsOffAtDoor: row['drops_off_at_door'] as bool? ?? false,
+        isPrivate: row['is_private'] as bool? ?? false,
         departureTime: timeRaw != null && timeRaw.length >= 5
             ? timeRaw.substring(0, 5)
             : null,
@@ -359,6 +362,13 @@ class HistoryRepository {
         vehicleColor: row['vehicle_color'] as String?,
       );
     }).toList();
+  }
+
+  Future<void> toggleTripPrivacy(String tripId, bool isPrivate) async {
+    await _client.rpc('toggle_trip_privacy', params: {
+      'p_trip_id': tripId,
+      'p_is_private': isPrivate,
+    });
   }
 
   Future<List<TripRequestEntry>> fetchPendingRequests(String tripId) async {

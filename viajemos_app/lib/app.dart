@@ -71,6 +71,8 @@ final _router = GoRouter(
           contactName: extra['contactName'] as String? ?? 'Conversación',
           contactId: extra['contactId'] as String?,
           tripId: extra['tripId'] as String?,
+          isGroupChat: extra['isGroupChat'] as bool? ?? false,
+          participantsCount: extra['participantsCount'] as int? ?? 2,
         );
       },
     ),

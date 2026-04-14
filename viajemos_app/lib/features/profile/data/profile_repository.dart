@@ -1,3 +1,5 @@
+import 'dart:io';
+import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../domain/user_profile.dart';
 
@@ -11,7 +13,7 @@ class ProfileRepository {
     var data = await _client
         .from('profiles')
         .select(
-            'full_name, avg_rating, trips_driven, trips_taken, bio_driver, bio_passenger, instagram, facebook, phone, birth_date')
+            'full_name, avg_rating, trips_driven, trips_taken, bio_driver, bio_passenger, instagram, facebook, phone, birth_date, avatar_url')
         .eq('id', user.id)
         .maybeSingle();
 
@@ -28,6 +30,7 @@ class ProfileRepository {
         'facebook': null,
         'phone': null,
         'birth_date': null,
+        'avatar_url': null,
       };
     }
 
@@ -48,6 +51,7 @@ class ProfileRepository {
       tripsDriver: (data['trips_driven'] as int?) ?? 0,
       tripsPassenger: (data['trips_taken'] as int?) ?? 0,
       memberSince: DateTime.parse(user.createdAt),
+      avatarUrl: data['avatar_url'] as String?,
       phone: data['phone'] as String?,
       birthDate: birthDateStr != null ? DateTime.tryParse(birthDateStr) : null,
       bioDriver: data['bio_driver'] as String?,
@@ -55,6 +59,26 @@ class ProfileRepository {
       instagram: data['instagram'] as String?,
       facebook: data['facebook'] as String?,
     );
+  }
+
+  Future<String> uploadAvatar(XFile file) async {
+    final user = _client.auth.currentUser;
+    if (user == null) throw Exception('No authenticated user');
+    // Always store as JPEG — image_picker normalizes images when imageQuality is set,
+    // and the bucket only accepts image/jpeg, image/png, image/webp.
+    const path_storage = 'avatar.jpg';
+    final storagePath = '${user.id}/$path_storage';
+    await _client.storage.from('avatars').uploadBinary(
+      storagePath,
+      await File(file.path).readAsBytes(),
+      fileOptions: const FileOptions(contentType: 'image/jpeg', upsert: true),
+    );
+    // Append a cache-busting timestamp so Flutter doesn't show the old photo
+    // after re-upload (NetworkImage caches by URL).
+    final baseUrl = _client.storage.from('avatars').getPublicUrl(storagePath);
+    final url = '$baseUrl?t=${DateTime.now().millisecondsSinceEpoch}';
+    await _client.from('profiles').update({'avatar_url': url}).eq('id', user.id);
+    return url;
   }
 
   Future<void> updatePersonalData({
