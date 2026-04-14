@@ -10,7 +10,18 @@ import '../../../shared/widgets/app_toast.dart';
 import '../data/passenger_request_repository.dart';
 
 class CreateRequestScreen extends ConsumerStatefulWidget {
-  const CreateRequestScreen({super.key});
+  const CreateRequestScreen({
+    super.key,
+    this.prefillOrigin,
+    this.prefillDestination,
+    this.prefillDateFrom,
+    this.prefillDateTo,
+  });
+
+  final String? prefillOrigin;
+  final String? prefillDestination;
+  final DateTime? prefillDateFrom;
+  final DateTime? prefillDateTo;
 
   @override
   ConsumerState<CreateRequestScreen> createState() => _CreateRequestScreenState();
@@ -49,6 +60,17 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
     super.initState();
     _originController.addListener(_onOriginChanged);
     _destinationController.addListener(_onDestChanged);
+    // Pre-fill from search if coming from empty results
+    if (widget.prefillOrigin != null && widget.prefillOrigin!.isNotEmpty) {
+      _originController.text = widget.prefillOrigin!;
+      _lastValidatedOrigin = widget.prefillOrigin;
+    }
+    if (widget.prefillDestination != null && widget.prefillDestination!.isNotEmpty) {
+      _destinationController.text = widget.prefillDestination!;
+      _lastValidatedDest = widget.prefillDestination;
+    }
+    if (widget.prefillDateFrom != null) _dateFrom = widget.prefillDateFrom;
+    if (widget.prefillDateTo != null) _dateTo = widget.prefillDateTo;
   }
 
   void _onOriginChanged() {

@@ -100,9 +100,33 @@ class SearchResultsScreen extends ConsumerStatefulWidget {
       _SearchResultsScreenState();
 }
 
+enum _SortMode { date, price }
+
 class _SearchResultsScreenState
     extends ConsumerState<SearchResultsScreen> {
   late Future<List<TripSearchResult>> _future;
+
+  // ── Active filters ────────────────────────────────────────────────────────
+  bool _onlyAvailable = false;
+  bool _onlyPets = false;
+  _SortMode _sort = _SortMode.date;
+
+  List<TripSearchResult> _applyFilters(List<TripSearchResult> all) {
+    var list = all.where((t) {
+      if (_onlyAvailable && t.freeSeats == 0) return false;
+      if (_onlyPets && !t.allowsPets) return false;
+      return true;
+    }).toList();
+    list.sort((a, b) {
+      // Always put full trips last
+      final aFull = a.freeSeats == 0 ? 1 : 0;
+      final bFull = b.freeSeats == 0 ? 1 : 0;
+      if (aFull != bFull) return aFull.compareTo(bFull);
+      if (_sort == _SortMode.price) return a.pricePerSeat.compareTo(b.pricePerSeat);
+      return a.departureDate.compareTo(b.departureDate);
+    });
+    return list;
+  }
 
   /// Parse "DD/MM" → DateTime (current year).
   DateTime? _parseDate(String? text) {
@@ -143,8 +167,7 @@ class _SearchResultsScreenState
       appBar: AppBar(
         title: Text(
           _title,
-          style: const TextStyle(
-              fontSize: 16, fontWeight: FontWeight.bold),
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
         ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
@@ -155,8 +178,7 @@ class _SearchResultsScreenState
         future: _future,
         builder: (context, snap) {
           if (snap.connectionState == ConnectionState.waiting) {
-            return const Center(
-                child: CircularProgressIndicator());
+            return const Center(child: CircularProgressIndicator());
           }
           if (snap.hasError) {
             return Center(
@@ -170,44 +192,290 @@ class _SearchResultsScreenState
               ),
             );
           }
-          final trips = snap.data ?? []
-            ..sort((a, b) =>
-                (a.freeSeats == 0 ? 1 : 0)
-                    .compareTo(b.freeSeats == 0 ? 1 : 0));
-          if (trips.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
+          final all = snap.data ?? [];
+          final trips = _applyFilters(all);
+
+          if (all.isEmpty) {
+            return _EmptyState(
+              origin: widget.origin,
+              destination: widget.destination,
+              dateFrom: _parseDate(widget.dateFromStr),
+              dateTo: _parseDate(widget.dateToStr),
+            );
+          }
+
+          return Column(
+            children: [
+              // ── Filter bar ──────────────────────────────────────────────
+              _FilterBar(
+                onlyAvailable: _onlyAvailable,
+                onlyPets: _onlyPets,
+                sort: _sort,
+                total: all.length,
+                filtered: trips.length,
+                onAvailableChanged: (v) => setState(() => _onlyAvailable = v),
+                onPetsChanged: (v) => setState(() => _onlyPets = v),
+                onSortChanged: (v) => setState(() => _sort = v),
+              ),
+              // ── Results ─────────────────────────────────────────────────
+              Expanded(
+                child: trips.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.filter_list_off_rounded,
+                                size: 48, color: Color(0xFFCBD5E1)),
+                            const SizedBox(height: 12),
+                            const Text(
+                              'Ningún viaje coincide\ncon los filtros activos',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                  fontSize: 15, color: Color(0xFF64748B)),
+                            ),
+                            const SizedBox(height: 12),
+                            TextButton(
+                              onPressed: () => setState(() {
+                                _onlyAvailable = false;
+                                _onlyPets = false;
+                                _sort = _SortMode.date;
+                              }),
+                              child: const Text('Limpiar filtros'),
+                            ),
+                          ],
+                        ),
+                      )
+                    : ListView.separated(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: trips.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 14),
+                        itemBuilder: (_, i) => _TripCard(trip: trips[i]),
+                      ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+// ── Empty State ───────────────────────────────────────────────────────────────
+
+class _EmptyState extends StatelessWidget {
+  const _EmptyState({
+    required this.origin,
+    required this.destination,
+    this.dateFrom,
+    this.dateTo,
+  });
+  final String origin;
+  final String? destination;
+  final DateTime? dateFrom;
+  final DateTime? dateTo;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                color: const Color(0xFFF1F5F9),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.search_off_rounded,
+                  size: 40, color: Color(0xFFCBD5E1)),
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'No hay viajes disponibles',
+              style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF1E293B)),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Todavía nadie publicó este trayecto.\nCreá una alerta y te avisamos cuando haya uno.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                  fontSize: 14,
+                  color: Color(0xFF64748B),
+                  height: 1.5),
+            ),
+            const SizedBox(height: 28),
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton.icon(
+                onPressed: () => context.push(
+                  '/passenger/create-request',
+                  extra: {
+                    'origin': origin,
+                    if (destination != null && destination!.isNotEmpty)
+                      'destination': destination,
+                    if (dateFrom != null) 'dateFrom': dateFrom,
+                    if (dateTo != null) 'dateTo': dateTo,
+                  },
+                ),
+                icon: const Icon(Icons.notifications_active_rounded,
+                    size: 18, color: Colors.white),
+                label: const Text(
+                  'Crear alerta para este viaje',
+                  style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(25)),
+                  elevation: 0,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextButton(
+              onPressed: () => context.pop(),
+              child: const Text('Modificar búsqueda',
+                  style: TextStyle(color: AppColors.textSecondary)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Filter Bar ────────────────────────────────────────────────────────────────
+
+class _FilterBar extends StatelessWidget {
+  const _FilterBar({
+    required this.onlyAvailable,
+    required this.onlyPets,
+    required this.sort,
+    required this.total,
+    required this.filtered,
+    required this.onAvailableChanged,
+    required this.onPetsChanged,
+    required this.onSortChanged,
+  });
+
+  final bool onlyAvailable;
+  final bool onlyPets;
+  final _SortMode sort;
+  final int total;
+  final int filtered;
+  final ValueChanged<bool> onAvailableChanged;
+  final ValueChanged<bool> onPetsChanged;
+  final ValueChanged<_SortMode> onSortChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Row(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
                 children: [
-                  const Icon(Icons.search_off_rounded,
-                      size: 64, color: Color(0xFFCBD5E1)),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'No encontramos viajes\npara esa búsqueda',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                        fontSize: 16,
-                        color: Color(0xFF64748B),
-                        fontWeight: FontWeight.w500),
+                  _FilterChip(
+                    label: 'Disponibles',
+                    icon: Icons.event_seat_rounded,
+                    active: onlyAvailable,
+                    onTap: () => onAvailableChanged(!onlyAvailable),
                   ),
-                  const SizedBox(height: 8),
-                  TextButton(
-                    onPressed: () => context.pop(),
-                    child: const Text('Modificar búsqueda'),
+                  const SizedBox(width: 8),
+                  _FilterChip(
+                    label: 'Mascotas',
+                    icon: Icons.pets_rounded,
+                    active: onlyPets,
+                    onTap: () => onPetsChanged(!onlyPets),
+                  ),
+                  const SizedBox(width: 8),
+                  _FilterChip(
+                    label: sort == _SortMode.date ? 'Fecha ↑' : 'Precio ↑',
+                    icon: Icons.sort_rounded,
+                    active: sort == _SortMode.price,
+                    onTap: () => onSortChanged(
+                        sort == _SortMode.date ? _SortMode.price : _SortMode.date),
                   ),
                 ],
               ),
-            );
-          }
-          return ListView.separated(
-            padding: const EdgeInsets.all(16),
-            itemCount: trips.length,
-            separatorBuilder: (_, __) =>
-                const SizedBox(height: 14),
-            itemBuilder: (_, i) =>
-                _TripCard(trip: trips[i]),
-          );
-        },
+            ),
+          ),
+          if (filtered < total) ...[
+            const SizedBox(width: 8),
+            Text(
+              '$filtered/$total',
+              style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textSecondary,
+                  fontWeight: FontWeight.w500),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _FilterChip extends StatelessWidget {
+  const _FilterChip({
+    required this.label,
+    required this.icon,
+    required this.active,
+    required this.onTap,
+  });
+  final String label;
+  final IconData icon;
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration: BoxDecoration(
+          color: active ? AppColors.primary : const Color(0xFFF1F5F9),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: active ? AppColors.primary : const Color(0xFFE2E8F0),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon,
+                size: 14,
+                color: active ? Colors.white : const Color(0xFF64748B)),
+            const SizedBox(width: 5),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: active ? Colors.white : const Color(0xFF64748B),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -584,6 +852,7 @@ class _TripDetailsSheet extends StatefulWidget {
 
 class _TripDetailsSheetState extends State<_TripDetailsSheet> {
   bool _sending = false;
+  bool _sent = false;
   final _messageController = TextEditingController();
   List<Map<String, String?>> _passengers = [];
 
@@ -640,14 +909,7 @@ class _TripDetailsSheetState extends State<_TripDetailsSheet> {
         seatsRequested: 1,
         message: fullMessage,
       );
-      if (mounted) {
-        Navigator.of(context).pop();
-        AppToast.show(
-          context,
-          message: 'Solicitud enviada a ${trip.driverName}',
-          type: ToastType.success,
-        );
-      }
+      if (mounted) setState(() => _sent = true);
     } catch (e) {
       if (mounted) {
         final msg = e.toString().contains('duplicate')
@@ -990,7 +1252,12 @@ class _TripDetailsSheetState extends State<_TripDetailsSheet> {
                 SizedBox(
                   width: double.infinity,
                   height: 54,
-                  child: trip.driverId ==
+                  child: _sent
+                      ? _SentConfirmation(
+                          driverName: trip.driverName,
+                          onClose: () => Navigator.of(context).pop(),
+                        )
+                      : trip.driverId ==
                           Supabase.instance.client.auth.currentUser?.id
                       ? Container(
                           decoration: BoxDecoration(
@@ -1063,6 +1330,46 @@ class _TripDetailsSheetState extends State<_TripDetailsSheet> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ── Sent Confirmation ─────────────────────────────────────────────────────────
+
+class _SentConfirmation extends StatelessWidget {
+  const _SentConfirmation({required this.driverName, required this.onClose});
+  final String driverName;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onClose,
+      child: Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFFF0FDF4),
+          borderRadius: BorderRadius.circular(27),
+          border: Border.all(color: const Color(0xFFBBF7D0), width: 1.5),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.check_circle_rounded,
+                size: 20, color: Color(0xFF16A34A)),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                'Solicitud enviada a $driverName',
+                style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF16A34A)),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
