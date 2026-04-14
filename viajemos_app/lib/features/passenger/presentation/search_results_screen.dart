@@ -384,48 +384,8 @@ class _TripCard extends StatelessWidget {
             ),
             const SizedBox(height: 12),
 
-            // Route — show city names only
-            Row(
-              children: [
-                Flexible(
-                  child: Text(trip.originCity,
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 15),
-                      overflow: TextOverflow.ellipsis),
-                ),
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 6),
-                  child: Icon(Icons.arrow_forward,
-                      size: 15, color: AppColors.primary),
-                ),
-                Flexible(
-                  child: Text(trip.destinationCity,
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 15),
-                      overflow: TextOverflow.ellipsis),
-                ),
-              ],
-            ),
-            if (trip.stops.isNotEmpty) ...[
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  const Icon(Icons.add_location_alt_outlined,
-                      size: 13, color: AppColors.textSecondary),
-                  const SizedBox(width: 3),
-                  Expanded(
-                    child: Text(
-                      'Paradas: ${trip.stops.join(' · ')}',
-                      style: const TextStyle(
-                          fontSize: 13, color: AppColors.textSecondary),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-            ],
+            // Route — show effective origin/destination for the passenger
+            _RouteRow(trip: trip),
             if (trip.via.isNotEmpty) ...[
               const SizedBox(height: 4),
               Row(
@@ -539,12 +499,12 @@ class _TripCard extends StatelessWidget {
                           ),
                   ),
                 for (int i = 0; i < trip.freeSeats; i++)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 4),
+                  const Padding(
+                    padding: EdgeInsets.only(right: 4),
                     child: CircleAvatar(
                       radius: 13,
                       backgroundColor: AppColors.inputBackground,
-                      child: const Icon(Icons.person_outline,
+                      child: Icon(Icons.person_outline,
                           size: 14,
                           color: AppColors.textSecondary),
                     ),
@@ -637,12 +597,21 @@ class _TripDetailsSheetState extends State<_TripDetailsSheet> {
   Future<void> _sendRequest() async {
     setState(() => _sending = true);
     try {
+      // Prepend stop info so the driver knows where to pick up / drop off.
+      String? stopNote;
+      if (trip.alightingStop != null) {
+        stopNote = 'Me bajo en ${trip.alightingStop}';
+      } else if (trip.boardingStop != null) {
+        stopNote = 'Me subo en ${trip.boardingStop}';
+      }
+      final userMsg = _messageController.text.trim();
+      final parts = [if (stopNote != null) stopNote, if (userMsg.isNotEmpty) userMsg];
+      final fullMessage = parts.isEmpty ? null : parts.join(' · ');
+
       await TripSearchRepository().createTripRequest(
         tripId: trip.id,
         seatsRequested: 1,
-        message: _messageController.text.trim().isEmpty
-            ? null
-            : _messageController.text.trim(),
+        message: fullMessage,
       );
       if (mounted) {
         final messenger = ScaffoldMessenger.of(context);
@@ -653,11 +622,13 @@ class _TripDetailsSheetState extends State<_TripDetailsSheet> {
       }
     } catch (e) {
       if (mounted) {
+        final msg = e.toString().contains('duplicate')
+            ? 'Ya enviaste una solicitud para este viaje'
+            : e.toString().contains('own')
+                ? 'No podés unirte a tu propio viaje'
+                : 'Error: $e';
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Error al enviar la solicitud'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text(msg), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -704,31 +675,8 @@ class _TripDetailsSheetState extends State<_TripDetailsSheet> {
                   ),
                   const SizedBox(height: 4),
 
-                  // Route — cities
-                  Row(
-                    children: [
-                      Flexible(
-                        child: Text(trip.originCity,
-                            style: const TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w500,
-                                color: Color(0xFF64748B))),
-                      ),
-                      const Padding(
-                        padding:
-                            EdgeInsets.symmetric(horizontal: 6),
-                        child: Icon(Icons.arrow_forward,
-                            size: 15, color: AppColors.primary),
-                      ),
-                      Flexible(
-                        child: Text(trip.destinationCity,
-                            style: const TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w500,
-                                color: Color(0xFF64748B))),
-                      ),
-                    ],
-                  ),
+                  // Route — effective passenger route
+                  _RouteRow(trip: trip, detailed: true),
                   // Specific pickup/dropoff addresses (when driver set them)
                   if (trip.pickupAddress != null ||
                       trip.dropoffAddress != null) ...[
@@ -901,12 +849,12 @@ class _TripDetailsSheetState extends State<_TripDetailsSheet> {
                         ),
                       // Free seats
                       for (int i = 0; i < trip.freeSeats; i++)
-                        Padding(
-                          padding: const EdgeInsets.only(right: 6),
+                        const Padding(
+                          padding: EdgeInsets.only(right: 6),
                           child: CircleAvatar(
                             radius: 14,
                             backgroundColor: AppColors.inputBackground,
-                            child: const Icon(Icons.person_outline,
+                            child: Icon(Icons.person_outline,
                                 size: 15,
                                 color: AppColors.textSecondary),
                           ),
@@ -1090,6 +1038,250 @@ class _DetailRow extends StatelessWidget {
                   fontSize: 13, color: Color(0xFF475569))),
         ),
       ],
+    );
+  }
+}
+
+// ── Route Row ─────────────────────────────────────────────────────────────────
+class _RouteRow extends StatelessWidget {
+  const _RouteRow({required this.trip, this.detailed = false});
+  final TripSearchResult trip;
+  final bool detailed;
+
+  @override
+  Widget build(BuildContext context) {
+    if (trip.alightingStop != null || trip.boardingStop != null) {
+      return _StopMatchRoute(trip: trip, detailed: detailed);
+    }
+    return _DirectRoute(trip: trip, detailed: detailed);
+  }
+}
+
+// Ruta directa — comportamiento original
+class _DirectRoute extends StatelessWidget {
+  const _DirectRoute({required this.trip, required this.detailed});
+  final TripSearchResult trip;
+  final bool detailed;
+
+  @override
+  Widget build(BuildContext context) {
+    final labelStyle = TextStyle(
+      fontWeight: FontWeight.w600,
+      fontSize: 15,
+      color: detailed ? const Color(0xFF64748B) : const Color(0xFF1E293B),
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Flexible(
+              child: Text(trip.originCity,
+                  style: labelStyle, overflow: TextOverflow.ellipsis),
+            ),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 6),
+              child: Icon(Icons.arrow_forward, size: 15, color: AppColors.primary),
+            ),
+            Flexible(
+              child: Text(trip.destinationCity,
+                  style: labelStyle, overflow: TextOverflow.ellipsis),
+            ),
+          ],
+        ),
+        if (trip.stops.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              const Icon(Icons.add_location_alt_outlined,
+                  size: 13, color: AppColors.textSecondary),
+              const SizedBox(width: 3),
+              Expanded(
+                child: Text(
+                  'Paradas: ${trip.stops.join(' · ')}',
+                  style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+// Ruta con parada — diseño limpio
+class _StopMatchRoute extends StatelessWidget {
+  const _StopMatchRoute({required this.trip, required this.detailed});
+  final TripSearchResult trip;
+  final bool detailed;
+
+  static const _orange = Color(0xFF16A34A);
+  static const _orangeLight = Color(0xFFF0FDF4);
+  static const _orangeBorder = Color(0xFFBBF7D0);
+
+  @override
+  Widget build(BuildContext context) {
+    final isBoarding = trip.boardingStop != null;
+    final stopName = trip.boardingStop ?? trip.alightingStop!;
+    final labelColor = detailed ? const Color(0xFF64748B) : const Color(0xFF1E293B);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Ruta real del viaje
+        Row(
+          children: [
+            Flexible(
+              child: Text(
+                trip.originCity,
+                style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: labelColor),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 6),
+              child: Icon(Icons.arrow_forward, size: 15, color: AppColors.primary),
+            ),
+            Flexible(
+              child: Text(
+                trip.destinationCity,
+                style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: labelColor),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        // Barra visual de ruta
+        _StopBar(
+          origin: trip.originCity,
+          stop: stopName,
+          destination: trip.destinationCity,
+          isBoarding: isBoarding,
+        ),
+        const SizedBox(height: 8),
+        // Pill de parada
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+          decoration: BoxDecoration(
+            color: _orangeLight,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: _orangeBorder, width: 1),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.place_rounded, size: 13, color: _orange),
+              const SizedBox(width: 4),
+              Flexible(
+                child: Text(
+                  isBoarding
+                      ? 'Subís en $stopName'
+                      : 'Bajás en $stopName',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: _orange,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _StopBar extends StatelessWidget {
+  const _StopBar({
+    required this.origin,
+    required this.stop,
+    required this.destination,
+    required this.isBoarding,
+  });
+  final String origin;
+  final String stop;
+  final String destination;
+  final bool isBoarding;
+
+  static const _green = Color(0xFF16A34A);
+  static const _active = Color(0xFF1E293B);
+  static const _faded = Color(0xFFCBD5E1);
+
+  @override
+  Widget build(BuildContext context) {
+    final leftActive = !isBoarding;
+    final rightActive = isBoarding;
+
+    return Row(
+      children: [
+        _Dot(color: leftActive ? _active : _faded),
+        const SizedBox(width: 3),
+        Flexible(
+          child: Text(
+            origin,
+            style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: leftActive ? _active : _faded),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        const SizedBox(width: 4),
+        Expanded(
+          child: Container(height: 2, color: leftActive ? _active : _faded),
+        ),
+        const SizedBox(width: 4),
+        _Dot(color: _green, size: 9),
+        const SizedBox(width: 3),
+        Text(
+          stop,
+          style: const TextStyle(
+              fontSize: 11, fontWeight: FontWeight.w700, color: _green),
+        ),
+        const SizedBox(width: 4),
+        Expanded(
+          child: Container(height: 2, color: rightActive ? _active : _faded),
+        ),
+        const SizedBox(width: 4),
+        Flexible(
+          child: Text(
+            destination,
+            style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: rightActive ? _active : _faded),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        const SizedBox(width: 3),
+        _Dot(color: rightActive ? _active : _faded),
+      ],
+    );
+  }
+}
+
+class _Dot extends StatelessWidget {
+  const _Dot({required this.color, this.size = 7});
+  final Color color;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
     );
   }
 }

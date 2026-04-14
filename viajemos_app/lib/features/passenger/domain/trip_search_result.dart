@@ -31,6 +31,8 @@ class TripSearchResult {
     this.splitCosts = false,
     this.pickupAddress,
     this.dropoffAddress,
+    this.boardingStop,
+    this.alightingStop,
   });
 
   final String id;
@@ -58,6 +60,10 @@ class TripSearchResult {
   final bool splitCosts;
   final String? pickupAddress;
   final String? dropoffAddress;
+  /// Non-null when the passenger boards at an intermediate stop (not at the trip origin).
+  final String? boardingStop;
+  /// Non-null when the passenger alights at an intermediate stop (not at the final destination).
+  final String? alightingStop;
 
   int get freeSeats => availableSeats - seatsTaken;
 
@@ -116,6 +122,38 @@ class TripSearchResult {
     final parts = driverName.trim().split(' ');
     if (parts.length >= 2) return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
     return driverName.isNotEmpty ? driverName[0].toUpperCase() : '?';
+  }
+
+  TripSearchResult copyWith({String? boardingStop, String? alightingStop}) {
+    return TripSearchResult(
+      id: id,
+      driverId: driverId,
+      driverName: driverName,
+      driverRating: driverRating,
+      driverAvatarUrl: driverAvatarUrl,
+      originAddress: originAddress,
+      destinationAddress: destinationAddress,
+      departureDate: departureDate,
+      departureTime: departureTime,
+      availableSeats: availableSeats,
+      seatsTaken: seatsTaken,
+      pricePerSeat: pricePerSeat,
+      allowsPets: allowsPets,
+      picksUpAtDoor: picksUpAtDoor,
+      dropsOffAtDoor: dropsOffAtDoor,
+      via: via,
+      stops: stops,
+      description: description,
+      vehicleBrand: vehicleBrand,
+      vehicleModel: vehicleModel,
+      vehicleColor: vehicleColor,
+      passengers: passengers,
+      splitCosts: splitCosts,
+      pickupAddress: pickupAddress,
+      dropoffAddress: dropoffAddress,
+      boardingStop: boardingStop ?? this.boardingStop,
+      alightingStop: alightingStop ?? this.alightingStop,
+    );
   }
 
   factory TripSearchResult.fromJson(Map<String, dynamic> json) {
