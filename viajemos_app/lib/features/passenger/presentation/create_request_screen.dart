@@ -510,19 +510,22 @@ class _SeatsAndPriceCardState extends State<_SeatsAndPriceCard> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Asientos necesarios',
-                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15, color: Color(0xFF1E293B)),
-                  ),
-                  Text(
-                    'Cantidad de lugares que necesitás',
-                    style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
-                  ),
-                ],
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Asientos necesarios',
+                      style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15, color: Color(0xFF1E293B)),
+                    ),
+                    Text(
+                      'Cantidad de lugares que necesitás',
+                      style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                    ),
+                  ],
+                ),
               ),
+              const SizedBox(width: 12),
               Container(
                 decoration: BoxDecoration(
                   color: Colors.white,
@@ -560,19 +563,22 @@ class _SeatsAndPriceCardState extends State<_SeatsAndPriceCard> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Precio que buscas pagar por asiento',
-                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15, color: Color(0xFF1E293B)),
-                  ),
-                  Text(
-                    r'Lo que estás dispuesto a pagar',
-                    style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
-                  ),
-                ],
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Precio máximo por asiento',
+                      style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15, color: Color(0xFF1E293B)),
+                    ),
+                    Text(
+                      r'Lo que estás dispuesto a pagar',
+                      style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                    ),
+                  ],
+                ),
               ),
+              const SizedBox(width: 12),
               Container(
                 width: 120,
                 decoration: BoxDecoration(
@@ -590,15 +596,10 @@ class _SeatsAndPriceCardState extends State<_SeatsAndPriceCard> {
                     if (parsed != null) widget.onPriceChanged(parsed);
                   },
                   decoration: const InputDecoration(
-                    prefixIcon: Padding(
-                      padding: EdgeInsets.only(left: 12, top: 12),
-                      child: Text(
-                        'ARS',
-                        style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 13),
-                      ),
-                    ),
+                    prefixText: 'ARS ',
+                    prefixStyle: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 13),
                     border: InputBorder.none,
-                    contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                   ),
                 ),
               ),
