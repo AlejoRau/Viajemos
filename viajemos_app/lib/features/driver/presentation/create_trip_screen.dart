@@ -347,6 +347,41 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
     return false;
   }
 
+  bool get _hasAnyData =>
+      _originController.text.trim().isNotEmpty ||
+      _destinationController.text.trim().isNotEmpty ||
+      _departureDate != null ||
+      _timeFromController.text.trim().isNotEmpty ||
+      _selectedVehicle != null;
+
+  Future<bool> _confirmDiscard() async {
+    if (!_hasAnyData) return true;
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('¿Salir sin guardar?',
+            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+        content: const Text(
+          'Si salís ahora, los cambios que hiciste se van a perder.',
+          style: TextStyle(fontSize: 14, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Seguir editando'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: const Color(0xFFDC2626)),
+            child: const Text('Descartar cambios'),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
+  }
+
   bool get _hasSameOriginDest {
     final origin = _originController.text.trim().toLowerCase();
     final dest = _destinationController.text.trim().toLowerCase();
@@ -581,12 +616,20 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
       });
     }
 
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        if (await _confirmDiscard() && mounted) context.go('/driver');
+      },
+      child: Scaffold(
       appBar: AppBar(
         title: const Text('Crear viaje'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.go('/driver'),
+          onPressed: () async {
+            if (await _confirmDiscard() && mounted) context.go('/driver');
+          },
         ),
         actions: [
           IconButton(
@@ -1039,7 +1082,7 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
           ],
         ),
       ),
-    );
+    ));
   }
 }
 
