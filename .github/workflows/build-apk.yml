@@ -1,27 +1,44 @@
-name: Build APK
+name: Build & Release APK
 
 on:
   workflow_dispatch:
+    inputs:
+      version_tag:
+        description: 'Tag de la versión (ej: v1.0.2)'
+        required: true
+        default: 'v1.0.0'
+      release_name:
+        description: 'Nombre del release en GitHub'
+        required: true
+        default: 'Nueva Versión de Viajemos'
+      flutter_version:
+        description: 'Versión de Flutter a usar'
+        required: true
+        default: '3.41.6'
+
+permissions:
+  contents: write
 
 jobs:
   build:
+    name: Build APK & Upload Release
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4.2.2
 
       - name: Set up Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v4.7.1
         with:
-          distribution: temurin
-          java-version: 17
+          java-version: '17'
+          distribution: 'temurin'
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.41.6"
-          channel: stable
+          channel: 'stable'
+          flutter-version: ${{ github.event.inputs.flutter_version }}
           cache: true
 
       - name: Restore google-services.json
@@ -30,16 +47,25 @@ jobs:
         run: echo "$GOOGLE_SERVICES_JSON" > viajemos_app/android/app/google-services.json
 
       - name: Install dependencies
-        working-directory: viajemos_app
         run: flutter pub get
-
-      - name: Build APK
         working-directory: viajemos_app
-        run: flutter build apk --release
 
-      - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
+      - name: Build APK (Release)
+        # Nota: Puedes añadir --build-name=${{ github.event.inputs.version_tag }} si deseas sincronizar el nombre interno de la versión.
+        run: flutter build apk --release
+        working-directory: viajemos_app
+
+      - name: Rename APK for identification
+        run: |
+          mv viajemos_app/build/app/outputs/flutter-apk/app-release.apk Viajemos-${{ github.event.inputs.version_tag }}.apk
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2.3.2
         with:
-          name: app-release
-          path: viajemos_app/build/app/outputs/flutter-apk/app-release.apk
-          retention-days: 7
+          tag_name: ${{ github.event.inputs.version_tag }}
+          name: ${{ github.event.inputs.release_name }}
+          draft: false
+          prerelease: false
+          files: Viajemos-${{ github.event.inputs.version_tag }}.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
