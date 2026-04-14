@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/theme/app_theme.dart';
+import 'core/providers/badge_providers.dart';
 import 'features/auth/presentation/login_screen.dart';
 import 'features/auth/presentation/register_screen.dart';
 import 'features/home/presentation/home_screen.dart';
@@ -16,6 +18,7 @@ import 'features/history/presentation/history_screen.dart';
 import 'features/chats/presentation/chats_screen.dart';
 import 'features/chats/presentation/chat_detail_screen.dart';
 import 'features/profile/presentation/profile_screen.dart';
+import 'features/profile/data/profile_provider.dart';
 import 'features/passenger/presentation/search_results_screen.dart';
 import 'shared/widgets/main_shell.dart';
 
@@ -131,8 +134,35 @@ final _router = GoRouter(
   ],
 );
 
-class ViajemosApp extends StatelessWidget {
+class ViajemosApp extends ConsumerStatefulWidget {
   const ViajemosApp({super.key});
+
+  @override
+  ConsumerState<ViajemosApp> createState() => _ViajemosAppState();
+}
+
+class _ViajemosAppState extends ConsumerState<ViajemosApp> {
+  late final StreamSubscription<AuthState> _authSub;
+
+  @override
+  void initState() {
+    super.initState();
+    _authSub = Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+      if (data.event == AuthChangeEvent.signedIn) {
+        // Invalidate all user-specific providers so they re-fetch with the new session
+        ref.invalidate(profileProvider);
+        ref.read(unreadCountProvider.notifier).refresh();
+        ref.read(pendingInvitationsCountProvider.notifier).refresh();
+        ref.read(pendingRequestsCountProvider.notifier).refresh();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _authSub.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {

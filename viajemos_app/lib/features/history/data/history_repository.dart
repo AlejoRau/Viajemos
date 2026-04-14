@@ -452,6 +452,7 @@ class HistoryRepository {
   }
 
   Future<List<PassengerTripHistory>> fetchPassengerHistory() async {
+    if (_client.auth.currentUser == null) return [];
     final data = await _client.rpc('get_passenger_history') as List;
     final tripIds = data
         .map((r) => r['trip_id'] as String?)
@@ -484,6 +485,7 @@ class HistoryRepository {
   }
 
   Future<List<ActivePassengerRequest>> fetchPassengerActiveRequests() async {
+    if (_client.auth.currentUser == null) return [];
     final data = await _client.rpc('get_passenger_active_requests') as List;
     return data.map((row) {
       final timeRaw = row['departure_time'] as String?;
@@ -511,6 +513,7 @@ class HistoryRepository {
   }
 
   Future<List<PassengerCompletedTrip>> fetchPassengerCompletedTrips() async {
+    if (_client.auth.currentUser == null) return [];
     final data = await _client.rpc('get_passenger_completed_trips') as List;
     return data.map((row) {
       final timeRaw = row['departure_time'] as String?;
