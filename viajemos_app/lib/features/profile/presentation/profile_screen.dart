@@ -1414,6 +1414,10 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
       setState(() => _error = 'La contraseña debe tener al menos 6 caracteres');
       return;
     }
+    if (!newPass.contains(RegExp(r'[a-zA-Z]')) || !newPass.contains(RegExp(r'[0-9]'))) {
+      setState(() => _error = 'La contraseña debe contener al menos una letra y un número');
+      return;
+    }
     if (newPass != _confirmController.text) {
       setState(() => _error = 'Las contraseñas no coinciden');
       return;

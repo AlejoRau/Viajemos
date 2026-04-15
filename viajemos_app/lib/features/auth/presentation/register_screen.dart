@@ -46,6 +46,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
       setState(() => _error = 'La contraseña debe tener al menos 6 caracteres.');
       return;
     }
+    if (!pass.contains(RegExp(r'[a-zA-Z]')) || !pass.contains(RegExp(r'[0-9]'))) {
+      setState(() => _error = 'La contraseña debe contener al menos una letra y un número.');
+      return;
+    }
     if (pass != confirm) {
       setState(() => _error = 'Las contraseñas no coinciden.');
       return;
@@ -167,7 +171,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       _label('CONTRASEÑA'),
                       _obscureField(
                           controller: _passwordController,
-                          hint: 'Mínimo 6 caracteres',
+                          hint: 'Mínimo 6 caracteres, letras y números',
                           obscure: _obscurePass,
                           onToggle: () =>
                               setState(() => _obscurePass = !_obscurePass)),
