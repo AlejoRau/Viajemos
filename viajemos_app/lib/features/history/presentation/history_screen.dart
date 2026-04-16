@@ -149,6 +149,43 @@ class _ActiveTripsBody extends ConsumerWidget {
   }
 }
 
+// ── Status badge for active/in-progress/indeterminate trips ───────────────
+
+class _ActiveTripStatusBadge extends StatelessWidget {
+  const _ActiveTripStatusBadge({required this.status});
+  final String status;
+
+  @override
+  Widget build(BuildContext context) {
+    final (Color bg, Color fg, Color dot, String label) = switch (status) {
+      'full'          => (const Color(0xFFDBEAFE), const Color(0xFF2563EB), const Color(0xFF2563EB), 'COMPLETO'),
+      'in_progress'   => (const Color(0xFFFFEDD5), const Color(0xFFC2410C), const Color(0xFFF97316), 'EN CURSO'),
+      'indeterminate' => (const Color(0xFFFEF3C7), const Color(0xFF92400E), const Color(0xFFF59E0B), 'PENDIENTE'),
+      _               => (Colors.green.shade100, Colors.green.shade800, Colors.green, 'ACTIVO'),
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 6, height: 6,
+            decoration: BoxDecoration(color: dot, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 5),
+          Text(label,
+              style: TextStyle(
+                  fontSize: 11, fontWeight: FontWeight.w700, color: fg)),
+        ],
+      ),
+    );
+  }
+}
+
 // ── Active trip card ───────────────────────────────────────────────────────
 
 class _ActiveTripCard extends ConsumerStatefulWidget {
@@ -395,42 +432,7 @@ class _ActiveTripCardState extends ConsumerState<_ActiveTripCard> {
                   // Header: ACTIVO badge + privacy badge + actions
                   Row(
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: trip.isFull
-                              ? const Color(0xFFDBEAFE)
-                              : Colors.green.shade100,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              width: 6,
-                              height: 6,
-                              decoration: BoxDecoration(
-                                color: trip.isFull
-                                    ? const Color(0xFF2563EB)
-                                    : Colors.green,
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                            const SizedBox(width: 5),
-                            Text(
-                              trip.isFull ? 'COMPLETO' : 'ACTIVO',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                color: trip.isFull
-                                    ? const Color(0xFF2563EB)
-                                    : Colors.green.shade800,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                      _ActiveTripStatusBadge(status: trip.status),
                       if (_isPrivate) ...[
                         const SizedBox(width: 6),
                         Container(
@@ -3273,11 +3275,38 @@ class _PassengerHistoryBody extends ConsumerWidget {
                             valueFontSize: 20)),
                   ]),
                   const SizedBox(height: 28),
-                  const Text('Viajes realizados',
-                      style: TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textPrimary)),
+                  Builder(builder: (ctx) {
+                    final pending = trips.where((t) => !t.hasRated).length;
+                    return Row(
+                      children: [
+                        const Text('Viajes realizados',
+                            style: TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textPrimary)),
+                        if (pending > 0) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 7, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFFF7ED),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                  color: const Color(0xFFF97316), width: 1),
+                            ),
+                            child: Text(
+                              '$pending pendiente${pending > 1 ? 's' : ''} de calificar',
+                              style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFFC2410C)),
+                            ),
+                          ),
+                        ],
+                      ],
+                    );
+                  }),
                   const SizedBox(height: 12),
                   ...trips.map((t) => _PassengerCompletedTripCard(trip: t)),
                 ]),
@@ -3296,16 +3325,25 @@ class _PassengerCompletedTripCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final needsRating = !trip.hasRated;
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.background,
-        border: Border.all(color: AppColors.border, width: 1.5),
+        border: Border.all(
+          color: needsRating ? const Color(0xFFF97316) : AppColors.border,
+          width: needsRating ? 2.0 : 1.5,
+        ),
         borderRadius: BorderRadius.circular(16),
-        boxShadow: const [
+        boxShadow: [
           BoxShadow(
-              color: Color(0x0A000000), blurRadius: 4, offset: Offset(0, 2)),
+            color: needsRating
+                ? const Color(0xFFF97316).withOpacity(0.12)
+                : const Color(0x0A000000),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
         ],
       ),
       child: Column(children: [

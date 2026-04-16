@@ -627,7 +627,9 @@ final passengerHistoryProvider =
 
 final passengerActiveRequestsProvider =
     FutureProvider.autoDispose<List<ActivePassengerRequest>>((ref) async {
-  await ref.read(historyRepositoryProvider).updatePassengerPendingStatuses();
+  try {
+    await ref.read(historyRepositoryProvider).updatePassengerPendingStatuses();
+  } catch (_) {}
   return ref.read(historyRepositoryProvider).fetchPassengerActiveRequests();
 });
 

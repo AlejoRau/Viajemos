@@ -4,12 +4,21 @@ import 'package:go_router/go_router.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/providers/role_provider.dart';
 import '../../core/providers/badge_providers.dart';
+import '../../features/history/data/history_repository.dart';
+import '../../features/trip_completion/data/trip_completion_repository.dart';
+import '../../features/trip_completion/presentation/trip_completion_dialog.dart';
+import '../../features/trip_completion/presentation/passenger_review_dialog.dart';
 
-class MainShell extends ConsumerWidget {
+class MainShell extends ConsumerStatefulWidget {
   const MainShell({super.key, required this.child});
 
   final Widget child;
 
+  @override
+  ConsumerState<MainShell> createState() => _MainShellState();
+}
+
+class _MainShellState extends ConsumerState<MainShell> {
   int _selectedIndex(BuildContext context) {
     final location = GoRouterState.of(context).uri.toString();
     if (location.startsWith('/history')) return 1;
@@ -19,17 +28,124 @@ class MainShell extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkInitialDialogs());
+  }
+
+  Future<void> _checkInitialDialogs() async {
+    if (!mounted) return;
+    final role = ref.read(roleProvider);
+
+    if (role == '/driver') {
+      // Update statuses first (open/full → in_progress, in_progress → indeterminate)
+      try {
+        await ref.read(historyRepositoryProvider).updatePastTripStatuses();
+      } catch (_) {}
+
+      // Show completion/indeterminate dialog if there are pending trips
+      try {
+        final pending = await ref
+            .read(tripCompletionRepositoryProvider)
+            .fetchDriverTripsPendingAction();
+
+        if (pending.isNotEmpty && mounted) {
+          final trip = pending.first;
+          if (trip.isIndeterminate) {
+            showIndeterminateTripDialog(
+              context,
+              trip,
+              onConfirmed: (ratings) async {
+                await ref.read(tripCompletionRepositoryProvider).confirmTripCompleted(
+                      tripId: trip.tripId,
+                      ratings: ratings,
+                    );
+                ref.invalidate(activeDriverTripsProvider);
+                ref.invalidate(driverHistoryProvider);
+              },
+              onCancelled: (reason) async {
+                await ref.read(tripCompletionRepositoryProvider).resolveIndeterminateTrip(
+                      tripId: trip.tripId,
+                      wasCompleted: false,
+                      reason: reason,
+                    );
+                ref.invalidate(activeDriverTripsProvider);
+                ref.invalidate(driverHistoryProvider);
+              },
+            );
+          } else {
+            showTripCompletionDialog(
+              context,
+              trip,
+              onConfirmed: (ratings) async {
+                await ref.read(tripCompletionRepositoryProvider).confirmTripCompleted(
+                      tripId: trip.tripId,
+                      ratings: ratings,
+                    );
+                ref.invalidate(activeDriverTripsProvider);
+                ref.invalidate(driverHistoryProvider);
+              },
+            );
+          }
+        }
+      } catch (_) {}
+    } else {
+      // Passenger: show review prompt for the first unrated completed trip
+      try {
+        final dismissed = ref.read(dismissedReviewsProvider);
+        final completedTrips = await ref
+            .read(historyRepositoryProvider)
+            .fetchPassengerCompletedTrips();
+
+        final pending = completedTrips
+            .where((t) => !t.hasRated && !dismissed.contains(t.tripId))
+            .toList();
+
+        if (pending.isNotEmpty && mounted) {
+          final trip = pending.first;
+          showPassengerReviewDialog(
+            context,
+            trip,
+            onSubmitted: (rating, comment) async {
+              await ref.read(historyRepositoryProvider).submitDriverReview(
+                    tripId: trip.tripId,
+                    driverId: trip.driverId,
+                    rating: rating,
+                    comment: comment,
+                  );
+              ref.invalidate(passengerCompletedTripsProvider);
+              ref.read(pendingPassengerReviewsCountProvider.notifier).refresh();
+            },
+            onDismissed: () {
+              ref.read(dismissedReviewsProvider.notifier).update(
+                    (s) => {...s, trip.tripId},
+                  );
+            },
+          );
+        }
+      } catch (_) {}
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final idx = _selectedIndex(context);
     final roleHome = ref.watch(roleProvider);
     final isDriver = roleHome == '/driver';
     final unreadCount = ref.watch(unreadCountProvider);
-    final pendingCount = isDriver
-        ? ref.watch(pendingRequestsCountProvider)
-        : ref.watch(pendingInvitationsCountProvider);
+
+    // Drivers: pending trip requests; Passengers: pending invitations + pending reviews
+    final int pendingCount;
+    if (isDriver) {
+      pendingCount = ref.watch(pendingRequestsCountProvider);
+    } else {
+      final invitations = ref.watch(pendingInvitationsCountProvider);
+      final reviews = ref.watch(pendingPassengerReviewsCountProvider);
+      pendingCount = invitations + reviews;
+    }
 
     return Scaffold(
-      body: child,
+      body: widget.child,
       bottomNavigationBar: Container(
         decoration: const BoxDecoration(
           color: Colors.white,
