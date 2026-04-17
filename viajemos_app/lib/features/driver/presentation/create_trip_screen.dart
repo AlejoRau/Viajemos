@@ -578,6 +578,7 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
           departureTime: _timeFromController.text.trim(),
           seats: _seats,
           price: _price,
+          splitCosts: _splitCosts,
           vehicle: _selectedVehicle?.displayName,
           vehicleColor: _selectedVehicle?.colorHex,
           acceptsPets: _acceptsPets,

@@ -274,7 +274,7 @@ class _MainCardState extends State<_MainCard>
                                         fontWeight: FontWeight.w500)),
                                 Text(t.originCity,
                                     style: const TextStyle(
-                                        fontSize: 14,
+                                        fontSize: 16,
                                         fontWeight: FontWeight.w700,
                                         color: Color(0xFF111827))),
                                 if (t.originAddress.isNotEmpty &&
@@ -309,7 +309,7 @@ class _MainCardState extends State<_MainCard>
                                       fontWeight: FontWeight.w500)),
                               Text(t.destinationCity,
                                   style: const TextStyle(
-                                      fontSize: 14,
+                                      fontSize: 16,
                                       fontWeight: FontWeight.w700,
                                       color: Color(0xFF111827))),
                               if (t.destinationAddress.isNotEmpty &&
@@ -364,8 +364,7 @@ class _MainCardState extends State<_MainCard>
                       icon: Icons.event_seat_rounded,
                       iconColor: const Color(0xFF1A73E8),
                       label: 'Asientos',
-                      value:
-                          '${t.seats} disponible${t.seats != 1 ? "s" : ""}',
+                      value: '${t.seats} disponible${t.seats != 1 ? "s" : ""}',
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -374,7 +373,9 @@ class _MainCardState extends State<_MainCard>
                       icon: Icons.monetization_on_rounded,
                       iconColor: const Color(0xFF16A34A),
                       label: 'Precio',
-                      value: '\$${t.price} / persona',
+                      value: t.splitCosts
+                          ? 'Gastos divididos'
+                          : '\$${t.price} / persona',
                     ),
                   ),
                 ],
@@ -388,7 +389,6 @@ class _MainCardState extends State<_MainCard>
                   iconColor: Color(t.vehicleColor ?? 0xFF6B7280),
                   label: 'Vehículo',
                   value: t.vehicle!,
-                  full: true,
                 ),
               ],
 
@@ -496,40 +496,37 @@ class _InfoItem extends StatelessWidget {
     required this.iconColor,
     required this.label,
     required this.value,
-    this.full = false,
   });
 
   final IconData icon;
   final Color iconColor;
   final String label;
   final String value;
-  final bool full;
 
   @override
   Widget build(BuildContext context) {
-    final child = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: const Color(0xFFF3F4F6),
+        color: const Color(0xFFF9FAFB),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: const Color(0xFFE5E7EB)),
       ),
       child: Row(
-        mainAxisSize: full ? MainAxisSize.max : MainAxisSize.min,
         children: [
           Container(
-            padding: const EdgeInsets.all(5),
+            padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
               color: iconColor.withOpacity(0.12),
-              borderRadius: BorderRadius.circular(6),
+              borderRadius: BorderRadius.circular(7),
             ),
-            child: Icon(icon, size: 13, color: iconColor),
+            child: Icon(icon, size: 14, color: iconColor),
           ),
-          const SizedBox(width: 8),
-          Flexible(
+          const SizedBox(width: 10),
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
               children: [
                 Text(label,
                     style: const TextStyle(
@@ -538,9 +535,9 @@ class _InfoItem extends StatelessWidget {
                         fontWeight: FontWeight.w500)),
                 Text(value,
                     style: const TextStyle(
-                        fontSize: 12,
+                        fontSize: 13,
                         fontWeight: FontWeight.w700,
-                        color: Color(0xFF111827)),
+                        color: Color(0xFF1E293B)),
                     overflow: TextOverflow.ellipsis,
                     maxLines: 1),
               ],
@@ -549,7 +546,6 @@ class _InfoItem extends StatelessWidget {
         ],
       ),
     );
-    return full ? SizedBox(width: double.infinity, child: child) : child;
   }
 }
 
@@ -628,21 +624,22 @@ class _ListSection extends StatelessWidget {
                     fontWeight: FontWeight.w700,
                     color: color)),
           ]),
-          const SizedBox(height: 5),
+          const SizedBox(height: 6),
           Wrap(
-            spacing: 5,
-            runSpacing: 4,
+            spacing: 6,
+            runSpacing: 5,
             children: items
                 .map((item) => Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 7, vertical: 3),
+                          horizontal: 10, vertical: 5),
                       decoration: BoxDecoration(
                         color: color.withOpacity(0.10),
-                        borderRadius: BorderRadius.circular(6),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: color.withOpacity(0.25)),
                       ),
                       child: Text(item,
                           style: TextStyle(
-                              fontSize: 11,
+                              fontSize: 13,
                               color: color,
                               fontWeight: FontWeight.w600)),
                     ))

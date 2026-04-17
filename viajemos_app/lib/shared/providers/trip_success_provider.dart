@@ -10,6 +10,7 @@ typedef TripSuccess = ({
   String departureTime,
   int seats,
   int price,
+  bool splitCosts,
   String? vehicle,
   int? vehicleColor,
   bool acceptsPets,
