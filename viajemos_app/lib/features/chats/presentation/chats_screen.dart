@@ -157,7 +157,12 @@ class _ChatsScreenState extends ConsumerState<ChatsScreen> {
 }
 
 class _ChatTile extends StatelessWidget {
-  const _ChatTile({required this.conv, required this.onTap, required this.onHide, required this.viewerIsDriver});
+  const _ChatTile({
+    required this.conv,
+    required this.onTap,
+    required this.onHide,
+    required this.viewerIsDriver,
+  });
   final ConversationSummary conv;
   final VoidCallback onTap;
   final VoidCallback onHide;
