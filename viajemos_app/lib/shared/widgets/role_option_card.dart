@@ -7,9 +7,11 @@ class RoleOptionCard extends StatelessWidget {
     required this.label,
     required this.icon,
     required this.onTap,
+    this.subtitle,
   });
 
   final String label;
+  final String? subtitle;
   final IconData icon;
   final VoidCallback onTap;
 
@@ -24,7 +26,7 @@ class RoleOptionCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         child: Container(
           width: double.infinity,
-          height: 200,
+          padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 20),
           decoration: BoxDecoration(
             border: Border.all(color: AppColors.border, width: 2),
             borderRadius: BorderRadius.circular(20),
@@ -47,10 +49,22 @@ class RoleOptionCard extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   fontSize: 18,
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.w700,
                   color: AppColors.textPrimary,
                 ),
               ),
+              if (subtitle != null) ...[
+                const SizedBox(height: 6),
+                Text(
+                  subtitle!,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w400,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
             ],
           ),
         ),

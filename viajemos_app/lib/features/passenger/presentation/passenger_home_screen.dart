@@ -26,13 +26,15 @@ class PassengerHomeScreen extends ConsumerWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               RoleOptionCard(
-                label: 'Buscar viajes',
+                label: 'Buscar Viajes Disponibles',
+                subtitle: 'Encontrá un viaje publicado por un conductor',
                 icon: Icons.search_rounded,
                 onTap: () => context.go('/passenger/search-trips'),
               ),
               const SizedBox(height: 20),
               RoleOptionCard(
-                label: 'Publicar que busco viaje',
+                label: 'Publicar que necesito viaje',
+                subtitle: 'Avisá a los conductores que buscás un lugar',
                 icon: Icons.campaign_rounded,
                 onTap: () => context.go('/passenger/create-request'),
               ),
