@@ -157,17 +157,11 @@ class _ChatsScreenState extends ConsumerState<ChatsScreen> {
 }
 
 class _ChatTile extends StatelessWidget {
-<<<<<<< Updated upstream
-  const _ChatTile({required this.conv, required this.onTap, required this.viewerIsDriver});
-  final ConversationSummary conv;
-  final VoidCallback onTap;
-  final bool viewerIsDriver;
-=======
-  const _ChatTile({required this.conv, required this.onTap, required this.onHide});
+  const _ChatTile({required this.conv, required this.onTap, required this.onHide, required this.viewerIsDriver});
   final ConversationSummary conv;
   final VoidCallback onTap;
   final VoidCallback onHide;
->>>>>>> Stashed changes
+  final bool viewerIsDriver;
 
   @override
   Widget build(BuildContext context) {
