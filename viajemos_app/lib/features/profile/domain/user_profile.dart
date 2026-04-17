@@ -11,6 +11,7 @@ class UserProfile {
     required this.memberSince,
     this.cancelledTripsCount = 0,
     this.expelledPassengersCount = 0,
+    this.kickedOutCount = 0,
     this.avatarUrl,
     this.phone,
     this.birthDate,
@@ -30,6 +31,7 @@ class UserProfile {
   final DateTime memberSince;
   final int cancelledTripsCount;
   final int expelledPassengersCount;
+  final int kickedOutCount; // veces que fue expulsado como pasajero
   final String? avatarUrl;
   final String? phone;
   final DateTime? birthDate;
