@@ -93,89 +93,67 @@ class _PublicProfileSheetState extends State<_PublicProfileSheet> {
   }
 }
 
-class _ProfileBody extends StatelessWidget {
+class _ProfileBody extends StatefulWidget {
   const _ProfileBody({required this.profile, this.viewerIsDriver});
   final UserProfile profile;
-  /// true  = viewer is driver   → show passenger side of this profile
-  /// false = viewer is passenger → show driver side of this profile
-  /// null  = show both
+  /// true  = default to passenger tab (viewer is driver)
+  /// false = default to driver tab (viewer is passenger)
+  /// null  = default to driver tab
   final bool? viewerIsDriver;
 
-  bool get _showDriverSide   => viewerIsDriver == null || viewerIsDriver == false;
-  bool get _showPassengerSide => viewerIsDriver == null || viewerIsDriver == true;
+  @override
+  State<_ProfileBody> createState() => _ProfileBodyState();
+}
+
+class _ProfileBodyState extends State<_ProfileBody> {
+  late bool _showingDriver; // true = showing driver tab
+
+  @override
+  void initState() {
+    super.initState();
+    // Default: show the tab most relevant to the viewer
+    // viewer is driver → see passenger tab first; viewer is passenger → see driver tab first
+    _showingDriver = widget.viewerIsDriver != true;
+  }
+
+  UserProfile get p => widget.profile;
+
+  int _age(DateTime birth) {
+    final today = DateTime.now();
+    int age = today.year - birth.year;
+    if (today.month < birth.month ||
+        (today.month == birth.month && today.day < birth.day)) age--;
+    return age;
+  }
+
+  String _formatYear(DateTime d) {
+    const months = ['enero','febrero','marzo','abril','mayo','junio',
+        'julio','agosto','septiembre','octubre','noviembre','diciembre'];
+    return '${months[d.month - 1]} ${d.year}';
+  }
 
   @override
   Widget build(BuildContext context) {
-    final roleLabel = viewerIsDriver == true
-        ? 'Perfil como pasajero'
-        : viewerIsDriver == false
-            ? 'Perfil como conductor'
-            : null;
-
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Role badge
-          if (roleLabel != null) ...[
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: viewerIsDriver == true
-                    ? const Color(0xFFEFF6FF)
-                    : const Color(0xFFF0FDF4),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: viewerIsDriver == true
-                      ? const Color(0xFFBFDBFE)
-                      : const Color(0xFFBBF7D0),
-                ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    viewerIsDriver == true
-                        ? Icons.airline_seat_recline_normal_rounded
-                        : Icons.directions_car_rounded,
-                    size: 14,
-                    color: viewerIsDriver == true
-                        ? const Color(0xFF1D4ED8)
-                        : const Color(0xFF16A34A),
-                  ),
-                  const SizedBox(width: 5),
-                  Text(
-                    roleLabel,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: viewerIsDriver == true
-                          ? const Color(0xFF1D4ED8)
-                          : const Color(0xFF16A34A),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 14),
-          ],
-
-          // Avatar + name + rating
+          // Avatar + name + rating + toggle
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               CircleAvatar(
                 radius: 36,
                 backgroundColor: AppColors.primaryLight,
                 child: Text(
-                  profile.initials,
+                  p.initials,
                   style: const TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
+                      fontSize: 24, fontWeight: FontWeight.bold,
                       color: AppColors.primary),
                 ),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -183,50 +161,41 @@ class _ProfileBody extends StatelessWidget {
                     RichText(
                       text: TextSpan(
                         style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
+                            fontSize: 19, fontWeight: FontWeight.bold,
                             color: Color(0xFF1E293B)),
                         children: [
-                          TextSpan(text: profile.fullName),
-                          if (profile.birthDate != null) ...[
-                            const TextSpan(
-                              text: ', ',
-                              style: TextStyle(
-                                  fontWeight: FontWeight.w400,
-                                  color: Color(0xFF94A3B8)),
-                            ),
-                            TextSpan(
-                              text: '${_age(profile.birthDate!)}',
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.w500,
-                                  color: Color(0xFF64748B)),
-                            ),
+                          TextSpan(text: p.fullName),
+                          if (p.birthDate != null) ...[
+                            const TextSpan(text: ', ',
+                                style: TextStyle(fontWeight: FontWeight.w400,
+                                    color: Color(0xFF94A3B8))),
+                            TextSpan(text: '${_age(p.birthDate!)}',
+                                style: const TextStyle(fontWeight: FontWeight.w500,
+                                    color: Color(0xFF64748B))),
                           ],
                         ],
                       ),
                     ),
                     const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        const Icon(Icons.star_rounded,
-                            size: 16, color: Color(0xFFFACC15)),
-                        const SizedBox(width: 4),
-                        Text(
-                          profile.avgRating > 0
-                              ? profile.avgRating.toStringAsFixed(1)
-                              : 'Sin calificación',
-                          style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFF1E293B)),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Miembro desde ${_formatYear(profile.memberSince)}',
-                      style: const TextStyle(
-                          fontSize: 12, color: AppColors.textSecondary),
+                    Row(children: [
+                      const Icon(Icons.star_rounded, size: 15, color: Color(0xFFFACC15)),
+                      const SizedBox(width: 3),
+                      Text(
+                        p.avgRating > 0
+                            ? p.avgRating.toStringAsFixed(1)
+                            : 'Sin calificación',
+                        style: const TextStyle(fontSize: 13,
+                            fontWeight: FontWeight.w600, color: Color(0xFF1E293B)),
+                      ),
+                    ]),
+                    const SizedBox(height: 3),
+                    Text('Miembro desde ${_formatYear(p.memberSince)}',
+                        style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+                    const SizedBox(height: 10),
+                    // Role toggle
+                    _RoleToggle(
+                      showingDriver: _showingDriver,
+                      onChanged: (v) => setState(() => _showingDriver = v),
                     ),
                   ],
                 ),
@@ -237,140 +206,216 @@ class _ProfileBody extends StatelessWidget {
           const Divider(color: Color(0xFFE2E8F0)),
           const SizedBox(height: 16),
 
-          // Trip stats — filtered by role
-          Row(
-            children: [
-              if (_showDriverSide)
-                Expanded(
-                  child: _StatBox(
-                      value: '${profile.tripsDriver}',
-                      label: 'Viajes como\nconductor',
-                      icon: Icons.directions_car_rounded),
-                ),
-              if (_showDriverSide && _showPassengerSide)
-                const SizedBox(width: 12),
-              if (_showPassengerSide)
-                Expanded(
-                  child: _StatBox(
-                      value: '${profile.tripsPassenger}',
-                      label: 'Viajes como\npasajero',
-                      icon: Icons.airline_seat_recline_normal_rounded),
-                ),
-            ],
+          // Stats
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 250),
+            child: _showingDriver
+                ? _DriverStats(profile: p, key: const ValueKey('driver'))
+                : _PassengerStats(profile: p, key: const ValueKey('passenger')),
           ),
-          // Negative stats — only relevant when viewing as driver (evaluating a driver)
-          if (_showDriverSide &&
-              (profile.cancelledTripsCount > 0 ||
-                  profile.expelledPassengersCount > 0)) ...[
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                if (profile.cancelledTripsCount > 0)
-                  Expanded(
-                    child: _StatBox(
-                        value: '${profile.cancelledTripsCount}',
-                        label: 'Viajes\ncancelados',
-                        icon: Icons.cancel_outlined,
-                        negative: true),
-                  ),
-                if (profile.cancelledTripsCount > 0 &&
-                    profile.expelledPassengersCount > 0)
-                  const SizedBox(width: 12),
-                if (profile.expelledPassengersCount > 0)
-                  Expanded(
-                    child: _StatBox(
-                        value: '${profile.expelledPassengersCount}',
-                        label: 'Pasajeros\nexpulsados',
-                        icon: Icons.person_remove_rounded,
-                        negative: true),
-                  ),
-              ],
-            ),
-          ],
+
           const SizedBox(height: 20),
 
-          // Bio driver
-          if (_showDriverSide &&
-              profile.bioDriver != null &&
-              profile.bioDriver!.isNotEmpty) ...[
-            const Text('Como conductor',
-                style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF1E293B))),
-            const SizedBox(height: 6),
-            Text(profile.bioDriver!,
-                style: const TextStyle(
-                    fontSize: 13,
-                    color: Color(0xFF475569),
-                    height: 1.5)),
-            const SizedBox(height: 16),
-          ],
+          // Bio
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 250),
+            child: _showingDriver
+                ? _BioSection(
+                    key: const ValueKey('bio_driver'),
+                    label: 'Como conductor',
+                    bio: p.bioDriver,
+                  )
+                : _BioSection(
+                    key: const ValueKey('bio_passenger'),
+                    label: 'Como pasajero',
+                    bio: p.bioPassenger,
+                  ),
+          ),
 
-          // Bio passenger
-          if (_showPassengerSide &&
-              profile.bioPassenger != null &&
-              profile.bioPassenger!.isNotEmpty) ...[
-            const Text('Como pasajero',
-                style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF1E293B))),
-            const SizedBox(height: 6),
-            Text(profile.bioPassenger!,
-                style: const TextStyle(
-                    fontSize: 13,
-                    color: Color(0xFF475569),
-                    height: 1.5)),
-            const SizedBox(height: 16),
-          ],
-
-          // Social — always shown
+          // Social
           const Divider(color: Color(0xFFE2E8F0)),
           const SizedBox(height: 12),
           const Text('Redes sociales',
-              style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700,
                   color: Color(0xFF1E293B))),
           const SizedBox(height: 10),
-          if (profile.instagram == null || profile.instagram!.isEmpty) ...[
-            if (profile.facebook == null || profile.facebook!.isEmpty)
-              const Text(
-                'Este usuario no agregó sus redes sociales.',
-                style: TextStyle(fontSize: 13, color: Color(0xFF94A3B8)),
-              )
-          ],
-          if (profile.instagram != null && profile.instagram!.isNotEmpty) ...[
-            _SocialRow(
-                icon: Icons.camera_alt_outlined,
-                label: '@${profile.instagram}'),
+          if ((p.instagram == null || p.instagram!.isEmpty) &&
+              (p.facebook == null || p.facebook!.isEmpty))
+            const Text('Este usuario no agregó sus redes sociales.',
+                style: TextStyle(fontSize: 13, color: Color(0xFF94A3B8))),
+          if (p.instagram != null && p.instagram!.isNotEmpty) ...[
+            _SocialRow(icon: Icons.camera_alt_outlined, label: '@${p.instagram}'),
             const SizedBox(height: 8),
           ],
-          if (profile.facebook != null && profile.facebook!.isNotEmpty)
-            _SocialRow(
-                icon: Icons.facebook_rounded, label: profile.facebook!),
+          if (p.facebook != null && p.facebook!.isNotEmpty)
+            _SocialRow(icon: Icons.facebook_rounded, label: p.facebook!),
         ],
       ),
     );
   }
+}
 
-  int _age(DateTime birth) {
-    final today = DateTime.now();
-    int age = today.year - birth.year;
-    if (today.month < birth.month ||
-        (today.month == birth.month && today.day < birth.day)) {
-      age--;
-    }
-    return age;
+// ── Role toggle ───────────────────────────────────────────────────────────────
+
+class _RoleToggle extends StatelessWidget {
+  const _RoleToggle({required this.showingDriver, required this.onChanged});
+  final bool showingDriver;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFFF1F5F9),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      padding: const EdgeInsets.all(3),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _ToggleTab(
+            label: 'Conductor',
+            icon: Icons.directions_car_rounded,
+            active: showingDriver,
+            onTap: () => onChanged(true),
+          ),
+          const SizedBox(width: 2),
+          _ToggleTab(
+            label: 'Pasajero',
+            icon: Icons.airline_seat_recline_normal_rounded,
+            active: !showingDriver,
+            onTap: () => onChanged(false),
+          ),
+        ],
+      ),
+    );
   }
+}
 
-  String _formatYear(DateTime d) {
-    const months = [
-      'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
-      'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
-    ];
-    return '${months[d.month - 1]} ${d.year}';
+class _ToggleTab extends StatelessWidget {
+  const _ToggleTab({
+    required this.label,
+    required this.icon,
+    required this.active,
+    required this.onTap,
+  });
+  final String label;
+  final IconData icon;
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeInOut,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: active ? Colors.white : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          boxShadow: active
+              ? [const BoxShadow(color: Color(0x18000000), blurRadius: 4, offset: Offset(0, 1))]
+              : null,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 13,
+                color: active ? AppColors.primary : AppColors.textSecondary),
+            const SizedBox(width: 4),
+            Text(label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+                  color: active ? AppColors.primary : AppColors.textSecondary,
+                )),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Stats sections ────────────────────────────────────────────────────────────
+
+class _DriverStats extends StatelessWidget {
+  const _DriverStats({super.key, required this.profile});
+  final UserProfile profile;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _StatBox(
+          value: '${profile.tripsDriver}',
+          label: 'Viajes como conductor',
+          icon: Icons.directions_car_rounded,
+        ),
+        if (profile.cancelledTripsCount > 0 || profile.expelledPassengersCount > 0) ...[
+          const SizedBox(height: 12),
+          Row(children: [
+            if (profile.cancelledTripsCount > 0)
+              Expanded(child: _StatBox(
+                  value: '${profile.cancelledTripsCount}',
+                  label: 'Viajes\ncancelados',
+                  icon: Icons.cancel_outlined,
+                  negative: true)),
+            if (profile.cancelledTripsCount > 0 && profile.expelledPassengersCount > 0)
+              const SizedBox(width: 12),
+            if (profile.expelledPassengersCount > 0)
+              Expanded(child: _StatBox(
+                  value: '${profile.expelledPassengersCount}',
+                  label: 'Pasajeros\nexpulsados',
+                  icon: Icons.person_remove_rounded,
+                  negative: true)),
+          ]),
+        ],
+      ],
+    );
+  }
+}
+
+class _PassengerStats extends StatelessWidget {
+  const _PassengerStats({super.key, required this.profile});
+  final UserProfile profile;
+
+  @override
+  Widget build(BuildContext context) {
+    return _StatBox(
+      value: '${profile.tripsPassenger}',
+      label: 'Viajes como pasajero',
+      icon: Icons.airline_seat_recline_normal_rounded,
+    );
+  }
+}
+
+// ── Bio section ───────────────────────────────────────────────────────────────
+
+class _BioSection extends StatelessWidget {
+  const _BioSection({super.key, required this.label, required this.bio});
+  final String label;
+  final String? bio;
+
+  @override
+  Widget build(BuildContext context) {
+    if (bio == null || bio!.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label,
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700,
+                  color: Color(0xFF1E293B))),
+          const SizedBox(height: 6),
+          Text(bio!,
+              style: const TextStyle(fontSize: 13, color: Color(0xFF475569), height: 1.5)),
+        ],
+      ),
+    );
   }
 }
 
