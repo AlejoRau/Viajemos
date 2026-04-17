@@ -287,11 +287,12 @@ class _ActiveTripCardState extends ConsumerState<_ActiveTripCard> {
     final date = _formatDate(trip.departureDate);
     final time = trip.departureTime != null ? '  ·  ${trip.departureTime}' : '';
     final seats = trip.freeSeats;
+    final link = 'viajemos://viaje/${trip.id}';
     final text = '🚗 Viajemos: ${trip.originAddress} → ${trip.destinationAddress}\n'
         '📅 $date$time\n'
         '💺 $seats lugar${seats != 1 ? 'es' : ''} disponible${seats != 1 ? 's' : ''}\n'
         '💰 \$${_formatNum(trip.pricePerSeat)} por asiento\n\n'
-        '¡Sumate al viaje!';
+        '¡Sumate al viaje! 👉 $link';
     Share.share(text);
   }
 
@@ -2444,11 +2445,12 @@ class _ActivePassengerRequestCardState
     final req = widget.request;
     final date = _formatDate(req.departureDate);
     final time = req.departureTime != null ? '  ·  ${req.departureTime}' : '';
+    final link = 'viajemos://viaje/${req.tripId}';
     final text = '🚗 Viajemos: ${req.originAddress} → ${req.destinationAddress}\n'
         '📅 $date$time\n'
         '💰 \$${_formatNum(req.pricePerSeat)} por asiento\n'
         '🚘 ${req.driverName}\n\n'
-        '¡Encontré este viaje en Viajemos!';
+        '¡Encontré este viaje en Viajemos! 👉 $link';
     Share.share(text);
   }
 

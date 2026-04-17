@@ -22,6 +22,7 @@ import 'features/chats/presentation/chat_detail_screen.dart';
 import 'features/profile/presentation/profile_screen.dart';
 import 'features/profile/data/profile_provider.dart';
 import 'features/passenger/presentation/search_results_screen.dart';
+import 'features/passenger/presentation/trip_deep_link_screen.dart';
 import 'features/notifications/presentation/notifications_screen.dart';
 import 'shared/widgets/main_shell.dart';
 
@@ -138,6 +139,12 @@ final _router = GoRouter(
         GoRoute(path: '/history', builder: (_, __) => const HistoryScreen()),
         GoRoute(path: '/chats', builder: (_, __) => const ChatsScreen()),
         GoRoute(path: '/profile', builder: (_, __) => const ProfileScreen()),
+        GoRoute(
+          path: '/viaje/:id',
+          builder: (_, state) => TripDeepLinkScreen(
+            tripId: state.pathParameters['id']!,
+          ),
+        ),
       ],
     ),
   ],

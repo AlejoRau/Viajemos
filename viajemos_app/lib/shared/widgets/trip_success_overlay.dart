@@ -36,10 +36,9 @@ class _TripSuccessOverlayState extends State<_TripSuccessOverlay>
     final date =
         '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}';
     final timeStr = t.departureTime.isNotEmpty ? ' a las ${t.departureTime}' : '';
-    final link =
-        'viajemos://buscar?origen=${Uri.encodeComponent(t.originCity)}&destino=${Uri.encodeComponent(t.destinationCity)}';
+    final link = 'viajemos://viaje/${t.id}';
     return '¡Unite a mi viaje de ${t.originCity} a ${t.destinationCity} el $date$timeStr! 🚗\n\n'
-        'Buscá este viaje en Viajemos:\n$link';
+        'Abrí el viaje directo en Viajemos:\n$link';
   }
 
   @override

@@ -133,6 +133,16 @@ class TripSearchRepository {
     return null;
   }
 
+  Future<TripSearchResult?> fetchTripById(String tripId) async {
+    final row = await _client
+        .from('trips')
+        .select(_select)
+        .eq('id', tripId)
+        .maybeSingle();
+    if (row == null) return null;
+    return TripSearchResult.fromJson(row as Map<String, dynamic>);
+  }
+
   Future<List<Map<String, String?>>> fetchTripPassengers(String tripId) async {
     final data = await _client
         .from('trip_requests')

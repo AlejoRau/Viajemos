@@ -77,6 +77,16 @@ Widget _passengerAvatar({
   );
 }
 
+/// Abre el sheet de detalle de un viaje desde cualquier contexto (ej: deep link).
+void showTripDetails(BuildContext context, TripSearchResult trip) {
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (_) => _TripDetailsSheet(trip: trip),
+  );
+}
+
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 class SearchResultsScreen extends ConsumerStatefulWidget {
