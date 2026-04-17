@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../../core/theme/app_theme.dart';
 import '../../../shared/widgets/role_option_card.dart';
 import '../../../shared/widgets/role_switcher_title.dart';
+import '../../../shared/widgets/notification_bell.dart';
 
 class PassengerHomeScreen extends ConsumerWidget {
   const PassengerHomeScreen({super.key});
@@ -17,6 +17,7 @@ class PassengerHomeScreen extends ConsumerWidget {
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.go('/'),
         ),
+        actions: const [NotificationBell()],
       ),
       body: Center(
         child: Padding(

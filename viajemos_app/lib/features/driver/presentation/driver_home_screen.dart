@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../../core/theme/app_theme.dart';
 import '../../../shared/widgets/role_option_card.dart';
 import '../../../shared/widgets/role_switcher_title.dart';
+import '../../../shared/widgets/notification_bell.dart';
 import '../../../shared/providers/trip_success_provider.dart';
 import '../../../shared/widgets/trip_success_overlay.dart';
 
@@ -38,6 +38,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.go('/'),
         ),
+        actions: const [NotificationBell()],
       ),
       body: Center(
         child: Padding(

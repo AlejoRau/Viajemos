@@ -96,6 +96,20 @@ class PushNotificationService {
         iOS: DarwinNotificationDetails(),
       ),
     );
+
+    // Persist to the notifications table so the in-app bell can show it.
+    try {
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user != null) {
+        await Supabase.instance.client.from('notifications').insert({
+          'user_id': user.id,
+          'title': notification.title ?? '',
+          'body': notification.body ?? '',
+          'type': message.data['type'] as String? ?? 'general',
+          if (message.data.isNotEmpty) 'data': message.data,
+        });
+      }
+    } catch (_) {}
   }
 
   /// Obtener el FCM token del dispositivo y guardarlo en Supabase.

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/theme/app_theme.dart';
 import 'core/providers/badge_providers.dart';
+import 'features/notifications/data/notifications_provider.dart';
 import 'features/auth/presentation/login_screen.dart';
 import 'features/auth/presentation/register_screen.dart';
 import 'features/home/presentation/home_screen.dart';
@@ -21,6 +22,7 @@ import 'features/chats/presentation/chat_detail_screen.dart';
 import 'features/profile/presentation/profile_screen.dart';
 import 'features/profile/data/profile_provider.dart';
 import 'features/passenger/presentation/search_results_screen.dart';
+import 'features/notifications/presentation/notifications_screen.dart';
 import 'shared/widgets/main_shell.dart';
 
 // Notifica al router cuando cambia el estado de auth para disparar redirect.
@@ -63,6 +65,12 @@ final _router = GoRouter(
     GoRoute(
       path: '/',
       builder: (_, __) => const HomeScreen(),
+    ),
+
+    // Notifications: sin nav bar
+    GoRoute(
+      path: '/notifications',
+      builder: (_, __) => const NotificationsScreen(),
     ),
 
     // Chat detail: sin nav bar
@@ -160,6 +168,8 @@ class _ViajemosAppState extends ConsumerState<ViajemosApp> {
         ref.read(unreadCountProvider.notifier).refresh();
         ref.read(pendingInvitationsCountProvider.notifier).refresh();
         ref.read(pendingRequestsCountProvider.notifier).refresh();
+        ref.read(notificationUnreadCountProvider.notifier).refresh();
+        ref.read(notificationsListProvider.notifier).refresh();
       }
     });
   }
