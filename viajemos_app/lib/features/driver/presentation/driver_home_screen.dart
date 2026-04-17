@@ -47,13 +47,15 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               RoleOptionCard(
-                label: 'Crear un viaje',
+                label: 'Publicar un viaje',
+                subtitle: 'Cargá tu ruta y encontrá pasajeros',
                 icon: Icons.location_on,
                 onTap: () => context.go('/driver/create-trip'),
               ),
               const SizedBox(height: 20),
               RoleOptionCard(
-                label: 'Ver pedidos de pasajeros',
+                label: 'Ver pasajeros que buscan viaje',
+                subtitle: 'Encontrá personas que necesitan un lugar',
                 icon: Icons.format_list_bulleted,
                 onTap: () => context.go('/driver/passenger-requests-filter'),
               ),
