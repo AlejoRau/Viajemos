@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../shared/widgets/public_profile_sheet.dart';
 import '../data/chat_repository.dart';
 
 String _initials(String name) {
@@ -153,22 +154,27 @@ class _ChatTile extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
         child: Row(
           children: [
-            CircleAvatar(
-              radius: 28,
-              backgroundColor: isGroup
-                  ? const Color(0xFFEDE9FE)
-                  : AppColors.primaryLight,
-              child: isGroup
-                  ? const Icon(Icons.groups_rounded,
-                      size: 26, color: Color(0xFF7C3AED))
-                  : Text(
-                      _initials(conv.contactName),
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.primary,
+            GestureDetector(
+              onTap: !isGroup && conv.contactId != null
+                  ? () => showPublicProfile(context, conv.contactId!)
+                  : null,
+              child: CircleAvatar(
+                radius: 28,
+                backgroundColor: isGroup
+                    ? const Color(0xFFEDE9FE)
+                    : AppColors.primaryLight,
+                child: isGroup
+                    ? const Icon(Icons.groups_rounded,
+                        size: 26, color: Color(0xFF7C3AED))
+                    : Text(
+                        _initials(conv.contactName),
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.primary,
+                        ),
                       ),
-                    ),
+              ),
             ),
             const SizedBox(width: 14),
             Expanded(

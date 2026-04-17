@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/providers/badge_providers.dart';
+import '../../../shared/widgets/public_profile_sheet.dart';
 import '../data/chat_repository.dart';
 import 'chat_trip_detail_sheet.dart';
 
@@ -372,15 +373,20 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
               )
             : Row(
                 children: [
-                  CircleAvatar(
-                    radius: 18,
-                    backgroundColor: AppColors.primaryLight,
-                    child: Text(
-                      _initials(widget.contactName),
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.primary,
+                  GestureDetector(
+                    onTap: widget.contactId != null
+                        ? () => showPublicProfile(context, widget.contactId!)
+                        : null,
+                    child: CircleAvatar(
+                      radius: 18,
+                      backgroundColor: AppColors.primaryLight,
+                      child: Text(
+                        _initials(widget.contactName),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.primary,
+                        ),
                       ),
                     ),
                   ),
@@ -1076,19 +1082,22 @@ class _GroupMembersSheetState extends State<_GroupMembersSheet> {
                             horizontal: 20, vertical: 10),
                         child: Row(
                           children: [
-                            CircleAvatar(
-                              radius: 22,
-                              backgroundColor: p.isDriver
-                                  ? AppColors.primaryLight
-                                  : const Color(0xFFF1F5F9),
-                              child: Text(
-                                _initials(p.fullName),
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w700,
-                                  color: p.isDriver
-                                      ? AppColors.primary
-                                      : AppColors.textSecondary,
+                            GestureDetector(
+                              onTap: () => showPublicProfile(context, p.userId),
+                              child: CircleAvatar(
+                                radius: 22,
+                                backgroundColor: p.isDriver
+                                    ? AppColors.primaryLight
+                                    : const Color(0xFFF1F5F9),
+                                child: Text(
+                                  _initials(p.fullName),
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: p.isDriver
+                                        ? AppColors.primary
+                                        : AppColors.textSecondary,
+                                  ),
                                 ),
                               ),
                             ),
