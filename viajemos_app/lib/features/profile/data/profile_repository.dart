@@ -13,7 +13,7 @@ class ProfileRepository {
     var data = await _client
         .from('profiles')
         .select(
-            'full_name, avg_rating, trips_driven, trips_taken, bio_driver, bio_passenger, instagram, facebook, phone, birth_date, avatar_url')
+            'full_name, avg_rating, trips_driven, trips_taken, bio_driver, bio_passenger, instagram, facebook, phone, birth_date, avatar_url, home_city')
         .eq('id', user.id)
         .maybeSingle();
 
@@ -47,7 +47,7 @@ class ProfileRepository {
       id: user.id,
       fullName: fullName,
       email: user.email ?? '',
-      avgRating: (data['avg_rating'] as num?)?.toDouble() ?? 0.0,
+      avgRating: double.tryParse('${data['avg_rating'] ?? ''}') ?? 0.0,
       tripsDriver: (data['trips_driven'] as int?) ?? 0,
       tripsPassenger: (data['trips_taken'] as int?) ?? 0,
       memberSince: DateTime.parse(user.createdAt),
@@ -58,6 +58,7 @@ class ProfileRepository {
       bioPassenger: data['bio_passenger'] as String?,
       instagram: data['instagram'] as String?,
       facebook: data['facebook'] as String?,
+      homeCity: data['home_city'] as String?,
     );
   }
 
@@ -117,7 +118,7 @@ class ProfileRepository {
   Future<UserProfile> fetchPublicProfile(String userId) async {
     final data = await _client
         .from('profiles')
-        .select('full_name, avg_rating, trips_driven, trips_taken, cancelled_trips_count, expelled_passengers_count, bio_driver, bio_passenger, instagram, facebook, created_at, birth_date')
+        .select('full_name, avg_rating, trips_driven, trips_taken, cancelled_trips_count, expelled_passengers_count, bio_driver, bio_passenger, instagram, facebook, created_at, birth_date, home_city')
         .eq('id', userId)
         .single();
 
@@ -129,7 +130,7 @@ class ProfileRepository {
           ? data['full_name'] as String
           : 'Usuario',
       email: '',
-      avgRating: (data['avg_rating'] as num?)?.toDouble() ?? 0.0,
+      avgRating: double.tryParse('${data['avg_rating'] ?? ''}') ?? 0.0,
       tripsDriver: (data['trips_driven'] as int?) ?? 0,
       tripsPassenger: (data['trips_taken'] as int?) ?? 0,
       cancelledTripsCount: (data['cancelled_trips_count'] as int?) ?? 0,
@@ -140,7 +141,16 @@ class ProfileRepository {
       bioPassenger: data['bio_passenger'] as String?,
       instagram: data['instagram'] as String?,
       facebook: data['facebook'] as String?,
+      homeCity: data['home_city'] as String?,
     );
+  }
+
+  Future<void> updateCity(String? city) async {
+    final user = _client.auth.currentUser;
+    if (user == null) return;
+    await _client.from('profiles').update({
+      'home_city': city?.trim().isEmpty == true ? null : city?.trim(),
+    }).eq('id', user.id);
   }
 
   Future<void> updateSocial({

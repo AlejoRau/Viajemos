@@ -55,6 +55,18 @@ class _ChatsScreenState extends ConsumerState<ChatsScreen> {
     super.dispose();
   }
 
+  Future<void> _hideConversation(ConversationSummary conv) async {
+    final confirmed = await showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _HideConversationSheet(conv: conv),
+    );
+    if (confirmed == true) {
+      setState(() => _conversations.remove(conv));
+      await _chatRepo.hideConversation(conv.id);
+    }
+  }
+
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
@@ -136,6 +148,7 @@ class _ChatsScreenState extends ConsumerState<ChatsScreen> {
                           );
                           if (mounted) _load();
                         },
+                        onHide: () => _hideConversation(filtered[i]),
                       ),
                     ),
             ),
@@ -144,17 +157,45 @@ class _ChatsScreenState extends ConsumerState<ChatsScreen> {
 }
 
 class _ChatTile extends StatelessWidget {
+<<<<<<< Updated upstream
   const _ChatTile({required this.conv, required this.onTap, required this.viewerIsDriver});
   final ConversationSummary conv;
   final VoidCallback onTap;
   final bool viewerIsDriver;
+=======
+  const _ChatTile({required this.conv, required this.onTap, required this.onHide});
+  final ConversationSummary conv;
+  final VoidCallback onTap;
+  final VoidCallback onHide;
+>>>>>>> Stashed changes
 
   @override
   Widget build(BuildContext context) {
     final isGroup = conv.isGroupChat;
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
+    return Dismissible(
+      key: ValueKey(conv.id),
+      direction: DismissDirection.endToStart,
+      confirmDismiss: (_) async {
+        onHide();
+        return false; // let _hideConversation handle removal
+      },
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 24),
+        color: const Color(0xFFEF4444),
+        child: const Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.delete_outline_rounded, color: Colors.white, size: 24),
+            SizedBox(height: 4),
+            Text('Eliminar', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
+          ],
+        ),
+      ),
+      child: InkWell(
+        onTap: onTap,
+        onLongPress: onHide,
+        child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
         child: Row(
           children: [
@@ -261,6 +302,7 @@ class _ChatTile extends StatelessWidget {
           ],
         ),
       ),
+      ),
     );
   }
 }
@@ -288,6 +330,71 @@ class _EmptyState extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+// ── Hide conversation sheet ───────────────────────────────────────────────────
+
+class _HideConversationSheet extends StatelessWidget {
+  const _HideConversationSheet({required this.conv});
+  final ConversationSummary conv;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 36, height: 4,
+            margin: const EdgeInsets.only(bottom: 16),
+            decoration: BoxDecoration(
+              color: AppColors.border,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          Text(
+            conv.contactName,
+            style: const TextStyle(
+              fontSize: 16, fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Esta conversación solo se eliminará para vos.',
+            style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 20),
+          ListTile(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            tileColor: const Color(0xFFFEF2F2),
+            leading: const Icon(Icons.delete_outline_rounded, color: Color(0xFFEF4444)),
+            title: const Text(
+              'Eliminar conversación',
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                color: Color(0xFFEF4444),
+              ),
+            ),
+            onTap: () => Navigator.pop(context, true),
+          ),
+          const SizedBox(height: 10),
+          ListTile(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            leading: const Icon(Icons.close_rounded, color: AppColors.textSecondary),
+            title: const Text('Cancelar'),
+            onTap: () => Navigator.pop(context, false),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -18,6 +18,7 @@ class UserProfile {
     this.bioPassenger,
     this.instagram,
     this.facebook,
+    this.homeCity,
   });
 
   final String id;
@@ -36,6 +37,7 @@ class UserProfile {
   final String? bioPassenger;
   final String? instagram;
   final String? facebook;
+  final String? homeCity;
 
   String get initials {
     final parts = fullName.trim().split(' ');

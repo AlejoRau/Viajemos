@@ -360,6 +360,14 @@ class ChatRepository {
         .eq('user_id', _myId);
   }
 
+  Future<void> hideConversation(String conversationId) async {
+    await _client
+        .from('conversation_participants')
+        .update({'hidden_at': DateTime.now().toUtc().toIso8601String()})
+        .eq('conversation_id', conversationId)
+        .eq('user_id', _myId);
+  }
+
   Future<PendingRequestInfo?> fetchPendingRequestForContact(
       String contactId) async {
     final data = await _client.rpc(

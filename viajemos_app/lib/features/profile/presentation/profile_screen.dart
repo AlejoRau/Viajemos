@@ -65,10 +65,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
 
   _SaveStatus _socialSaveStatus = _SaveStatus.idle;
   Timer? _socialDebounce;
+  _SaveStatus _bioSaveStatus = _SaveStatus.idle;
+  Timer? _bioDebounce;
+  final _bioController = TextEditingController();
 
   // Last saved text — listeners compare against these to ignore pure cursor moves.
   String _lastInstagram = '';
   String _lastFacebook = '';
+  String _lastBio = '';
 
   @override
   void initState() {
@@ -86,11 +90,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
   @override
   void dispose() {
     _socialDebounce?.cancel();
+    _bioDebounce?.cancel();
     _instagramController.removeListener(_onSocialChanged);
     _facebookController.removeListener(_onSocialChanged);
+    _bioController.removeListener(_onBioChanged);
     _tabController.dispose();
     _instagramController.dispose();
     _facebookController.dispose();
+    _bioController.dispose();
     _instagramFocusNode.dispose();
     _facebookFocusNode.dispose();
     super.dispose();
@@ -106,6 +113,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     _lastFacebook = _facebookController.text;
     _instagramController.addListener(_onSocialChanged);
     _facebookController.addListener(_onSocialChanged);
+    _bioController.text = profile.bioDriver?.isNotEmpty == true
+        ? profile.bioDriver!
+        : (profile.bioPassenger ?? '');
+    _lastBio = _bioController.text;
+    _bioController.addListener(_onBioChanged);
   }
 
   void _onSocialChanged() {
@@ -148,6 +160,34 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
       });
     } catch (e) {
       if (mounted) setState(() => _socialSaveStatus = _SaveStatus.idle);
+    }
+  }
+
+  void _onBioChanged() {
+    if (_bioController.text == _lastBio) return;
+    _lastBio = _bioController.text;
+    _bioDebounce?.cancel();
+    if (_bioSaveStatus != _SaveStatus.saving) {
+      setState(() => _bioSaveStatus = _SaveStatus.saving);
+    }
+    _bioDebounce = Timer(const Duration(milliseconds: 800), _saveBio);
+  }
+
+  Future<void> _saveBio() async {
+    final text = _bioController.text.trim();
+    try {
+      await ref.read(profileRepositoryProvider).updateBio(
+            bioDriver: text.isEmpty ? null : text,
+            bioPassenger: text.isEmpty ? null : text,
+          );
+      if (!mounted) return;
+      ref.invalidate(profileProvider);
+      setState(() => _bioSaveStatus = _SaveStatus.saved);
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) setState(() => _bioSaveStatus = _SaveStatus.idle);
+      });
+    } catch (e) {
+      if (mounted) setState(() => _bioSaveStatus = _SaveStatus.idle);
     }
   }
 
@@ -303,10 +343,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
               onCompletenessAction: _onCompletenessAction,
               socialSaveStatus: _socialSaveStatus,
               onGoToAccount: () => _tabController.animateTo(1),
+              bioController: _bioController,
+              bioSaveStatus: _bioSaveStatus,
             ),
             _CuentaTab(
               email: profile.email,
               phone: profile.phone,
+              homeCity: profile.homeCity,
               onOpinionsTap: _showOpinions,
               onLogout: () async {
                 await PushNotificationService.deleteToken();
@@ -343,6 +386,8 @@ class _InfoPersonalTab extends StatelessWidget {
     required this.onCompletenessAction,
     required this.socialSaveStatus,
     required this.onGoToAccount,
+    required this.bioController,
+    required this.bioSaveStatus,
   });
 
   final bool isDriver;
@@ -357,6 +402,8 @@ class _InfoPersonalTab extends StatelessWidget {
   final void Function(ProfileCompletenessItem) onCompletenessAction;
   final _SaveStatus socialSaveStatus;
   final VoidCallback onGoToAccount;
+  final TextEditingController bioController;
+  final _SaveStatus bioSaveStatus;
 
   Widget _initialsCircle(UserProfile p) => CircleAvatar(
         radius: 48,
@@ -1120,9 +1167,10 @@ class _ProfileSectionLabel extends StatelessWidget {
 // ── Tab 2: Cuenta ─────────────────────────────────────────────────────────────
 
 class _CuentaTab extends StatefulWidget {
-  const _CuentaTab({required this.email, required this.phone, required this.onOpinionsTap, required this.onLogout});
+  const _CuentaTab({required this.email, required this.phone, required this.homeCity, required this.onOpinionsTap, required this.onLogout});
   final String email;
   final String? phone;
+  final String? homeCity;
   final VoidCallback onOpinionsTap;
   final VoidCallback onLogout;
 
@@ -1147,6 +1195,15 @@ class _CuentaTabState extends State<_CuentaTab> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => const _ChangePasswordSheet(),
+    );
+  }
+
+  void _showChangeCity() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _ChangeCitySheet(currentCity: widget.homeCity),
     );
   }
 
@@ -1257,12 +1314,10 @@ class _CuentaTabState extends State<_CuentaTab> {
           ),
           const SizedBox(height: 8),
           _AccountRow(
-            icon: Icons.home_outlined,
-            label: 'Dirección postal',
-            value: '',
-            onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Dirección postal — próximamente disponible')),
-            ),
+            icon: Icons.location_city_outlined,
+            label: 'Ciudad actual',
+            value: widget.homeCity ?? 'Sin especificar',
+            onTap: _showChangeCity,
           ),
           const SizedBox(height: 24),
 
@@ -1318,6 +1373,59 @@ class _CuentaTabState extends State<_CuentaTab> {
 }
 
 // ── Sheet: Cambiar email ───────────────────────────────────────────────────────
+
+// ── Sheet: Cambiar ciudad ─────────────────────────────────────────────────────
+
+class _ChangeCitySheet extends ConsumerStatefulWidget {
+  const _ChangeCitySheet({this.currentCity});
+  final String? currentCity;
+
+  @override
+  ConsumerState<_ChangeCitySheet> createState() => _ChangeCitySheetState();
+}
+
+class _ChangeCitySheetState extends ConsumerState<_ChangeCitySheet> {
+  late final _cityController = TextEditingController(text: widget.currentCity ?? '');
+  bool _loading = false;
+
+  @override
+  void dispose() {
+    _cityController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    setState(() => _loading = true);
+    try {
+      await ref.read(profileRepositoryProvider).updateCity(_cityController.text);
+      ref.invalidate(profileProvider);
+      if (mounted) Navigator.pop(context);
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _BottomSheetWrapper(
+      title: 'Ciudad actual',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _EditField(
+            label: 'Ciudad donde vivís',
+            controller: _cityController,
+            keyboardType: TextInputType.text,
+          ),
+          const SizedBox(height: 24),
+          _SaveButton(loading: _loading, onPressed: _save),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Sheet: Cambiar email ──────────────────────────────────────────────────────
 
 class _ChangeEmailSheet extends StatefulWidget {
   const _ChangeEmailSheet({required this.currentEmail});
