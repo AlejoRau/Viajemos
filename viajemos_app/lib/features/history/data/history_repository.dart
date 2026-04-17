@@ -91,6 +91,7 @@ class ActivePassengerRequest {
     this.vehicleBrand,
     this.vehicleModel,
     this.vehicleColor,
+    this.splitCosts = false,
   });
 
   final String id; // request_id
@@ -109,6 +110,7 @@ class ActivePassengerRequest {
   final String? vehicleBrand;
   final String? vehicleModel;
   final String? vehicleColor;
+  final bool splitCosts;
 
   bool get isPending => status == 'pending';
   bool get isAccepted => status == 'accepted';
@@ -506,6 +508,7 @@ class HistoryRepository {
         vehicleBrand: row['vehicle_brand'] as String?,
         vehicleModel: row['vehicle_model'] as String?,
         vehicleColor: row['vehicle_color'] as String?,
+        splitCosts: row['split_costs'] as bool? ?? false,
       );
     }).toList();
   }

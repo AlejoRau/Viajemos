@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/providers/role_provider.dart';
 import '../../../shared/widgets/public_profile_sheet.dart';
@@ -2305,6 +2306,138 @@ class _ActivePassengerRequestCardState
     extends ConsumerState<_ActivePassengerRequestCard> {
   bool _cancelling = false;
 
+  @override
+  void initState() {
+    super.initState();
+    if (widget.request.isAccepted) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _checkAndShowAcceptedDialog());
+    }
+  }
+
+  Future<void> _checkAndShowAcceptedDialog() async {
+    final key = 'seen_accepted_${widget.request.id}';
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool(key) == true) return;
+    await prefs.setBool(key, true);
+    if (!mounted) return;
+    final req = widget.request;
+    await showGeneralDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: '',
+      barrierColor: Colors.black54,
+      transitionDuration: const Duration(milliseconds: 350),
+      transitionBuilder: (ctx, anim, _, child) {
+        final curved = CurvedAnimation(parent: anim, curve: Curves.easeOutBack);
+        return ScaleTransition(
+          scale: Tween<double>(begin: 0.85, end: 1.0).animate(curved),
+          child: FadeTransition(opacity: anim, child: child),
+        );
+      },
+      pageBuilder: (ctx, _, __) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 28, 24, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TweenAnimationBuilder<double>(
+                tween: Tween(begin: 0.5, end: 1.0),
+                duration: const Duration(milliseconds: 500),
+                curve: Curves.elasticOut,
+                builder: (_, v, child) => Transform.scale(scale: v, child: child),
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade50,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(Icons.check_circle_rounded,
+                      color: Colors.green.shade600, size: 40),
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                '¡Fuiste aceptado/a!',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold,
+                    color: Color(0xFF1E293B)),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Tu solicitud fue aceptada por ${req.driverName}.',
+                style: const TextStyle(fontSize: 14, color: Color(0xFF64748B)),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 20),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Column(
+                  children: [
+                    _AcceptedDetailRow(
+                      icon: Icons.route_rounded,
+                      text: '${req.originAddress} → ${req.destinationAddress}',
+                    ),
+                    const SizedBox(height: 10),
+                    _AcceptedDetailRow(
+                      icon: Icons.calendar_today_rounded,
+                      text: req.departureTime != null
+                          ? '${_formatDate(req.departureDate)}  ·  ${req.departureTime}'
+                          : _formatDate(req.departureDate),
+                    ),
+                    const SizedBox(height: 10),
+                    _AcceptedDetailRow(
+                      icon: Icons.person_rounded,
+                      text: req.driverName,
+                    ),
+                    if (req.vehicleDisplay.isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      _AcceptedDetailRow(
+                        icon: Icons.directions_car_rounded,
+                        text: req.vehicleDisplay,
+                      ),
+                    ],
+                    const SizedBox(height: 10),
+                    _AcceptedDetailRow(
+                      icon: Icons.attach_money_rounded,
+                      text: req.splitCosts
+                          ? 'Gastos divididos'
+                          : '\$${_formatNum(req.pricePerSeat)} por asiento',
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green.shade600,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14)),
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  child: const Text('Perfecto',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   void _shareRequest() {
     final req = widget.request;
     final date = _formatDate(req.departureDate);
@@ -2468,10 +2601,13 @@ class _ActivePassengerRequestCardState
                   ),
                   const Spacer(),
                   // Driver mini avatar
-                  _MiniAvatar(
-                      name: req.driverName,
-                      avatarUrl: req.driverAvatarUrl,
-                      index: 0),
+                  GestureDetector(
+                    onTap: () => showPublicProfile(context, req.driverId),
+                    child: _MiniAvatar(
+                        name: req.driverName,
+                        avatarUrl: req.driverAvatarUrl,
+                        index: 0),
+                  ),
                   const SizedBox(width: 4),
                   // Delete / cancel button
                   SizedBox(
@@ -2727,7 +2863,9 @@ class _PassengerRequestDetailSheet extends StatelessWidget {
                 _DetailSection(
                   icon: Icons.person_rounded,
                   title: 'Conductor',
-                  child: Row(children: [
+                  child: GestureDetector(
+                    onTap: () => showPublicProfile(context, req.driverId),
+                    child: Row(children: [
                     CircleAvatar(
                       radius: 22,
                       backgroundColor: AppColors.primaryLight,
@@ -2764,7 +2902,10 @@ class _PassengerRequestDetailSheet extends StatelessWidget {
                             ]),
                           ]),
                     ),
+                    const Icon(Icons.chevron_right,
+                        color: AppColors.primary, size: 20),
                   ]),
+                  ),
                 ),
                 const SizedBox(height: 16),
                 _DetailSection(
@@ -4284,3 +4425,25 @@ class _RoutePlace extends StatelessWidget {
     );
   }
 }
+
+class _AcceptedDetailRow extends StatelessWidget {
+  const _AcceptedDetailRow({required this.icon, required this.text});
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 16, color: Colors.green.shade600),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(text,
+              style: const TextStyle(fontSize: 14, color: Color(0xFF1E293B))),
+        ),
+      ],
+    );
+  }
+}
+

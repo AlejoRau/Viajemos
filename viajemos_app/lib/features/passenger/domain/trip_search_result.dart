@@ -1,5 +1,6 @@
 class TripPassengerPreview {
-  const TripPassengerPreview({required this.name, this.avatarUrl});
+  const TripPassengerPreview({required this.userId, required this.name, this.avatarUrl});
+  final String userId;
   final String name;
   final String? avatarUrl;
 }
@@ -195,6 +196,7 @@ class TripSearchResult {
           .map((r) {
             final p = r['profiles'] as Map<String, dynamic>? ?? {};
             return TripPassengerPreview(
+              userId: r['passenger_id'] as String? ?? '',
               name: p['full_name'] as String? ?? 'Pasajero',
               avatarUrl: p['avatar_url'] as String?,
             );

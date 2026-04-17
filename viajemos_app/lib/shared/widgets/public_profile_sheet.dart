@@ -1,21 +1,24 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
+import '../../features/passenger/domain/trip_search_result.dart';
 import '../../features/profile/data/profile_repository.dart';
 import '../../features/profile/domain/user_profile.dart';
 
 /// Shows a public profile bottom sheet for any user by their ID.
-void showPublicProfile(BuildContext context, String userId) {
+/// Pass [tripContext] to show a trip info banner at the top of the sheet.
+void showPublicProfile(BuildContext context, String userId, {TripSearchResult? tripContext}) {
   showModalBottomSheet(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    builder: (_) => _PublicProfileSheet(userId: userId),
+    builder: (_) => _PublicProfileSheet(userId: userId, tripContext: tripContext),
   );
 }
 
 class _PublicProfileSheet extends StatefulWidget {
-  const _PublicProfileSheet({required this.userId});
+  const _PublicProfileSheet({required this.userId, this.tripContext});
   final String userId;
+  final TripSearchResult? tripContext;
 
   @override
   State<_PublicProfileSheet> createState() => _PublicProfileSheetState();
