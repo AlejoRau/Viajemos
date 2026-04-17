@@ -575,10 +575,14 @@ class _TripCard extends StatelessWidget {
             // Driver + price
             Row(
               children: [
-                _DriverAvatar(
-                  initials: trip.driverInitials,
-                  avatarUrl: trip.driverAvatarUrl,
-                  radius: 24,
+                GestureDetector(
+                  onTap: () => showPublicProfile(context, trip.driverId),
+                  behavior: HitTestBehavior.opaque,
+                  child: _DriverAvatar(
+                    initials: trip.driverInitials,
+                    avatarUrl: trip.driverAvatarUrl,
+                    radius: 24,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -780,11 +784,14 @@ class _TripCard extends StatelessWidget {
                   Padding(
                     padding: const EdgeInsets.only(right: 4),
                     child: i < trip.passengers.length
-                        ? _passengerAvatar(
-                            name: trip.passengers[i].name,
-                            avatarUrl: trip.passengers[i].avatarUrl,
-                            radius: 13,
-                            color: AppColors.primary,
+                        ? GestureDetector(
+                            onTap: () => showPublicProfile(context, trip.passengers[i].userId),
+                            child: _passengerAvatar(
+                              name: trip.passengers[i].name,
+                              avatarUrl: trip.passengers[i].avatarUrl,
+                              radius: 13,
+                              color: AppColors.primary,
+                            ),
                           )
                         : const CircleAvatar(
                             radius: 13,
@@ -866,7 +873,7 @@ class _TripDetailsSheetState extends State<_TripDetailsSheet> {
     // Use data already loaded in the model if available
     if (widget.trip.passengers.isNotEmpty) {
       setState(() => _passengers = widget.trip.passengers
-          .map((p) => {'name': p.name, 'avatarUrl': p.avatarUrl})
+          .map((p) => {'name': p.name, 'avatarUrl': p.avatarUrl, 'userId': p.userId})
           .toList());
       return;
     }
@@ -889,6 +896,126 @@ class _TripDetailsSheetState extends State<_TripDetailsSheet> {
         RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
         (m) => '${m[1]}.',
       )}';
+
+  Future<void> _confirmAndSend() async {
+    final confirmed = await showGeneralDialog<bool>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: '',
+      barrierColor: Colors.black54,
+      transitionDuration: const Duration(milliseconds: 320),
+      transitionBuilder: (ctx, anim, _, child) {
+        final curved = CurvedAnimation(parent: anim, curve: Curves.easeOutBack);
+        return ScaleTransition(
+          scale: Tween<double>(begin: 0.88, end: 1.0).animate(curved),
+          child: FadeTransition(opacity: anim, child: child),
+        );
+      },
+      pageBuilder: (ctx, _, __) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 28, 24, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                '¿Confirmás la solicitud?',
+                style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold,
+                    color: Color(0xFF1E293B)),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Estás por pedirle un lugar a ${trip.driverName}.',
+                style: const TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+              ),
+              const SizedBox(height: 18),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Column(
+                  children: [
+                    _ConfirmRow(
+                      icon: Icons.route_rounded,
+                      text: '${trip.originCity} → ${trip.destinationCity}',
+                    ),
+                    const SizedBox(height: 10),
+                    _ConfirmRow(
+                      icon: Icons.calendar_today_rounded,
+                      text: trip.formattedTime.isNotEmpty
+                          ? '${trip.formattedDate}  ·  ${trip.formattedTime}'
+                          : trip.formattedDate,
+                    ),
+                    const SizedBox(height: 10),
+                    _ConfirmRow(
+                      icon: Icons.person_rounded,
+                      text: trip.driverName,
+                    ),
+                    if (trip.vehicleDisplay.isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      _ConfirmRow(
+                        icon: Icons.directions_car_rounded,
+                        text: trip.vehicleDisplay,
+                      ),
+                    ],
+                    const SizedBox(height: 10),
+                    _ConfirmRow(
+                      icon: Icons.attach_money_rounded,
+                      text: trip.splitCosts
+                          ? 'Gastos divididos'
+                          : '${_formatPrice(trip.pricePerSeat)} por asiento',
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(ctx, false),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFF64748B),
+                        side: const BorderSide(color: Color(0xFFCBD5E1)),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14)),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      child: const Text('Cancelar',
+                          style: TextStyle(fontWeight: FontWeight.w600)),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.pop(ctx, true),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF1A73E8),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14)),
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      child: const Text('Confirmar',
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (confirmed != true) return;
+    await _sendRequest();
+  }
 
   Future<void> _sendRequest() async {
     setState(() => _sending = true);
@@ -1122,11 +1249,16 @@ class _TripDetailsSheetState extends State<_TripDetailsSheet> {
                         Padding(
                           padding: const EdgeInsets.only(right: 6),
                           child: i < _passengers.length
-                              ? _passengerAvatar(
-                                  name: _passengers[i]['name'] ?? 'Pasajero',
-                                  avatarUrl: _passengers[i]['avatarUrl'],
-                                  radius: 14,
-                                  color: AppColors.primary,
+                              ? GestureDetector(
+                                  onTap: _passengers[i]['userId'] != null
+                                      ? () => showPublicProfile(context, _passengers[i]['userId']!)
+                                      : null,
+                                  child: _passengerAvatar(
+                                    name: _passengers[i]['name'] ?? 'Pasajero',
+                                    avatarUrl: _passengers[i]['avatarUrl'],
+                                    radius: 14,
+                                    color: AppColors.primary,
+                                  ),
                                 )
                               : const CircleAvatar(
                                   radius: 14,
@@ -1304,7 +1436,7 @@ class _TripDetailsSheetState extends State<_TripDetailsSheet> {
                               ),
                             )
                           : ElevatedButton(
-                          onPressed: _sending ? null : _sendRequest,
+                          onPressed: _sending ? null : _confirmAndSend,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF1A73E8),
                             shape: RoundedRectangleBorder(
@@ -1393,6 +1525,26 @@ class _DetailRow extends StatelessWidget {
           child: Text(text,
               style: const TextStyle(
                   fontSize: 13, color: Color(0xFF475569))),
+        ),
+      ],
+    );
+  }
+}
+
+class _ConfirmRow extends StatelessWidget {
+  const _ConfirmRow({required this.icon, required this.text});
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: AppColors.primary),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(text,
+              style: const TextStyle(fontSize: 14, color: Color(0xFF1E293B))),
         ),
       ],
     );

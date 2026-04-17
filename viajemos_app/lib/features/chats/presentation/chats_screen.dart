@@ -11,17 +11,18 @@ String _initials(String name) {
 
 String _formatTimestamp(DateTime? dt) {
   if (dt == null) return '';
+  final local = dt.toLocal();
   final now = DateTime.now();
   final today = DateTime(now.year, now.month, now.day);
   final yesterday = today.subtract(const Duration(days: 1));
-  final msgDay = DateTime(dt.year, dt.month, dt.day);
+  final msgDay = DateTime(local.year, local.month, local.day);
 
   if (msgDay == today) {
-    return '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+    return '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
   } else if (msgDay == yesterday) {
     return 'Ayer';
   } else {
-    return '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}';
+    return '${local.day.toString().padLeft(2, '0')}/${local.month.toString().padLeft(2, '0')}';
   }
 }
 

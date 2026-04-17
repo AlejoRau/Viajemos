@@ -25,7 +25,7 @@ class TripSearchRepository {
       description,
       profiles!owner_id(full_name, avg_rating, avatar_url),
       vehicles!vehicle_id(brand, model, color),
-      trip_requests!trip_id(status, profiles!passenger_id(full_name, avatar_url))
+      trip_requests!trip_id(status, passenger_id, profiles!passenger_id(full_name, avatar_url))
     ''';
 
   /// Fetches raw trip rows applying optional server-side filters.
@@ -143,6 +143,7 @@ class TripSearchRepository {
     return data.map((row) {
       final profile = row['profiles'] as Map<String, dynamic>? ?? {};
       return {
+        'userId': row['passenger_id'] as String?,
         'name': profile['full_name'] as String? ?? 'Pasajero',
         'avatarUrl': profile['avatar_url'] as String?,
       };
