@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/providers/role_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/widgets/public_profile_sheet.dart';
 import '../data/chat_repository.dart';
@@ -27,14 +29,14 @@ String _formatTimestamp(DateTime? dt) {
   }
 }
 
-class ChatsScreen extends StatefulWidget {
+class ChatsScreen extends ConsumerStatefulWidget {
   const ChatsScreen({super.key});
 
   @override
-  State<ChatsScreen> createState() => _ChatsScreenState();
+  ConsumerState<ChatsScreen> createState() => _ChatsScreenState();
 }
 
-class _ChatsScreenState extends State<ChatsScreen> {
+class _ChatsScreenState extends ConsumerState<ChatsScreen> {
   final _searchController = TextEditingController();
   final _chatRepo = ChatRepository();
   String _query = '';
@@ -120,6 +122,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
                           const Divider(height: 1, color: AppColors.border),
                       itemBuilder: (context, i) => _ChatTile(
                         conv: filtered[i],
+                        viewerIsDriver: ref.read(roleProvider) == '/driver',
                         onTap: () async {
                           await context.push(
                             '/chats/${filtered[i].id}',
@@ -141,9 +144,10 @@ class _ChatsScreenState extends State<ChatsScreen> {
 }
 
 class _ChatTile extends StatelessWidget {
-  const _ChatTile({required this.conv, required this.onTap});
+  const _ChatTile({required this.conv, required this.onTap, required this.viewerIsDriver});
   final ConversationSummary conv;
   final VoidCallback onTap;
+  final bool viewerIsDriver;
 
   @override
   Widget build(BuildContext context) {
@@ -156,7 +160,7 @@ class _ChatTile extends StatelessWidget {
           children: [
             GestureDetector(
               onTap: !isGroup && conv.contactId != null
-                  ? () => showPublicProfile(context, conv.contactId!)
+                  ? () => showPublicProfile(context, conv.contactId!, viewerIsDriver: viewerIsDriver)
                   : null,
               child: CircleAvatar(
                 radius: 28,
@@ -186,7 +190,7 @@ class _ChatTile extends StatelessWidget {
                       Expanded(
                         child: GestureDetector(
                           onTap: !isGroup && conv.contactId != null
-                              ? () => showPublicProfile(context, conv.contactId!)
+                              ? () => showPublicProfile(context, conv.contactId!, viewerIsDriver: viewerIsDriver)
                               : null,
                           child: Text(
                             conv.contactName,

@@ -576,7 +576,7 @@ class _TripCard extends StatelessWidget {
             Row(
               children: [
                 GestureDetector(
-                  onTap: () => showPublicProfile(context, trip.driverId),
+                  onTap: () => showPublicProfile(context, trip.driverId, viewerIsDriver: false),
                   behavior: HitTestBehavior.opaque,
                   child: _DriverAvatar(
                     initials: trip.driverInitials,
@@ -785,7 +785,7 @@ class _TripCard extends StatelessWidget {
                     padding: const EdgeInsets.only(right: 4),
                     child: i < trip.passengers.length
                         ? GestureDetector(
-                            onTap: () => showPublicProfile(context, trip.passengers[i].userId),
+                            onTap: () => showPublicProfile(context, trip.passengers[i].userId, viewerIsDriver: true),
                             child: _passengerAvatar(
                               name: trip.passengers[i].name,
                               avatarUrl: trip.passengers[i].avatarUrl,
@@ -1113,7 +1113,7 @@ class _TripDetailsSheetState extends State<_TripDetailsSheet> {
 
                   // Driver — tap to see public profile
                   GestureDetector(
-                    onTap: () => showPublicProfile(context, trip.driverId),
+                    onTap: () => showPublicProfile(context, trip.driverId, viewerIsDriver: false),
                     child: Row(
                       children: [
                         _DriverAvatar(
@@ -1251,7 +1251,7 @@ class _TripDetailsSheetState extends State<_TripDetailsSheet> {
                           child: i < _passengers.length
                               ? GestureDetector(
                                   onTap: _passengers[i]['userId'] != null
-                                      ? () => showPublicProfile(context, _passengers[i]['userId']!)
+                                      ? () => showPublicProfile(context, _passengers[i]['userId']!, viewerIsDriver: true)
                                       : null,
                                   child: _passengerAvatar(
                                     name: _passengers[i]['name'] ?? 'Pasajero',

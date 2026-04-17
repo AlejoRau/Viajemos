@@ -5,20 +5,32 @@ import '../../features/profile/data/profile_repository.dart';
 import '../../features/profile/domain/user_profile.dart';
 
 /// Shows a public profile bottom sheet for any user by their ID.
-/// Pass [tripContext] to show a trip info banner at the top of the sheet.
-void showPublicProfile(BuildContext context, String userId, {TripSearchResult? tripContext}) {
+/// [viewerIsDriver]: true = viewer is a driver (shows passenger profile of the other),
+///                  false = viewer is a passenger (shows driver profile of the other),
+///                  null = show both sections.
+void showPublicProfile(
+  BuildContext context,
+  String userId, {
+  TripSearchResult? tripContext,
+  bool? viewerIsDriver,
+}) {
   showModalBottomSheet(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    builder: (_) => _PublicProfileSheet(userId: userId, tripContext: tripContext),
+    builder: (_) => _PublicProfileSheet(
+      userId: userId,
+      tripContext: tripContext,
+      viewerIsDriver: viewerIsDriver,
+    ),
   );
 }
 
 class _PublicProfileSheet extends StatefulWidget {
-  const _PublicProfileSheet({required this.userId, this.tripContext});
+  const _PublicProfileSheet({required this.userId, this.tripContext, this.viewerIsDriver});
   final String userId;
   final TripSearchResult? tripContext;
+  final bool? viewerIsDriver;
 
   @override
   State<_PublicProfileSheet> createState() => _PublicProfileSheetState();
@@ -74,7 +86,7 @@ class _PublicProfileSheetState extends State<_PublicProfileSheet> {
               ),
             )
           else
-            Expanded(child: _ProfileBody(profile: _profile!)),
+            Expanded(child: _ProfileBody(profile: _profile!, viewerIsDriver: widget.viewerIsDriver)),
         ],
       ),
     );
@@ -82,16 +94,73 @@ class _PublicProfileSheetState extends State<_PublicProfileSheet> {
 }
 
 class _ProfileBody extends StatelessWidget {
-  const _ProfileBody({required this.profile});
+  const _ProfileBody({required this.profile, this.viewerIsDriver});
   final UserProfile profile;
+  /// true  = viewer is driver   → show passenger side of this profile
+  /// false = viewer is passenger → show driver side of this profile
+  /// null  = show both
+  final bool? viewerIsDriver;
+
+  bool get _showDriverSide   => viewerIsDriver == null || viewerIsDriver == false;
+  bool get _showPassengerSide => viewerIsDriver == null || viewerIsDriver == true;
 
   @override
   Widget build(BuildContext context) {
+    final roleLabel = viewerIsDriver == true
+        ? 'Perfil como pasajero'
+        : viewerIsDriver == false
+            ? 'Perfil como conductor'
+            : null;
+
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Role badge
+          if (roleLabel != null) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: viewerIsDriver == true
+                    ? const Color(0xFFEFF6FF)
+                    : const Color(0xFFF0FDF4),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: viewerIsDriver == true
+                      ? const Color(0xFFBFDBFE)
+                      : const Color(0xFFBBF7D0),
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    viewerIsDriver == true
+                        ? Icons.airline_seat_recline_normal_rounded
+                        : Icons.directions_car_rounded,
+                    size: 14,
+                    color: viewerIsDriver == true
+                        ? const Color(0xFF1D4ED8)
+                        : const Color(0xFF16A34A),
+                  ),
+                  const SizedBox(width: 5),
+                  Text(
+                    roleLabel,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: viewerIsDriver == true
+                          ? const Color(0xFF1D4ED8)
+                          : const Color(0xFF16A34A),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+          ],
+
           // Avatar + name + rating
           Row(
             children: [
@@ -168,26 +237,31 @@ class _ProfileBody extends StatelessWidget {
           const Divider(color: Color(0xFFE2E8F0)),
           const SizedBox(height: 16),
 
-          // Trip stats
+          // Trip stats — filtered by role
           Row(
             children: [
-              Expanded(
-                child: _StatBox(
-                    value: '${profile.tripsDriver}',
-                    label: 'Viajes como\nconductor',
-                    icon: Icons.directions_car_rounded),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _StatBox(
-                    value: '${profile.tripsPassenger}',
-                    label: 'Viajes como\npasajero',
-                    icon: Icons.airline_seat_recline_normal_rounded),
-              ),
+              if (_showDriverSide)
+                Expanded(
+                  child: _StatBox(
+                      value: '${profile.tripsDriver}',
+                      label: 'Viajes como\nconductor',
+                      icon: Icons.directions_car_rounded),
+                ),
+              if (_showDriverSide && _showPassengerSide)
+                const SizedBox(width: 12),
+              if (_showPassengerSide)
+                Expanded(
+                  child: _StatBox(
+                      value: '${profile.tripsPassenger}',
+                      label: 'Viajes como\npasajero',
+                      icon: Icons.airline_seat_recline_normal_rounded),
+                ),
             ],
           ),
-          if (profile.cancelledTripsCount > 0 ||
-              profile.expelledPassengersCount > 0) ...[
+          // Negative stats — only relevant when viewing as driver (evaluating a driver)
+          if (_showDriverSide &&
+              (profile.cancelledTripsCount > 0 ||
+                  profile.expelledPassengersCount > 0)) ...[
             const SizedBox(height: 12),
             Row(
               children: [
@@ -216,7 +290,9 @@ class _ProfileBody extends StatelessWidget {
           const SizedBox(height: 20),
 
           // Bio driver
-          if (profile.bioDriver != null && profile.bioDriver!.isNotEmpty) ...[
+          if (_showDriverSide &&
+              profile.bioDriver != null &&
+              profile.bioDriver!.isNotEmpty) ...[
             const Text('Como conductor',
                 style: TextStyle(
                     fontSize: 13,
@@ -232,7 +308,8 @@ class _ProfileBody extends StatelessWidget {
           ],
 
           // Bio passenger
-          if (profile.bioPassenger != null &&
+          if (_showPassengerSide &&
+              profile.bioPassenger != null &&
               profile.bioPassenger!.isNotEmpty) ...[
             const Text('Como pasajero',
                 style: TextStyle(

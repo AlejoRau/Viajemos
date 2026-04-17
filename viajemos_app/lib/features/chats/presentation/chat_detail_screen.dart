@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/providers/badge_providers.dart';
+import '../../../core/providers/role_provider.dart';
 import '../../../shared/widgets/public_profile_sheet.dart';
 import '../data/chat_repository.dart';
 import 'chat_trip_detail_sheet.dart';
@@ -375,7 +376,7 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
                 children: [
                   GestureDetector(
                     onTap: widget.contactId != null
-                        ? () => showPublicProfile(context, widget.contactId!)
+                        ? () => showPublicProfile(context, widget.contactId!, viewerIsDriver: ref.read(roleProvider) == '/driver')
                         : null,
                     child: CircleAvatar(
                       radius: 18,
@@ -394,7 +395,7 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
                   Expanded(
                     child: GestureDetector(
                       onTap: widget.contactId != null
-                          ? () => showPublicProfile(context, widget.contactId!)
+                          ? () => showPublicProfile(context, widget.contactId!, viewerIsDriver: ref.read(roleProvider) == '/driver')
                           : null,
                       child: _tripInfo != null
                           ? Text(

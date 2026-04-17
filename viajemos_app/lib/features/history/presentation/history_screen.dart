@@ -975,7 +975,7 @@ class _DriverTripDetailsSheetState
                               children: [
                                 InkWell(
                                   onTap: () => showPublicProfile(
-                                      context, _passengerIds[i]),
+                                      context, _passengerIds[i], viewerIsDriver: true),
                                   borderRadius: BorderRadius.circular(21),
                                   child: _MiniAvatar(
                                     name: _passengerNames[i],
@@ -987,7 +987,7 @@ class _DriverTripDetailsSheetState
                                 Expanded(
                                   child: InkWell(
                                     onTap: () => showPublicProfile(
-                                        context, _passengerIds[i]),
+                                        context, _passengerIds[i], viewerIsDriver: true),
                                     child: Text(
                                       _passengerNames[i],
                                       style: const TextStyle(
@@ -1473,14 +1473,14 @@ class _PassengerListSheetState extends ConsumerState<_PassengerListSheet> {
                 child: Row(
                   children: [
                     InkWell(
-                      onTap: () => showPublicProfile(context, _ids[i]),
+                      onTap: () => showPublicProfile(context, _ids[i], viewerIsDriver: true),
                       borderRadius: BorderRadius.circular(22),
                       child: _MiniAvatar(name: _names[i], index: i, size: 44),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: InkWell(
-                        onTap: () => showPublicProfile(context, _ids[i]),
+                        onTap: () => showPublicProfile(context, _ids[i], viewerIsDriver: true),
                         child: Text(
                           _names[i],
                           style: const TextStyle(
@@ -1766,7 +1766,7 @@ class _RequestEntry extends StatelessWidget {
           Row(
             children: [
               GestureDetector(
-                onTap: () => showPublicProfile(context, entry.passengerId),
+                onTap: () => showPublicProfile(context, entry.passengerId, viewerIsDriver: true),
                 child: _MiniAvatar(
                   name: entry.passengerName,
                   avatarUrl: entry.passengerAvatarUrl,
@@ -1780,7 +1780,7 @@ class _RequestEntry extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     GestureDetector(
-                      onTap: () => showPublicProfile(context, entry.passengerId),
+                      onTap: () => showPublicProfile(context, entry.passengerId, viewerIsDriver: true),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -2604,7 +2604,7 @@ class _ActivePassengerRequestCardState
                   const Spacer(),
                   // Driver mini avatar
                   GestureDetector(
-                    onTap: () => showPublicProfile(context, req.driverId),
+                    onTap: () => showPublicProfile(context, req.driverId, viewerIsDriver: false),
                     child: _MiniAvatar(
                         name: req.driverName,
                         avatarUrl: req.driverAvatarUrl,
@@ -2875,7 +2875,7 @@ class _PassengerRequestDetailSheet extends StatelessWidget {
                   icon: Icons.person_rounded,
                   title: 'Conductor',
                   child: GestureDetector(
-                    onTap: () => showPublicProfile(context, req.driverId),
+                    onTap: () => showPublicProfile(context, req.driverId, viewerIsDriver: false),
                     child: Row(children: [
                     CircleAvatar(
                       radius: 22,
