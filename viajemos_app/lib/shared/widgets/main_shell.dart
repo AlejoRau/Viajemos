@@ -149,13 +149,11 @@ class _MainShellState extends ConsumerState<MainShell> {
         children: [
           widget.child,
           if (idx != 0)
-            SafeArea(
-              child: Align(
-                alignment: Alignment.topRight,
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 12, right: 16),
-                  child: _RoleBadge(isDriver: isDriver),
-                ),
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 12,
+              right: 16,
+              child: IgnorePointer(
+                child: _RoleBadge(isDriver: isDriver),
               ),
             ),
         ],
