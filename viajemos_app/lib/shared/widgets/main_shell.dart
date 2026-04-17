@@ -148,15 +148,16 @@ class _MainShellState extends ConsumerState<MainShell> {
       body: Stack(
         children: [
           widget.child,
-          SafeArea(
-            child: Align(
-              alignment: Alignment.topRight,
-              child: Padding(
-                padding: const EdgeInsets.only(top: 12, right: 16),
-                child: _RoleBadge(isDriver: isDriver),
+          if (idx != 0)
+            SafeArea(
+              child: Align(
+                alignment: Alignment.topRight,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 12, right: 16),
+                  child: _RoleBadge(isDriver: isDriver),
+                ),
               ),
             ),
-          ),
         ],
       ),
       bottomNavigationBar: Container(
