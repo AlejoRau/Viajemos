@@ -1,0 +1,88 @@
+name: Build & Release APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_tag:
+        description: 'Tag v. Dejar vacío para usar el de pubspec.yaml'
+        required: false
+        default: ''
+      release_name:
+        description: 'Nombre del release en GitHub'
+        required: true
+        default: 'Viajemos'
+      flutter_version:
+        description: 'Versión de Flutter a usar'
+        required: true
+        default: '3.41.6'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build APK & Upload Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4.2.2
+
+      - name: Extract version from pubspec.yaml
+        id: pubspec
+        run: |
+          # Extrae la versión de pubspec.yaml (ej: 1.0.0)
+          VERSION=$(grep '^version: ' viajemos_app/pubspec.yaml | cut -d ' ' -f 2 | cut -d '+' -f 1)
+          echo "VERSION_NAME=v$VERSION" >> $GITHUB_OUTPUT
+          echo "Detectada versión $VERSION de pubspec.yaml"
+
+      - name: Set up Java
+        uses: actions/setup-java@v4.7.1
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          flutter-version: ${{ github.event.inputs.flutter_version }}
+          cache: true
+
+      - name: Restore google-services.json
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: echo "$GOOGLE_SERVICES_JSON" > viajemos_app/android/app/google-services.json
+
+      - name: Install dependencies
+        run: flutter pub get
+        working-directory: viajemos_app
+
+      - name: Build APK (Release)
+        # Usamos la versión detectada o la ingresada manualmente para el build-name
+        run: |
+          FINAL_VERSION="${{ github.event.inputs.version_tag }}"
+          if [ -z "$FINAL_VERSION" ]; then
+            FINAL_VERSION="${{ steps.pubspec.outputs.VERSION_NAME }}"
+          fi
+          flutter build apk --release --build-name=$FINAL_VERSION
+        working-directory: viajemos_app
+
+      - name: Rename APK for identification
+        run: |
+          FINAL_VERSION="${{ github.event.inputs.version_tag }}"
+          if [ -z "$FINAL_VERSION" ]; then
+            FINAL_VERSION="${{ steps.pubspec.outputs.VERSION_NAME }}"
+          fi
+          mv viajemos_app/build/app/outputs/flutter-apk/app-release.apk Viajemos-$FINAL_VERSION.apk
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2.3.2
+        with:
+          tag_name: ${{ github.event.inputs.version_tag != '' && github.event.inputs.version_tag || steps.pubspec.outputs.VERSION_NAME }}
+          name: ${{ github.event.inputs.release_name }}
+          draft: false
+          prerelease: false
+          files: Viajemos-${{ github.event.inputs.version_tag != '' && github.event.inputs.version_tag || steps.pubspec.outputs.VERSION_NAME }}.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

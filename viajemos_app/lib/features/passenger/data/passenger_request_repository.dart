@@ -25,7 +25,7 @@ class PassengerRequest {
   final String originAddress;
   final String destinationAddress;
   final DateTime dateFrom;
-  final DateTime dateTo;
+  final DateTime? dateTo;
   final int seatsNeeded;
   final bool hasPet;
   final bool isSmoker;
@@ -37,13 +37,13 @@ class PassengerRequest {
 
   String get formattedDateRange {
     final from = '${dateFrom.day.toString().padLeft(2, '0')}/${dateFrom.month.toString().padLeft(2, '0')}';
-    if (dateFrom == dateTo ||
-        (dateFrom.year == dateTo.year &&
-            dateFrom.month == dateTo.month &&
-            dateFrom.day == dateTo.day)) {
+    if (dateTo == null ||
+        (dateFrom.year == dateTo!.year &&
+            dateFrom.month == dateTo!.month &&
+            dateFrom.day == dateTo!.day)) {
       return from;
     }
-    final to = '${dateTo.day.toString().padLeft(2, '0')}/${dateTo.month.toString().padLeft(2, '0')}';
+    final to = '${dateTo!.day.toString().padLeft(2, '0')}/${dateTo!.month.toString().padLeft(2, '0')}';
     return '$from – $to';
   }
 
@@ -62,7 +62,7 @@ class PassengerRequest {
       originAddress: (json['origin_address'] as String?) ?? '',
       destinationAddress: (json['destination_address'] as String?) ?? '',
       dateFrom: DateTime.parse(json['date_from'] as String),
-      dateTo: DateTime.parse(json['date_to'] as String),
+      dateTo: json['date_to'] != null ? DateTime.parse(json['date_to'] as String) : null,
       seatsNeeded: json['seats_needed'] as int,
       hasPet: json['has_pet'] as bool,
       isSmoker: json['is_smoker'] as bool,
@@ -83,7 +83,7 @@ class PassengerRequestRepository {
     required String originAddress,
     required String destinationAddress,
     required DateTime dateFrom,
-    required DateTime dateTo,
+    DateTime? dateTo,
     required int seatsNeeded,
     required bool hasPet,
     required bool isSmoker,
@@ -99,7 +99,7 @@ class PassengerRequestRepository {
       'origin_address': originAddress,
       'destination_address': destinationAddress,
       'date_from': dateFrom.toIso8601String().substring(0, 10),
-      'date_to': dateTo.toIso8601String().substring(0, 10),
+      if (dateTo != null) 'date_to': dateTo.toIso8601String().substring(0, 10),
       'seats_needed': seatsNeeded,
       'has_pet': hasPet,
       'is_smoker': isSmoker,

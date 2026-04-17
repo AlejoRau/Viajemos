@@ -19,6 +19,9 @@ class TripRepository {
     required bool dropsOffAtDoor,
     required List<String> via,
     required List<String> stops,
+    required bool splitCosts,
+    String? pickupAddress,
+    String? dropoffAddress,
     String? description,
     String? vehicleId,
   }) async {
@@ -29,6 +32,12 @@ class TripRepository {
       'owner_id': user.id,
       'origin_address': originAddress,
       'destination_address': destinationAddress,
+      if (pickupAddress != null && pickupAddress.isNotEmpty &&
+          pickupAddress != originAddress)
+        'pickup_address': pickupAddress,
+      if (dropoffAddress != null && dropoffAddress.isNotEmpty &&
+          dropoffAddress != destinationAddress)
+        'dropoff_address': dropoffAddress,
       'available_seats': availableSeats,
       'price_per_seat': pricePerSeat,
       'departure_date': departureDate.toIso8601String().substring(0, 10),
@@ -37,8 +46,8 @@ class TripRepository {
       'drops_off_at_door': dropsOffAtDoor,
       'via': via,
       'stops': stops,
-      if (description != null && description.isNotEmpty)
-        'description': description,
+      'split_costs': splitCosts,
+      if (description != null && description.isNotEmpty) 'description': description,
       if (vehicleId != null) 'vehicle_id': vehicleId,
       if (originLat != null && originLng != null)
         'origin_location': 'POINT($originLng $originLat)',
@@ -55,5 +64,36 @@ class TripRepository {
         .single();
 
     return response['id'] as String;
+  }
+
+  Future<List<Map<String, dynamic>>> fetchDriverTripSummaries() async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) return [];
+    final data = await _client
+        .from('trips')
+        .select('id, origin_address, destination_address, departure_date, departure_time, via, status')
+        .eq('owner_id', userId)
+        .order('departure_date', ascending: false) as List;
+    return data.cast<Map<String, dynamic>>();
+  }
+
+  Future<Map<String, dynamic>?> fetchTripForRepeat(String tripId) async {
+    return await _client
+        .from('trips')
+        .select(
+            'origin_address, destination_address, departure_time, allows_pets, picks_up_at_door, drops_off_at_door, via, stops, description, vehicle_id')
+        .eq('id', tripId)
+        .maybeSingle();
+  }
+
+  Future<int> countActiveTrips() async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) return 0;
+    final data = await _client
+        .from('trips')
+        .select('id')
+        .eq('owner_id', userId)
+        .inFilter('status', ['open', 'full']) as List;
+    return data.length;
   }
 }

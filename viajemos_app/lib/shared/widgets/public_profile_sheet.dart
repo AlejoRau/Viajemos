@@ -108,11 +108,31 @@ class _ProfileBody extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(profile.fullName,
+                    RichText(
+                      text: TextSpan(
                         style: const TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
-                            color: Color(0xFF1E293B))),
+                            color: Color(0xFF1E293B)),
+                        children: [
+                          TextSpan(text: profile.fullName),
+                          if (profile.birthDate != null) ...[
+                            const TextSpan(
+                              text: ', ',
+                              style: TextStyle(
+                                  fontWeight: FontWeight.w400,
+                                  color: Color(0xFF94A3B8)),
+                            ),
+                            TextSpan(
+                              text: '${_age(profile.birthDate!)}',
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w500,
+                                  color: Color(0xFF64748B)),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
                     const SizedBox(height: 4),
                     Row(
                       children: [
@@ -253,6 +273,16 @@ class _ProfileBody extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  int _age(DateTime birth) {
+    final today = DateTime.now();
+    int age = today.year - birth.year;
+    if (today.month < birth.month ||
+        (today.month == birth.month && today.day < birth.day)) {
+      age--;
+    }
+    return age;
   }
 
   String _formatYear(DateTime d) {

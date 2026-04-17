@@ -1,3 +1,5 @@
+import 'dart:io';
+import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../domain/user_profile.dart';
 
@@ -11,7 +13,7 @@ class ProfileRepository {
     var data = await _client
         .from('profiles')
         .select(
-            'full_name, avg_rating, trips_driven, trips_taken, bio_driver, bio_passenger, instagram, facebook, phone, birth_date')
+            'full_name, avg_rating, trips_driven, trips_taken, bio_driver, bio_passenger, instagram, facebook, phone, birth_date, avatar_url')
         .eq('id', user.id)
         .maybeSingle();
 
@@ -28,6 +30,7 @@ class ProfileRepository {
         'facebook': null,
         'phone': null,
         'birth_date': null,
+        'avatar_url': null,
       };
     }
 
@@ -48,6 +51,7 @@ class ProfileRepository {
       tripsDriver: (data['trips_driven'] as int?) ?? 0,
       tripsPassenger: (data['trips_taken'] as int?) ?? 0,
       memberSince: DateTime.parse(user.createdAt),
+      avatarUrl: data['avatar_url'] as String?,
       phone: data['phone'] as String?,
       birthDate: birthDateStr != null ? DateTime.tryParse(birthDateStr) : null,
       bioDriver: data['bio_driver'] as String?,
@@ -57,18 +61,44 @@ class ProfileRepository {
     );
   }
 
+  Future<String> uploadAvatar(XFile file) async {
+    final user = _client.auth.currentUser;
+    if (user == null) throw Exception('No authenticated user');
+    // Always store as JPEG — image_picker normalizes images when imageQuality is set,
+    // and the bucket only accepts image/jpeg, image/png, image/webp.
+    const path_storage = 'avatar.jpg';
+    final storagePath = '${user.id}/$path_storage';
+    await _client.storage.from('avatars').uploadBinary(
+      storagePath,
+      await File(file.path).readAsBytes(),
+      fileOptions: const FileOptions(contentType: 'image/jpeg', upsert: true),
+    );
+    // Append a cache-busting timestamp so Flutter doesn't show the old photo
+    // after re-upload (NetworkImage caches by URL).
+    final baseUrl = _client.storage.from('avatars').getPublicUrl(storagePath);
+    final url = '$baseUrl?t=${DateTime.now().millisecondsSinceEpoch}';
+    await _client.from('profiles').update({'avatar_url': url}).eq('id', user.id);
+    return url;
+  }
+
   Future<void> updatePersonalData({
     required String firstName,
     required String lastName,
-    required String? phone,
     required DateTime? birthDate,
   }) async {
     final user = _client.auth.currentUser;
     if (user == null) return;
     await _client.from('profiles').update({
       'full_name': '$firstName $lastName'.trim(),
-      'phone': phone?.isEmpty ?? true ? null : phone,
       'birth_date': birthDate?.toIso8601String().substring(0, 10),
+    }).eq('id', user.id);
+  }
+
+  Future<void> updatePhone(String phone) async {
+    final user = _client.auth.currentUser;
+    if (user == null) return;
+    await _client.from('profiles').update({
+      'phone': phone.trim().isEmpty ? null : phone.trim(),
     }).eq('id', user.id);
   }
 
@@ -87,9 +117,11 @@ class ProfileRepository {
   Future<UserProfile> fetchPublicProfile(String userId) async {
     final data = await _client
         .from('profiles')
-        .select('full_name, avg_rating, trips_driven, trips_taken, cancelled_trips_count, expelled_passengers_count, bio_driver, bio_passenger, instagram, facebook, created_at')
+        .select('full_name, avg_rating, trips_driven, trips_taken, cancelled_trips_count, expelled_passengers_count, bio_driver, bio_passenger, instagram, facebook, created_at, birth_date')
         .eq('id', userId)
         .single();
+
+    final birthDateStr = data['birth_date'] as String?;
 
     return UserProfile(
       id: userId,
@@ -103,6 +135,7 @@ class ProfileRepository {
       cancelledTripsCount: (data['cancelled_trips_count'] as int?) ?? 0,
       expelledPassengersCount: (data['expelled_passengers_count'] as int?) ?? 0,
       memberSince: DateTime.tryParse(data['created_at'] as String? ?? '') ?? DateTime.now(),
+      birthDate: birthDateStr != null ? DateTime.tryParse(birthDateStr) : null,
       bioDriver: data['bio_driver'] as String?,
       bioPassenger: data['bio_passenger'] as String?,
       instagram: data['instagram'] as String?,

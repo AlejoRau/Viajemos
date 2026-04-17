@@ -118,14 +118,19 @@ class _ChatsScreenState extends State<ChatsScreen> {
                           const Divider(height: 1, color: AppColors.border),
                       itemBuilder: (context, i) => _ChatTile(
                         conv: filtered[i],
-                        onTap: () => context.push(
-                          '/chats/${filtered[i].id}',
-                          extra: {
-                            'contactName': filtered[i].contactName,
-                            'contactId': filtered[i].contactId,
-                            'tripId': filtered[i].tripId,
-                          },
-                        ),
+                        onTap: () async {
+                          await context.push(
+                            '/chats/${filtered[i].id}',
+                            extra: {
+                              'contactName': filtered[i].contactName,
+                              'contactId': filtered[i].contactId,
+                              'tripId': filtered[i].tripId,
+                              'isGroupChat': filtered[i].isGroupChat,
+                              'participantsCount': filtered[i].participantsCount,
+                            },
+                          );
+                          if (mounted) _load();
+                        },
                       ),
                     ),
             ),
@@ -140,6 +145,7 @@ class _ChatTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isGroup = conv.isGroupChat;
     return InkWell(
       onTap: onTap,
       child: Padding(
@@ -148,15 +154,20 @@ class _ChatTile extends StatelessWidget {
           children: [
             CircleAvatar(
               radius: 28,
-              backgroundColor: AppColors.primaryLight,
-              child: Text(
-                _initials(conv.contactName),
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.primary,
-                ),
-              ),
+              backgroundColor: isGroup
+                  ? const Color(0xFFEDE9FE)
+                  : AppColors.primaryLight,
+              child: isGroup
+                  ? const Icon(Icons.groups_rounded,
+                      size: 26, color: Color(0xFF7C3AED))
+                  : Text(
+                      _initials(conv.contactName),
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.primary,
+                      ),
+                    ),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -184,7 +195,17 @@ class _ChatTile extends StatelessWidget {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 3),
+                  if (isGroup)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 2),
+                      child: Text(
+                        '${conv.participantsCount} integrante${conv.participantsCount == 1 ? '' : 's'}',
+                        style: const TextStyle(
+                            fontSize: 11, color: Color(0xFF7C3AED),
+                            fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                  const SizedBox(height: 1),
                   Text(
                     conv.lastMessage,
                     style: TextStyle(

@@ -10,6 +10,8 @@ class ConversationSummary {
     this.lastMessageAt,
     this.name,
     this.tripId,
+    this.isGroupChat = false,
+    this.participantsCount = 2,
   });
 
   final String id;
@@ -20,6 +22,8 @@ class ConversationSummary {
   final int unreadCount;
   final String? name;
   final String? tripId;
+  final bool isGroupChat;
+  final int participantsCount;
 }
 
 class ChatMessage {
@@ -30,6 +34,7 @@ class ChatMessage {
     required this.content,
     required this.createdAt,
     required this.isMine,
+    this.senderName,
   });
 
   final String id;
@@ -38,6 +43,24 @@ class ChatMessage {
   final String content;
   final DateTime createdAt;
   final bool isMine;
+  /// Display name of the sender — populated for group chat messages.
+  final String? senderName;
+}
+
+// ── Group participant ─────────────────────────────────────────────────────────
+
+class GroupParticipant {
+  const GroupParticipant({
+    required this.userId,
+    required this.fullName,
+    required this.isDriver,
+    this.avatarUrl,
+  });
+
+  final String userId;
+  final String fullName;
+  final String? avatarUrl;
+  final bool isDriver;
 }
 
 class PendingRequestInfo {
@@ -117,6 +140,60 @@ class AcceptedTripInfo {
     } catch (_) {
       return departureDate;
     }
+  }
+}
+
+// ── Pending Invitation (driver → passenger offer, shown as banner in chat) ───
+
+class PendingInvitationInfo {
+  const PendingInvitationInfo({
+    required this.invitationId,
+    required this.tripId,
+    required this.originAddress,
+    required this.destinationAddress,
+    required this.departureDate,
+    required this.pricePerSeat,
+    required this.freeSeats,
+    this.departureTime,
+    this.message,
+    this.vehicleBrand,
+    this.vehicleModel,
+    this.vehicleColor,
+  });
+
+  final String invitationId;
+  final String tripId;
+  final String originAddress;
+  final String destinationAddress;
+  final DateTime departureDate;
+  final int pricePerSeat;
+  final int freeSeats;
+  final String? departureTime;
+  final String? message;
+  final String? vehicleBrand;
+  final String? vehicleModel;
+  final String? vehicleColor;
+
+  static String _city(String address) {
+    final parts = address
+        .split(',')
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toList();
+    if (parts.length <= 1) return address.trim();
+    if (RegExp(r'^\d').hasMatch(parts.first)) return parts.last;
+    return parts.first;
+  }
+
+  String get originCity => _city(originAddress);
+  String get destinationCity => _city(destinationAddress);
+
+  String get formattedDate {
+    const months = [
+      'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+      'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
+    ];
+    return '${departureDate.day} de ${months[departureDate.month - 1]}';
   }
 }
 
@@ -224,6 +301,8 @@ class ChatRepository {
         unreadCount: (row['unread_count'] as num?)?.toInt() ?? 0,
         name: row['name'] as String?,
         tripId: row['trip_id'] as String?,
+        isGroupChat: row['is_group_chat'] as bool? ?? false,
+        participantsCount: (row['participants_count'] as num?)?.toInt() ?? 2,
       );
     }).toList();
   }
@@ -231,21 +310,38 @@ class ChatRepository {
   Future<List<ChatMessage>> fetchMessages(String conversationId) async {
     final data = await _client
         .from('messages')
-        .select('id, conversation_id, sender_id, content, created_at')
+        .select('id, conversation_id, sender_id, content, created_at, profiles!sender_id(full_name)')
         .eq('conversation_id', conversationId)
-        .order('created_at') as List;
+        .order('created_at', ascending: false) as List; // newest first
 
     final myId = _myId;
     return data
-        .map((row) => ChatMessage(
-              id: row['id'] as String,
-              conversationId: row['conversation_id'] as String,
-              senderId: row['sender_id'] as String,
-              content: row['content'] as String,
-              createdAt: DateTime.parse(row['created_at'] as String),
-              isMine: row['sender_id'] == myId,
-            ))
+        .map((row) {
+          final profile = row['profiles'] as Map<String, dynamic>?;
+          return ChatMessage(
+            id: row['id'] as String,
+            conversationId: row['conversation_id'] as String,
+            senderId: row['sender_id'] as String,
+            content: row['content'] as String,
+            createdAt: DateTime.parse(row['created_at'] as String),
+            isMine: row['sender_id'] == myId,
+            senderName: profile?['full_name'] as String?,
+          );
+        })
         .toList();
+  }
+
+  Future<List<GroupParticipant>> fetchGroupParticipants(String conversationId) async {
+    final data = await _client.rpc(
+      'get_group_participants',
+      params: {'p_conversation_id': conversationId},
+    ) as List;
+    return data.map((row) => GroupParticipant(
+          userId: row['user_id'] as String,
+          fullName: row['full_name'] as String? ?? 'Usuario',
+          avatarUrl: row['avatar_url'] as String?,
+          isDriver: row['is_driver'] as bool? ?? false,
+        )).toList();
   }
 
   Future<void> sendMessage(String conversationId, String content) async {
@@ -368,6 +464,50 @@ class ChatRepository {
     }
   }
 
+  /// Fetches a pending trip invitation sent BY [contactId] TO the current user.
+  /// Used by the passenger to show the accept/decline banner in chat.
+  Future<PendingInvitationInfo?> fetchPendingInvitationFromContact(
+      String contactId) async {
+    final data = await _client.rpc(
+      'get_pending_invitation_from_contact',
+      params: {'p_contact_id': contactId},
+    ) as List;
+
+    if (data.isEmpty) return null;
+    final row = data.first;
+    final timeRaw = row['departure_time'] as String?;
+    return PendingInvitationInfo(
+      invitationId: row['invitation_id'] as String,
+      tripId: row['trip_id'] as String,
+      originAddress: row['origin_address'] as String,
+      destinationAddress: row['destination_address'] as String,
+      departureDate: DateTime.parse(row['departure_date'] as String),
+      pricePerSeat: (row['price_per_seat'] as num).toInt(),
+      freeSeats: (row['free_seats'] as num?)?.toInt() ?? 0,
+      departureTime: timeRaw != null && timeRaw.length >= 5
+          ? timeRaw.substring(0, 5)
+          : null,
+      message: row['message'] as String?,
+      vehicleBrand: row['vehicle_brand'] as String?,
+      vehicleModel: row['vehicle_model'] as String?,
+      vehicleColor: row['vehicle_color'] as String?,
+    );
+  }
+
+  Future<void> acceptInvitation(String invitationId) async {
+    await _client
+        .from('trip_invitations')
+        .update({'status': 'accepted'})
+        .eq('id', invitationId);
+  }
+
+  Future<void> declineInvitation(String invitationId) async {
+    await _client.rpc(
+      'decline_trip_invitation',
+      params: {'p_invitation_id': invitationId},
+    );
+  }
+
   Future<void> declineRequest(String requestId) async {
     await _client
         .from('trip_requests')
@@ -405,6 +545,7 @@ class ChatRepository {
               content: row['content'] as String,
               createdAt: DateTime.parse(row['created_at'] as String),
               isMine: false,
+              // senderName not available in realtime payload; group UI resolves via cached participants
             ));
           },
         )

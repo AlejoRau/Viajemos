@@ -6,10 +6,22 @@ import '../../../core/theme/app_theme.dart';
 import '../../../shared/formatters/date_formatter.dart';
 import '../../../shared/services/city_search_service.dart';
 import '../../../shared/widgets/city_autocomplete_field.dart';
+import '../../../shared/widgets/app_toast.dart';
 import '../data/passenger_request_repository.dart';
 
 class CreateRequestScreen extends ConsumerStatefulWidget {
-  const CreateRequestScreen({super.key});
+  const CreateRequestScreen({
+    super.key,
+    this.prefillOrigin,
+    this.prefillDestination,
+    this.prefillDateFrom,
+    this.prefillDateTo,
+  });
+
+  final String? prefillOrigin;
+  final String? prefillDestination;
+  final DateTime? prefillDateFrom;
+  final DateTime? prefillDateTo;
 
   @override
   ConsumerState<CreateRequestScreen> createState() => _CreateRequestScreenState();
@@ -28,9 +40,100 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
   int _seats = 1;
   int _price = 4500;
   bool _publishing = false;
+  bool _showErrors = false;
+
+  // Last city name confirmed via autocomplete selection (null = not validated)
+  String? _lastValidatedOrigin;
+  String? _lastValidatedDest;
+
+  @override
+  void initState() {
+    super.initState();
+    _originController.addListener(_onOriginChanged);
+    _destinationController.addListener(_onDestChanged);
+    // Pre-fill from search if coming from empty results
+    if (widget.prefillOrigin != null && widget.prefillOrigin!.isNotEmpty) {
+      _originController.text = widget.prefillOrigin!;
+      _lastValidatedOrigin = widget.prefillOrigin;
+    }
+    if (widget.prefillDestination != null && widget.prefillDestination!.isNotEmpty) {
+      _destinationController.text = widget.prefillDestination!;
+      _lastValidatedDest = widget.prefillDestination;
+    }
+    if (widget.prefillDateFrom != null) _dateFrom = widget.prefillDateFrom;
+    if (widget.prefillDateTo != null) _dateTo = widget.prefillDateTo;
+  }
+
+  bool get _originValidated =>
+      _lastValidatedOrigin != null &&
+      _lastValidatedOrigin!.toLowerCase() ==
+          _originController.text.trim().toLowerCase();
+
+  bool get _destValidated =>
+      _lastValidatedDest != null &&
+      _lastValidatedDest!.toLowerCase() ==
+          _destinationController.text.trim().toLowerCase();
+
+  bool get _hasRequiredErrors =>
+      _originController.text.trim().isEmpty ||
+      _destinationController.text.trim().isEmpty ||
+      _dateFrom == null;
+
+  bool get _hasAnyData =>
+      _originController.text.trim().isNotEmpty ||
+      _destinationController.text.trim().isNotEmpty ||
+      _dateFrom != null;
+
+  void _onOriginChanged() {
+    if (_lastValidatedOrigin != null &&
+        _lastValidatedOrigin!.toLowerCase() !=
+            _originController.text.trim().toLowerCase()) {
+      _lastValidatedOrigin = null;
+    }
+    if (_showErrors) setState(() {});
+  }
+
+  void _onDestChanged() {
+    if (_lastValidatedDest != null &&
+        _lastValidatedDest!.toLowerCase() !=
+            _destinationController.text.trim().toLowerCase()) {
+      _lastValidatedDest = null;
+    }
+    if (_showErrors) setState(() {});
+  }
+
+  Future<bool> _confirmDiscard() async {
+    if (!_hasAnyData) return true;
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('¿Salir sin guardar?',
+            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+        content: const Text(
+          'Si salís ahora, los cambios que hiciste se van a perder.',
+          style: TextStyle(fontSize: 14, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Seguir editando'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: const Color(0xFFDC2626)),
+            child: const Text('Descartar cambios'),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
+  }
 
   @override
   void dispose() {
+    _originController.removeListener(_onOriginChanged);
+    _destinationController.removeListener(_onDestChanged);
     _originController.dispose();
     _destinationController.dispose();
     _timeFromController.dispose();
@@ -40,11 +143,14 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
   }
 
   String? _validate() {
-    if (_originController.text.trim().isEmpty) return 'Ingresá el origen';
-    if (_destinationController.text.trim().isEmpty) return 'Ingresá el destino';
-    if (_dateFrom == null) return 'Seleccioná la fecha de inicio';
-    if (_dateTo == null) return 'Seleccioná la fecha de fin';
-    if (_dateTo!.isBefore(_dateFrom!)) return 'La fecha de fin debe ser igual o posterior al inicio';
+    if (_hasRequiredErrors) return 'required';
+    if (!_originValidated) return 'Seleccioná el origen de la lista de ciudades';
+    if (!_destValidated) return 'Seleccioná el destino de la lista de ciudades';
+    if (_originController.text.trim().toLowerCase() ==
+        _destinationController.text.trim().toLowerCase()) {
+      return 'El origen y el destino no pueden ser iguales';
+    }
+    if (_dateTo != null && _dateTo!.isBefore(_dateFrom!)) return 'La fecha de fin debe ser igual o posterior al inicio';
     final tf = _timeFromController.text.trim();
     final tt = _timeToController.text.trim();
     if (tf.isNotEmpty && tt.isNotEmpty) {
@@ -66,9 +172,8 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
   Future<void> _publish() async {
     final error = _validate();
     if (error != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error), backgroundColor: Colors.red.shade600),
-      );
+      setState(() => _showErrors = true);
+      if (error != 'required') AppToast.show(context, message: error);
       return;
     }
 
@@ -78,7 +183,7 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
         originAddress: _originController.text.trim(),
         destinationAddress: _destinationController.text.trim(),
         dateFrom: _dateFrom!,
-        dateTo: _dateTo!,
+        dateTo: _dateTo,
         seatsNeeded: _seats,
         hasPet: _hasPet,
         isSmoker: false,
@@ -94,22 +199,12 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
             : _descriptionController.text.trim(),
       );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('¡Pedido publicado con éxito!'),
-            backgroundColor: Color(0xFF16A34A),
-          ),
-        );
+        AppToast.show(context, message: '¡Pedido publicado con éxito!', type: ToastType.success);
         context.go('/passenger');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error al publicar: $e'),
-            backgroundColor: Colors.red.shade600,
-          ),
-        );
+        AppToast.show(context, message: 'Error al publicar: $e');
       }
     } finally {
       if (mounted) setState(() => _publishing = false);
@@ -120,6 +215,7 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
     required TextEditingController controller,
     required String placeholder,
     required IconData icon,
+    required ValueChanged<String> onSelected,
   }) {
     return CityAutocompleteField(
       controller: controller,
@@ -127,17 +223,26 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
       icon: icon,
       defaultSuggestions: popularArgentineCities,
       citySearchSource: CitySearchSource.georef,
+      onSelected: onSelected,
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        if (await _confirmDiscard() && mounted) context.go('/passenger');
+      },
+      child: Scaffold(
       appBar: AppBar(
         title: const Text('Publicar pedido'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.go('/passenger'),
+          onPressed: () async {
+            if (await _confirmDiscard() && mounted) context.go('/passenger');
+          },
         ),
       ),
       body: SingleChildScrollView(
@@ -170,13 +275,53 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
                           controller: _originController,
                           placeholder: 'Origen',
                           icon: Icons.search,
+                          onSelected: (name) =>
+                              setState(() => _lastValidatedOrigin = name),
                         ),
+                        if (_showErrors && _originController.text.trim().isEmpty)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 4, left: 4),
+                            child: Text('Este campo es obligatorio',
+                                style: TextStyle(
+                                    color: Color(0xFFDC2626),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w500)),
+                          )
+                        else if (_showErrors && !_originValidated)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 4, left: 4),
+                            child: Text('Seleccioná una ciudad de la lista',
+                                style: TextStyle(
+                                    color: Color(0xFFDC2626),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w500)),
+                          ),
                         const SizedBox(height: 12),
                         _buildLocationInput(
                           controller: _destinationController,
                           placeholder: 'Destino',
                           icon: Icons.near_me_rounded,
+                          onSelected: (name) =>
+                              setState(() => _lastValidatedDest = name),
                         ),
+                        if (_showErrors && _destinationController.text.trim().isEmpty)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 4, left: 4),
+                            child: Text('Este campo es obligatorio',
+                                style: TextStyle(
+                                    color: Color(0xFFDC2626),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w500)),
+                          )
+                        else if (_showErrors && !_destValidated)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 4, left: 4),
+                            child: Text('Seleccioná una ciudad de la lista',
+                                style: TextStyle(
+                                    color: Color(0xFFDC2626),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w500)),
+                          ),
                       ],
                     ),
                   ),
@@ -194,13 +339,27 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
             Row(
               children: [
                 Expanded(
-                  child: _DatePickerInput(
-                    label: 'Desde',
-                    value: _dateFrom,
-                    onPicked: (d) => setState(() {
-                      _dateFrom = d;
-                      if (_dateTo != null && _dateTo!.isBefore(d)) _dateTo = d;
-                    }),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _DatePickerInput(
+                        label: 'Desde',
+                        value: _dateFrom,
+                        onPicked: (d) => setState(() {
+                          _dateFrom = d;
+                          if (_dateTo != null && _dateTo!.isBefore(d)) _dateTo = d;
+                        }),
+                      ),
+                      if (_showErrors && _dateFrom == null)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 4, left: 4),
+                          child: Text('Este campo es obligatorio',
+                              style: TextStyle(
+                                  color: Color(0xFFDC2626),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500)),
+                        ),
+                    ],
                   ),
                 ),
                 const Padding(
@@ -209,7 +368,7 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
                 ),
                 Expanded(
                   child: _DatePickerInput(
-                    label: 'Hasta',
+                    label: 'Hasta (opcional)',
                     value: _dateTo,
                     onPicked: (d) => setState(() => _dateTo = d),
                     firstDate: _dateFrom,
@@ -291,7 +450,7 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
           ],
         ),
       ),
-    );
+    ));
   }
 }
 
@@ -449,19 +608,22 @@ class _SeatsAndPriceCardState extends State<_SeatsAndPriceCard> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Asientos necesarios',
-                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15, color: Color(0xFF1E293B)),
-                  ),
-                  Text(
-                    'Cantidad de lugares que necesitás',
-                    style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
-                  ),
-                ],
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Asientos necesarios',
+                      style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15, color: Color(0xFF1E293B)),
+                    ),
+                    Text(
+                      'Cantidad de lugares que necesitás',
+                      style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                    ),
+                  ],
+                ),
               ),
+              const SizedBox(width: 12),
               Container(
                 decoration: BoxDecoration(
                   color: Colors.white,
@@ -499,19 +661,22 @@ class _SeatsAndPriceCardState extends State<_SeatsAndPriceCard> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Precio que buscas pagar por asiento',
-                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15, color: Color(0xFF1E293B)),
-                  ),
-                  Text(
-                    r'Lo que estás dispuesto a pagar',
-                    style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
-                  ),
-                ],
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Precio máximo por asiento',
+                      style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15, color: Color(0xFF1E293B)),
+                    ),
+                    Text(
+                      r'Lo que estás dispuesto a pagar',
+                      style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                    ),
+                  ],
+                ),
               ),
+              const SizedBox(width: 12),
               Container(
                 width: 120,
                 decoration: BoxDecoration(
@@ -529,15 +694,10 @@ class _SeatsAndPriceCardState extends State<_SeatsAndPriceCard> {
                     if (parsed != null) widget.onPriceChanged(parsed);
                   },
                   decoration: const InputDecoration(
-                    prefixIcon: Padding(
-                      padding: EdgeInsets.only(left: 12, top: 12),
-                      child: Text(
-                        'ARS',
-                        style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 13),
-                      ),
-                    ),
+                    prefixText: 'ARS ',
+                    prefixStyle: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 13),
                     border: InputBorder.none,
-                    contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                   ),
                 ),
               ),
@@ -650,7 +810,11 @@ class _DatePickerInput extends StatelessWidget {
               context: context,
               initialDate: initial.isBefore(earliest) ? earliest : initial,
               firstDate: earliest,
-              lastDate: DateTime.now().add(const Duration(days: 365)),
+              lastDate: DateTime(
+                DateTime.now().year,
+                DateTime.now().month + 1,
+                DateTime.now().day,
+              ),
             );
             if (picked != null) onPicked(picked);
           },

@@ -4,12 +4,33 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/widgets/role_option_card.dart';
 import '../../../shared/widgets/role_switcher_title.dart';
+import '../../../shared/providers/trip_success_provider.dart';
+import '../../../shared/widgets/trip_success_overlay.dart';
 
-class DriverHomeScreen extends ConsumerWidget {
+class DriverHomeScreen extends ConsumerStatefulWidget {
   const DriverHomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<DriverHomeScreen> createState() => _DriverHomeScreenState();
+}
+
+class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkSuccess());
+  }
+
+  void _checkSuccess() {
+    final success = ref.read(tripSuccessProvider);
+    if (success != null && mounted) {
+      ref.read(tripSuccessProvider.notifier).state = null;
+      showTripSuccessOverlay(context, trip: success);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const RoleSwitcherTitle(),
