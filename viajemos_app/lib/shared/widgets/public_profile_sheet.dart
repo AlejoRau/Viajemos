@@ -216,21 +216,19 @@ class _ProfileBodyState extends State<_ProfileBody> {
 
           const SizedBox(height: 20),
 
-          // Bio
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 250),
-            child: _showingDriver
-                ? _BioSection(
-                    key: const ValueKey('bio_driver'),
-                    label: 'Como conductor',
-                    bio: p.bioDriver,
-                  )
-                : _BioSection(
-                    key: const ValueKey('bio_passenger'),
-                    label: 'Como pasajero',
-                    bio: p.bioPassenger,
-                  ),
-          ),
+          // Bio — siempre visible, igual en los dos tabs
+          if ((p.bioDriver != null && p.bioDriver!.isNotEmpty) ||
+              (p.bioPassenger != null && p.bioPassenger!.isNotEmpty)) ...[
+            const Text('Sobre mí',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700,
+                    color: Color(0xFF1E293B))),
+            const SizedBox(height: 6),
+            Text(
+              p.bioDriver?.isNotEmpty == true ? p.bioDriver! : p.bioPassenger!,
+              style: const TextStyle(fontSize: 13, color: Color(0xFF475569), height: 1.5),
+            ),
+            const SizedBox(height: 16),
+          ],
 
           // Social
           const Divider(color: Color(0xFFE2E8F0)),
@@ -384,40 +382,28 @@ class _PassengerStats extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _StatBox(
-      value: '${profile.tripsPassenger}',
-      label: 'Viajes como pasajero',
-      icon: Icons.airline_seat_recline_normal_rounded,
-    );
-  }
-}
-
-// ── Bio section ───────────────────────────────────────────────────────────────
-
-class _BioSection extends StatelessWidget {
-  const _BioSection({super.key, required this.label, required this.bio});
-  final String label;
-  final String? bio;
-
-  @override
-  Widget build(BuildContext context) {
-    if (bio == null || bio!.isEmpty) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label,
-              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700,
-                  color: Color(0xFF1E293B))),
-          const SizedBox(height: 6),
-          Text(bio!,
-              style: const TextStyle(fontSize: 13, color: Color(0xFF475569), height: 1.5)),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _StatBox(
+          value: '${profile.tripsPassenger}',
+          label: 'Viajes como pasajero',
+          icon: Icons.airline_seat_recline_normal_rounded,
+        ),
+        if (profile.kickedOutCount > 0) ...[
+          const SizedBox(height: 12),
+          _StatBox(
+            value: '${profile.kickedOutCount}',
+            label: 'Viajes\nque lo bajaron',
+            icon: Icons.directions_walk_rounded,
+            negative: true,
+          ),
         ],
-      ),
+      ],
     );
   }
 }
+
 
 class _StatBox extends StatelessWidget {
   const _StatBox({
