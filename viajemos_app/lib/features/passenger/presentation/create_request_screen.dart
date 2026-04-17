@@ -8,6 +8,7 @@ import '../../../shared/services/city_search_service.dart';
 import '../../../shared/widgets/city_autocomplete_field.dart';
 import '../../../shared/widgets/app_toast.dart';
 import '../data/passenger_request_repository.dart';
+import '../../history/data/history_repository.dart';
 
 class CreateRequestScreen extends ConsumerStatefulWidget {
   const CreateRequestScreen({
@@ -102,11 +103,36 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
     if (_showErrors) setState(() {});
   }
 
+  void _applyFromAlert(Map<String, dynamic> raw) {
+    final origin = raw['origin_address'] as String? ?? '';
+    final dest = raw['destination_address'] as String? ?? '';
+    setState(() {
+      _originController.text = origin;
+      _destinationController.text = dest;
+      _lastValidatedOrigin = origin.isNotEmpty ? origin : null;
+      _lastValidatedDest = dest.isNotEmpty ? dest : null;
+    });
+  }
+
+  Future<void> _openHistoryPicker() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _AlertHistoryPickerSheet(
+        onSelect: (raw) {
+          Navigator.pop(context);
+          _applyFromAlert(raw);
+        },
+      ),
+    );
+  }
+
   Future<bool> _confirmDiscard() async {
     if (!_hasAnyData) return true;
     final result = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('¿Salir sin guardar?',
             style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
@@ -116,11 +142,11 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context, false),
+            onPressed: () => Navigator.pop(ctx, false),
             child: const Text('Seguir editando'),
           ),
           TextButton(
-            onPressed: () => Navigator.pop(context, true),
+            onPressed: () => Navigator.pop(ctx, true),
             style: TextButton.styleFrom(foregroundColor: const Color(0xFFDC2626)),
             child: const Text('Descartar cambios'),
           ),
@@ -244,6 +270,13 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
             if (await _confirmDiscard() && mounted) context.go('/passenger');
           },
         ),
+        actions: [
+          IconButton(
+            tooltip: 'Usar pedido anterior',
+            icon: const Icon(Icons.history_rounded),
+            onPressed: _openHistoryPicker,
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
@@ -778,6 +811,187 @@ class _DescriptionField extends StatelessWidget {
     );
   }
 }
+
+// ── Alert History Picker Sheet ─────────────────────────────────────────────
+
+class _AlertHistoryPickerSheet extends StatefulWidget {
+  const _AlertHistoryPickerSheet({required this.onSelect});
+  final void Function(Map<String, dynamic> raw) onSelect;
+
+  @override
+  State<_AlertHistoryPickerSheet> createState() => _AlertHistoryPickerSheetState();
+}
+
+class _AlertHistoryPickerSheetState extends State<_AlertHistoryPickerSheet> {
+  List<Map<String, dynamic>>? _alerts;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetch();
+  }
+
+  Future<void> _fetch() async {
+    try {
+      final alerts = await HistoryRepository().fetchPassengerAlertSummaries();
+      if (mounted) setState(() { _alerts = alerts; _loading = false; });
+    } catch (_) {
+      if (mounted) setState(() { _alerts = []; _loading = false; });
+    }
+  }
+
+  String _formatDate(String? dateStr) {
+    if (dateStr == null) return '';
+    try {
+      final d = DateTime.parse(dateStr);
+      return '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+    } catch (_) {
+      return dateStr;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.6,
+      minChildSize: 0.4,
+      maxChildSize: 0.92,
+      builder: (_, controller) => Container(
+        decoration: const BoxDecoration(
+          color: AppColors.pageBackground,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(children: [
+          const SizedBox(height: 12),
+          Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+                color: AppColors.border,
+                borderRadius: BorderRadius.circular(2)),
+          ),
+          const SizedBox(height: 16),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Row(children: [
+              const Icon(Icons.history_rounded, size: 20, color: AppColors.primary),
+              const SizedBox(width: 8),
+              const Text('Mis pedidos',
+                  style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimary)),
+              const Spacer(),
+              const Text('Tocá uno para copiar sus datos',
+                  style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+            ]),
+          ),
+          const SizedBox(height: 16),
+          const Divider(height: 1, color: AppColors.border),
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : (_alerts == null || _alerts!.isEmpty)
+                    ? const Center(
+                        child: Text('No tenés pedidos creados',
+                            style: TextStyle(
+                                fontSize: 14, color: AppColors.textSecondary)))
+                    : ListView.separated(
+                        controller: controller,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 12),
+                        itemCount: _alerts!.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 8),
+                        itemBuilder: (_, i) {
+                          final t = _alerts![i];
+                          final origin = t['origin_address'] as String? ?? '';
+                          final destination = t['destination_address'] as String? ?? '';
+                          final dateFrom = _formatDate(t['date_from'] as String?);
+                          final dateTo = t['date_to'] != null
+                              ? _formatDate(t['date_to'] as String?)
+                              : null;
+                          final isActive = t['is_active'] as bool? ?? false;
+                          return InkWell(
+                            onTap: () => widget.onSelect(t),
+                            borderRadius: BorderRadius.circular(14),
+                            child: Container(
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: AppColors.background,
+                                border: Border.all(
+                                    color: isActive
+                                        ? AppColors.primary.withOpacity(0.35)
+                                        : AppColors.border,
+                                    width: 1.5),
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              child: Row(children: [
+                                Expanded(
+                                  child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                    Row(children: [
+                                      Expanded(
+                                        child: Text(
+                                          '$origin  →  $destination',
+                                          style: const TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w600,
+                                              color: AppColors.textPrimary),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      if (isActive) ...[
+                                        const SizedBox(width: 8),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 7, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: AppColors.primaryLight,
+                                            borderRadius: BorderRadius.circular(6),
+                                          ),
+                                          child: const Text('Activo',
+                                              style: TextStyle(
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: AppColors.primary)),
+                                        ),
+                                      ],
+                                    ]),
+                                    const SizedBox(height: 4),
+                                    Row(children: [
+                                      const Icon(Icons.calendar_today_rounded,
+                                          size: 12, color: AppColors.textSecondary),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        dateTo != null
+                                            ? '$dateFrom – $dateTo'
+                                            : dateFrom,
+                                        style: const TextStyle(
+                                            fontSize: 12,
+                                            color: AppColors.textSecondary),
+                                      ),
+                                    ]),
+                                  ]),
+                                ),
+                                const SizedBox(width: 12),
+                                const Icon(Icons.content_copy_rounded,
+                                    size: 18, color: AppColors.primary),
+                              ]),
+                            ),
+                          );
+                        },
+                      ),
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 class _DatePickerInput extends StatelessWidget {
   const _DatePickerInput({

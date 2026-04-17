@@ -110,7 +110,17 @@ final _router = GoRouter(
           },
         ),
         GoRoute(path: '/passenger', builder: (_, __) => const PassengerHomeScreen()),
-        GoRoute(path: '/passenger/search-trips', builder: (_, __) => const SearchTripsScreen()),
+        GoRoute(
+          path: '/passenger/search-trips',
+          builder: (_, state) {
+            final extra = (state.extra as Map?)?.cast<String, dynamic>() ?? {};
+            return SearchTripsScreen(
+              prefillOrigin: extra['origin'] as String?,
+              prefillDestination: extra['destination'] as String?,
+              prefillMaxPrice: extra['maxPrice'] as String?,
+            );
+          },
+        ),
         GoRoute(
           path: '/passenger/search-results',
           builder: (_, state) {

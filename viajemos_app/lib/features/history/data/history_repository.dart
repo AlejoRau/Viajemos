@@ -174,7 +174,7 @@ class MyTripAlert {
     required this.originAddress,
     required this.destinationAddress,
     required this.dateFrom,
-    required this.dateTo,
+    this.dateTo,
     required this.seatsNeeded,
     required this.pendingInvitations,
     required this.timeFlexible,
@@ -184,22 +184,24 @@ class MyTripAlert {
     this.description,
     this.hasPet = false,
     this.isSmoker = false,
+    this.isExpired = false,
   });
 
   final String id;
   final String originAddress;
   final String destinationAddress;
   final DateTime dateFrom;
-  final DateTime dateTo;
+  final DateTime? dateTo;
   final int seatsNeeded;
   final int pendingInvitations;
   final bool timeFlexible;
-  final String? departureTime; // "HH:mm"
+  final String? departureTime;
   final String? departureTimeTo;
   final int? maxPrice;
   final String? description;
   final bool hasPet;
   final bool isSmoker;
+  final bool isExpired;
 
   bool get hasInvitations => pendingInvitations > 0;
 }
@@ -495,8 +497,8 @@ class HistoryRepository {
         id: row['request_id'] as String,
         tripId: row['trip_id'] as String,
         departureDate: DateTime.parse(row['departure_date'] as String),
-        originAddress: row['origin_address'] as String,
-        destinationAddress: row['destination_address'] as String,
+        originAddress: row['origin_address'] as String? ?? '',
+        destinationAddress: row['destination_address'] as String? ?? '',
         pricePerSeat: (row['price_per_seat'] as num).toInt(),
         seatsRequested: (row['seats_requested'] as int?) ?? 1,
         status: row['status'] as String,
@@ -562,10 +564,10 @@ class HistoryRepository {
     return data.map((row) {
       return MyTripAlert(
         id: row['alert_id'] as String,
-        originAddress: row['origin_address'] as String,
-        destinationAddress: row['destination_address'] as String,
+        originAddress: row['origin_address'] as String? ?? '',
+        destinationAddress: row['destination_address'] as String? ?? '',
         dateFrom: DateTime.parse(row['date_from'] as String),
-        dateTo: DateTime.parse(row['date_to'] as String),
+        dateTo: row['date_to'] != null ? DateTime.parse(row['date_to'] as String) : null,
         seatsNeeded: (row['seats_needed'] as int?) ?? 1,
         pendingInvitations: (row['pending_invitations'] as int?) ?? 0,
         timeFlexible: row['time_flexible'] as bool? ?? true,
@@ -575,8 +577,21 @@ class HistoryRepository {
         description: row['description'] as String?,
         hasPet: row['has_pet'] as bool? ?? false,
         isSmoker: row['is_smoker'] as bool? ?? false,
+        isExpired: row['is_expired'] as bool? ?? false,
       );
     }).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> fetchPassengerAlertSummaries() async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) return [];
+    final data = await _client
+        .from('trip_alerts')
+        .select('id, origin_address, destination_address, date_from, date_to, is_active')
+        .eq('user_id', userId)
+        .order('created_at', ascending: false)
+        .limit(30) as List;
+    return data.cast<Map<String, dynamic>>();
   }
 
   Future<void> deactivateAlert(String alertId) async {

@@ -358,7 +358,7 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
     if (!_hasAnyData) return true;
     final result = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('¿Salir sin guardar?',
             style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
@@ -368,11 +368,11 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context, false),
+            onPressed: () => Navigator.pop(ctx, false),
             child: const Text('Seguir editando'),
           ),
           TextButton(
-            onPressed: () => Navigator.pop(context, true),
+            onPressed: () => Navigator.pop(ctx, true),
             style: TextButton.styleFrom(foregroundColor: const Color(0xFFDC2626)),
             child: const Text('Descartar cambios'),
           ),

@@ -20,7 +20,16 @@ String _sanitizeCity(String raw) =>
 // ── Pantalla ──────────────────────────────────────────────────────────────────
 
 class SearchTripsScreen extends StatelessWidget {
-  const SearchTripsScreen({super.key});
+  const SearchTripsScreen({
+    super.key,
+    this.prefillOrigin,
+    this.prefillDestination,
+    this.prefillMaxPrice,
+  });
+
+  final String? prefillOrigin;
+  final String? prefillDestination;
+  final String? prefillMaxPrice;
 
   @override
   Widget build(BuildContext context) {
@@ -42,9 +51,13 @@ class SearchTripsScreen extends StatelessWidget {
           child: Container(color: const Color(0xFFE2E8F0), height: 1.0),
         ),
       ),
-      body: const SingleChildScrollView(
-        padding: EdgeInsets.all(24),
-        child: _FilterCard(),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: _FilterCard(
+          prefillOrigin: prefillOrigin,
+          prefillDestination: prefillDestination,
+          prefillMaxPrice: prefillMaxPrice,
+        ),
       ),
     );
   }
@@ -53,18 +66,34 @@ class SearchTripsScreen extends StatelessWidget {
 // ── Tarjeta de filtros ────────────────────────────────────────────────────────
 
 class _FilterCard extends StatefulWidget {
-  const _FilterCard();
+  const _FilterCard({
+    this.prefillOrigin,
+    this.prefillDestination,
+    this.prefillMaxPrice,
+  });
+
+  final String? prefillOrigin;
+  final String? prefillDestination;
+  final String? prefillMaxPrice;
 
   @override
   State<_FilterCard> createState() => _FilterCardState();
 }
 
 class _FilterCardState extends State<_FilterCard> {
-  final _fromController = TextEditingController();
-  final _toController = TextEditingController();
+  late final TextEditingController _fromController;
+  late final TextEditingController _toController;
   final _fromDateController = TextEditingController();
   final _toDateController = TextEditingController();
-  final _priceController = TextEditingController();
+  late final TextEditingController _priceController;
+
+  @override
+  void initState() {
+    super.initState();
+    _fromController = TextEditingController(text: widget.prefillOrigin ?? '');
+    _toController = TextEditingController(text: widget.prefillDestination ?? '');
+    _priceController = TextEditingController(text: widget.prefillMaxPrice ?? '');
+  }
 
   @override
   void dispose() {

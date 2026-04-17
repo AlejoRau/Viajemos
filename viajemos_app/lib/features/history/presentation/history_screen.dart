@@ -1994,8 +1994,14 @@ class _PassengerActiveRequestsBody extends ConsumerWidget {
       );
     }
 
-    final requests = asyncRequests.value ?? [];
-    final alerts = asyncAlerts.value ?? [];
+    final today = DateTime.now();
+    final todayDate = DateTime(today.year, today.month, today.day);
+    final allRequests = asyncRequests.value ?? [];
+    final requests = allRequests
+        .where((r) => !r.departureDate.isBefore(todayDate))
+        .toList();
+    final allAlerts = asyncAlerts.value ?? [];
+    final alerts = allAlerts.where((a) => !a.isExpired).toList();
     final bothEmpty = requests.isEmpty && alerts.isEmpty;
 
     return RefreshIndicator(
@@ -2230,7 +2236,9 @@ class _MyTripAlertCardState extends ConsumerState<_MyTripAlertCard> {
               _InfoChip(
                 icon: Icons.calendar_today_rounded,
                 label:
-                    '${formatDate(alert.dateFrom)} – ${formatDate(alert.dateTo)}',
+                    alert.dateTo != null
+                        ? '${formatDate(alert.dateFrom)} – ${formatDate(alert.dateTo!)}'
+                        : formatDate(alert.dateFrom),
               ),
               _InfoChip(
                 icon: Icons.people_rounded,
@@ -2587,7 +2595,7 @@ class _ActivePassengerRequestCardState
                         horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
                       color: req.isPending
-                          ? const Color(0xFFF1F5F9)
+                          ? const Color(0xFFDCFCE7)
                           : Colors.green.shade100,
                       borderRadius: BorderRadius.circular(8),
                     ),
@@ -2597,10 +2605,8 @@ class _ActivePassengerRequestCardState
                         Container(
                           width: 6,
                           height: 6,
-                          decoration: BoxDecoration(
-                            color: req.isPending
-                                ? const Color(0xFF94A3B8)
-                                : Colors.green,
+                          decoration: const BoxDecoration(
+                            color: Colors.green,
                             shape: BoxShape.circle,
                           ),
                         ),
@@ -2610,9 +2616,7 @@ class _ActivePassengerRequestCardState
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w700,
-                            color: req.isPending
-                                ? const Color(0xFF64748B)
-                                : Colors.green.shade800,
+                            color: Colors.green.shade800,
                           ),
                         ),
                       ],
@@ -2733,62 +2737,51 @@ class _ActivePassengerRequestCardState
 
               // CTA buttons
               const SizedBox(height: 12),
-              IntrinsicHeight(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () => showModalBottomSheet(
-                          context: context,
-                          isScrollControlled: true,
-                          backgroundColor: Colors.transparent,
-                          builder: (_) =>
-                              _PassengerRequestDetailSheet(request: req),
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.green.shade700,
-                          side: BorderSide(color: Colors.green.shade400),
-                          padding:
-                              const EdgeInsets.symmetric(vertical: 10),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12)),
-                        ),
-                        child: const Text('Ver detalles',
-                            style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600)),
-                      ),
+              Row(children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      backgroundColor: Colors.transparent,
+                      builder: (_) =>
+                          _PassengerRequestDetailSheet(request: req),
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: _shareRequest,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF2563EB),
-                          foregroundColor: Colors.white,
-                          padding:
-                              const EdgeInsets.symmetric(vertical: 10),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12)),
-                          elevation: 0,
-                        ),
-                        child: const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.share_rounded, size: 15),
-                            SizedBox(width: 6),
-                            Text('Compartir',
-                                style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600)),
-                          ],
-                        ),
-                      ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.primary,
+                      side: const BorderSide(color: AppColors.primary),
+                      minimumSize: const Size(0, 40),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
                     ),
-                  ],
+                    child: const Text('Ver solicitud',
+                        style: TextStyle(fontSize: 13)),
+                  ),
                 ),
-              ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: _shareRequest,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size(0, 40),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                      elevation: 0,
+                    ),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.share_rounded, size: 15),
+                        SizedBox(width: 6),
+                        Text('Compartir',
+                            style: TextStyle(fontSize: 13)),
+                      ],
+                    ),
+                  ),
+                ),
+              ]),
             ],
           ),
         ),
@@ -3008,8 +3001,8 @@ class _DriverHistoryBody extends ConsumerWidget {
       );
     }
 
-    final totalEarnings =
-        completedTrips.fold(0, (sum, t) => sum + t.earnings);
+    final totalPassengers =
+        completedTrips.fold(0, (sum, t) => sum + t.seatsTaken);
     final ratedTrips =
         completedTrips.where((t) => t.avgTripRating != null).toList();
     final avgRating = ratedTrips.isEmpty
@@ -3046,11 +3039,9 @@ class _DriverHistoryBody extends ConsumerWidget {
                 const SizedBox(width: 10),
                 Expanded(
                     child: _StatCard(
-                        icon: Icons.emoji_events_rounded,
-                        value:
-                            '\$${(totalEarnings / 1000).toStringAsFixed(0)}k',
-                        label: 'Ganado',
-                        valueFontSize: 20)),
+                        icon: Icons.people_rounded,
+                        value: '$totalPassengers',
+                        label: 'Pasajeros')),
               ]),
               const SizedBox(height: 28),
             ],
@@ -3297,7 +3288,15 @@ class _DriverTripCardState extends State<_DriverTripCard> {
             ]),
           ),
           Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+            Text(
+              '${trip.departureDate.day.toString().padLeft(2, '0')}/${trip.departureDate.month.toString().padLeft(2, '0')}',
+              style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textSecondary),
+            ),
             if (trip.avgTripRating != null) ...[
+              const SizedBox(height: 4),
               Row(children: [
                 const Icon(Icons.star_rounded,
                     size: 16, color: Color(0xFFFACC15)),
@@ -3308,13 +3307,7 @@ class _DriverTripCardState extends State<_DriverTripCard> {
                         fontWeight: FontWeight.w600,
                         color: AppColors.textPrimary)),
               ]),
-              const SizedBox(height: 4),
             ],
-            Text('+\$${_formatNum(trip.earnings)}',
-                style: const TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.primary)),
           ]),
         ]),
         const SizedBox(height: 10),
@@ -3377,6 +3370,601 @@ class _DriverTripCardState extends State<_DriverTripCard> {
   }
 }
 
+// ── Closed request card (expired pending requests shown in historial) ────────
+
+class _ClosedRequestCard extends StatefulWidget {
+  const _ClosedRequestCard({required this.request});
+  final ActivePassengerRequest request;
+  @override
+  State<_ClosedRequestCard> createState() => _ClosedRequestCardState();
+}
+
+class _ClosedRequestCardState extends State<_ClosedRequestCard> {
+  void _repeat() {
+    final req = widget.request;
+    context.push('/passenger/search-results', extra: {
+      'origin': req.originAddress,
+      'destination': req.destinationAddress,
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final req = widget.request;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.background,
+        border: Border.all(color: AppColors.border, width: 1.5),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: const [
+          BoxShadow(color: Color(0x0A000000), blurRadius: 4, offset: Offset(0, 2)),
+        ],
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          _closedBadge('CERRADA'),
+          const Spacer(),
+          Text(
+            '${req.departureDate.day.toString().padLeft(2, '0')}/${req.departureDate.month.toString().padLeft(2, '0')}',
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
+          ),
+        ]),
+        const SizedBox(height: 10),
+        _routeRow(req.originAddress, req.destinationAddress),
+        const SizedBox(height: 6),
+        Row(children: [
+          const Icon(Icons.person_rounded, size: 13, color: AppColors.textSecondary),
+          const SizedBox(width: 4),
+          Text(req.driverName, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+          const SizedBox(width: 12),
+          Text('\$${_formatNum(req.pricePerSeat)} por asiento',
+              style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+        ]),
+        const SizedBox(height: 10),
+        const Divider(height: 1, color: AppColors.border),
+        const SizedBox(height: 10),
+        Row(children: [
+          Expanded(
+            child: OutlinedButton(
+              onPressed: () => showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                backgroundColor: Colors.transparent,
+                builder: (_) => _ClosedRequestDetailSheet(request: req),
+              ),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                side: const BorderSide(color: AppColors.primary),
+                minimumSize: const Size(0, 40),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              child: const Text('Ver detalles', style: TextStyle(fontSize: 13)),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: ElevatedButton(
+              onPressed: _repeat,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                minimumSize: const Size(0, 40),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                elevation: 0,
+              ),
+              child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                Icon(Icons.refresh_rounded, size: 15),
+                SizedBox(width: 6),
+                Text('Repetir solicitud', style: TextStyle(fontSize: 13)),
+              ]),
+            ),
+          ),
+        ]),
+      ]),
+    );
+  }
+}
+
+// ── Closed alert card (expired trip alerts shown in historial) ───────────────
+
+class _ClosedAlertCard extends StatefulWidget {
+  const _ClosedAlertCard({required this.alert});
+  final MyTripAlert alert;
+  @override
+  State<_ClosedAlertCard> createState() => _ClosedAlertCardState();
+}
+
+class _ClosedAlertCardState extends State<_ClosedAlertCard> {
+  String _fmtD(DateTime d) =>
+      '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}';
+
+  void _repeat() {
+    final a = widget.alert;
+    context.push('/passenger/create-request', extra: {
+      'origin': a.originAddress,
+      'destination': a.destinationAddress,
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final a = widget.alert;
+    final dateLabel = a.dateTo != null
+        ? '${_fmtD(a.dateFrom)} – ${_fmtD(a.dateTo!)}'
+        : _fmtD(a.dateFrom);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.background,
+        border: Border.all(color: AppColors.border, width: 1.5),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: const [
+          BoxShadow(color: Color(0x0A000000), blurRadius: 4, offset: Offset(0, 2)),
+        ],
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          _closedBadge('PEDIDO CERRADO'),
+          const Spacer(),
+          Text(dateLabel,
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
+        ]),
+        const SizedBox(height: 10),
+        _routeRow(a.originAddress, a.destinationAddress),
+        const SizedBox(height: 6),
+        Row(children: [
+          const Icon(Icons.people_rounded, size: 13, color: AppColors.textSecondary),
+          const SizedBox(width: 4),
+          Text('${a.seatsNeeded} asiento${a.seatsNeeded > 1 ? 's' : ''}',
+              style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+          if (a.maxPrice != null) ...[
+            const SizedBox(width: 12),
+            Text('hasta \$${_formatNum(a.maxPrice!)}',
+                style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+          ],
+        ]),
+        const SizedBox(height: 10),
+        const Divider(height: 1, color: AppColors.border),
+        const SizedBox(height: 10),
+        Row(children: [
+          Expanded(
+            child: OutlinedButton(
+              onPressed: () => showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                backgroundColor: Colors.transparent,
+                builder: (_) => _ClosedAlertDetailSheet(alert: a),
+              ),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                side: const BorderSide(color: AppColors.primary),
+                minimumSize: const Size(0, 40),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              child: const Text('Ver detalles', style: TextStyle(fontSize: 13)),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: ElevatedButton(
+              onPressed: _repeat,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                minimumSize: const Size(0, 40),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                elevation: 0,
+              ),
+              child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                Icon(Icons.refresh_rounded, size: 15),
+                SizedBox(width: 6),
+                Text('Repetir pedido', style: TextStyle(fontSize: 13)),
+              ]),
+            ),
+          ),
+        ]),
+      ]),
+    );
+  }
+}
+
+Widget _closedBadge(String label) => Container(
+  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+  decoration: BoxDecoration(color: const Color(0xFFF1F5F9), borderRadius: BorderRadius.circular(8)),
+  child: Row(mainAxisSize: MainAxisSize.min, children: [
+    Container(width: 6, height: 6,
+        decoration: const BoxDecoration(color: Color(0xFF94A3B8), shape: BoxShape.circle)),
+    const SizedBox(width: 5),
+    Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF64748B))),
+  ]),
+);
+
+Widget _routeRow(String origin, String destination) => Row(children: [
+  Flexible(child: Text(origin,
+      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+      overflow: TextOverflow.ellipsis)),
+  const Padding(padding: EdgeInsets.symmetric(horizontal: 6),
+      child: Icon(Icons.arrow_forward_rounded, size: 14, color: AppColors.primary)),
+  Flexible(child: Text(destination,
+      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+      overflow: TextOverflow.ellipsis)),
+]);
+
+// ── Closed request detail sheet (for expired/past pending requests) ──────────
+
+class _ClosedRequestDetailSheet extends StatelessWidget {
+  const _ClosedRequestDetailSheet({required this.request});
+  final ActivePassengerRequest request;
+
+  @override
+  Widget build(BuildContext context) {
+    final req = request;
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.75,
+      minChildSize: 0.4,
+      maxChildSize: 0.95,
+      builder: (_, controller) => Container(
+        decoration: const BoxDecoration(
+          color: AppColors.pageBackground,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: ListView(
+          controller: controller,
+          padding: EdgeInsets.zero,
+          children: [
+            // Handle
+            const SizedBox(height: 12),
+            Center(
+              child: Container(
+                width: 40, height: 4,
+                decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(2)),
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // ── Route header ────────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Row(children: [
+                  _closedBadge('CERRADA'),
+                  const Spacer(),
+                  Text(_formatDate(req.departureDate),
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
+                ]),
+                const SizedBox(height: 18),
+                // Origin
+                Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+                  Container(
+                    width: 10, height: 10,
+                    decoration: const BoxDecoration(color: Color(0xFF94A3B8), shape: BoxShape.circle),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(req.originAddress,
+                        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                  ),
+                ]),
+                Padding(
+                  padding: const EdgeInsets.only(left: 4),
+                  child: Container(width: 2, height: 22, color: const Color(0xFFE2E8F0), margin: const EdgeInsets.symmetric(vertical: 3)),
+                ),
+                // Destination
+                Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+                  const Icon(Icons.location_on, size: 18, color: AppColors.primary),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(req.destinationAddress,
+                        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                  ),
+                ]),
+                const SizedBox(height: 12),
+                if (req.departureTime != null)
+                  Row(children: [
+                    const Icon(Icons.access_time_rounded, size: 14, color: AppColors.textSecondary),
+                    const SizedBox(width: 6),
+                    Text(req.departureTime!,
+                        style: const TextStyle(fontSize: 14, color: AppColors.textSecondary)),
+                  ]),
+              ]),
+            ),
+
+            const SizedBox(height: 20),
+            const Divider(height: 1, color: AppColors.border),
+            const SizedBox(height: 20),
+
+            // ── Driver ──────────────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: _DetailSection(
+                icon: Icons.person_rounded,
+                title: 'Conductor',
+                child: GestureDetector(
+                  onTap: () => showPublicProfile(context, req.driverId, viewerIsDriver: false),
+                  child: Row(children: [
+                    CircleAvatar(
+                      radius: 30,
+                      backgroundColor: AppColors.primaryLight,
+                      backgroundImage: req.driverAvatarUrl != null
+                          ? NetworkImage(req.driverAvatarUrl!) : null,
+                      child: req.driverAvatarUrl == null
+                          ? Text(_initials(req.driverName),
+                              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: AppColors.primary))
+                          : null,
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text(req.driverName,
+                            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+                        const SizedBox(height: 4),
+                        Row(children: [
+                          const Icon(Icons.star_rounded, size: 15, color: Color(0xFFFACC15)),
+                          const SizedBox(width: 4),
+                          Text(req.driverRating.toStringAsFixed(1),
+                              style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+                          const SizedBox(width: 8),
+                          const Text('· Ver perfil',
+                              style: TextStyle(fontSize: 13, color: AppColors.primary, fontWeight: FontWeight.w500)),
+                        ]),
+                      ]),
+                    ),
+                    const Icon(Icons.chevron_right, color: AppColors.primary, size: 22),
+                  ]),
+                ),
+              ),
+            ),
+
+            if (req.vehicleDisplay.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: _DetailSection(
+                  icon: Icons.directions_car_rounded,
+                  title: 'Vehículo',
+                  child: Text(req.vehicleDisplay,
+                      style: const TextStyle(fontSize: 15, color: AppColors.textPrimary, fontWeight: FontWeight.w500)),
+                ),
+              ),
+            ],
+
+            // ── Price ───────────────────────────────────────────────────────
+            const SizedBox(height: 14),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: _DetailSection(
+                icon: Icons.payments_outlined,
+                title: 'Precio',
+                child: Row(children: [
+                  Expanded(child: _InfoTile(
+                      label: 'Por asiento',
+                      value: req.splitCosts ? 'A dividir' : '\$${_formatNum(req.pricePerSeat)}',
+                      valueFontSize: 16)),
+                  Expanded(child: _InfoTile(
+                      label: 'Asientos pedidos',
+                      value: '${req.seatsRequested}',
+                      valueFontSize: 16)),
+                  if (!req.splitCosts)
+                    Expanded(child: _InfoTile(
+                        label: 'Total',
+                        value: '\$${_formatNum(req.pricePerSeat * req.seatsRequested)}',
+                        valueColor: AppColors.primary,
+                        valueFontSize: 16,
+                        bold: true)),
+                ]),
+              ),
+            ),
+
+            const SizedBox(height: 40),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Closed alert detail sheet ────────────────────────────────────────────────
+
+class _ClosedAlertDetailSheet extends StatelessWidget {
+  const _ClosedAlertDetailSheet({required this.alert});
+  final MyTripAlert alert;
+
+  String _fmtFull(DateTime d) =>
+      '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+
+  @override
+  Widget build(BuildContext context) {
+    final a = alert;
+    final dateLabel = a.dateTo != null
+        ? '${_fmtFull(a.dateFrom)} – ${_fmtFull(a.dateTo!)}'
+        : _fmtFull(a.dateFrom);
+
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.75,
+      minChildSize: 0.4,
+      maxChildSize: 0.95,
+      builder: (_, controller) => Container(
+        decoration: const BoxDecoration(
+          color: AppColors.pageBackground,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: ListView(
+          controller: controller,
+          padding: EdgeInsets.zero,
+          children: [
+            // Handle
+            const SizedBox(height: 12),
+            Center(
+              child: Container(
+                width: 40, height: 4,
+                decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(2)),
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // ── Route header ────────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Row(children: [
+                  _closedBadge('PEDIDO CERRADO'),
+                  const Spacer(),
+                  Text(dateLabel,
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
+                ]),
+                const SizedBox(height: 18),
+                Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+                  Container(
+                    width: 10, height: 10,
+                    decoration: const BoxDecoration(color: Color(0xFF94A3B8), shape: BoxShape.circle),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(a.originAddress,
+                        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                  ),
+                ]),
+                Padding(
+                  padding: const EdgeInsets.only(left: 4),
+                  child: Container(width: 2, height: 22, color: const Color(0xFFE2E8F0), margin: const EdgeInsets.symmetric(vertical: 3)),
+                ),
+                Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+                  const Icon(Icons.location_on, size: 18, color: AppColors.primary),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(a.destinationAddress,
+                        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                  ),
+                ]),
+              ]),
+            ),
+
+            const SizedBox(height: 20),
+            const Divider(height: 1, color: AppColors.border),
+            const SizedBox(height: 20),
+
+            // ── Invitations banner (if any) ─────────────────────────────────
+            if (a.pendingInvitations > 0) ...[
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryLight,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: AppColors.primary.withOpacity(0.25)),
+                  ),
+                  child: Row(children: [
+                    const Icon(Icons.mail_rounded, color: AppColors.primary, size: 22),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text(
+                          '${a.pendingInvitations} conductor${a.pendingInvitations > 1 ? 'es' : ''} respondió este pedido',
+                          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.primary),
+                        ),
+                        const SizedBox(height: 2),
+                        const Text('Tenías propuestas de conductores',
+                            style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                      ]),
+                    ),
+                  ]),
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+
+            // ── Date & time ─────────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: _DetailSection(
+                icon: Icons.calendar_today_rounded,
+                title: 'Fecha y hora',
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  _InfoTile(label: 'Rango de fecha', value: dateLabel, valueFontSize: 15),
+                  if (a.departureTime != null) ...[
+                    const SizedBox(height: 12),
+                    _InfoTile(
+                      label: a.timeFlexible ? 'Ventana horaria (flexible)' : 'Hora',
+                      value: a.departureTimeTo != null
+                          ? '${a.departureTime} – ${a.departureTimeTo}'
+                          : a.departureTime!,
+                      valueFontSize: 15,
+                    ),
+                  ],
+                ]),
+              ),
+            ),
+
+            // ── Seats & price ────────────────────────────────────────────────
+            const SizedBox(height: 14),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: _DetailSection(
+                icon: Icons.event_seat_rounded,
+                title: 'Asientos y precio',
+                child: Row(children: [
+                  Expanded(child: _InfoTile(
+                      label: 'Asientos necesarios',
+                      value: '${a.seatsNeeded}',
+                      valueFontSize: 18,
+                      bold: true)),
+                  if (a.maxPrice != null)
+                    Expanded(child: _InfoTile(
+                        label: 'Precio máximo',
+                        value: '\$${_formatNum(a.maxPrice!)}',
+                        valueFontSize: 18,
+                        bold: true,
+                        valueColor: AppColors.primary)),
+                ]),
+              ),
+            ),
+
+            // ── Preferences ─────────────────────────────────────────────────
+            if (a.hasPet || a.isSmoker) ...[
+              const SizedBox(height: 14),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: _DetailSection(
+                  icon: Icons.tune_rounded,
+                  title: 'Preferencias',
+                  child: Wrap(spacing: 10, runSpacing: 8, children: [
+                    if (a.hasPet)
+                      _InfoChip(icon: Icons.pets_rounded, label: 'Viaja con mascota'),
+                    if (a.isSmoker)
+                      _InfoChip(icon: Icons.smoking_rooms_rounded, label: 'Fumador'),
+                  ]),
+                ),
+              ),
+            ],
+
+            // ── Description ──────────────────────────────────────────────────
+            if (a.description != null && a.description!.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: _DetailSection(
+                  icon: Icons.notes_rounded,
+                  title: 'Descripción',
+                  child: Text(a.description!,
+                      style: const TextStyle(fontSize: 14, height: 1.5, color: AppColors.textPrimary)),
+                ),
+              ),
+            ],
+
+            const SizedBox(height: 40),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 // ══════════════════════════════════════════════════════════════════════════
 // PASSENGER HISTORY TAB (completed trips only)
 // ══════════════════════════════════════════════════════════════════════════
@@ -3387,6 +3975,14 @@ class _PassengerHistoryBody extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(passengerCompletedTripsProvider);
+    final allRequests = ref.watch(passengerActiveRequestsProvider).valueOrNull ?? [];
+    final allAlerts = ref.watch(myTripAlertsProvider).valueOrNull ?? [];
+    final today = DateTime.now();
+    final todayDate = DateTime(today.year, today.month, today.day);
+    final closedRequests = allRequests
+        .where((r) => r.departureDate.isBefore(todayDate) && r.isPending)
+        .toList();
+    final expiredAlerts = allAlerts.where((a) => a.isExpired).toList();
 
     return async.when(
       loading: () => const Center(child: CircularProgressIndicator()),
@@ -3395,14 +3991,14 @@ class _PassengerHistoryBody extends ConsumerWidget {
             style: TextStyle(color: AppColors.textSecondary)),
       ),
       data: (trips) {
-        if (trips.isEmpty) {
+        if (trips.isEmpty && closedRequests.isEmpty && expiredAlerts.isEmpty) {
           return const _EmptyHistory(
             icon: Icons.location_on_outlined,
             message: 'Aún no realizaste viajes como pasajero.',
           );
         }
 
-        final totalSpent = trips.fold(0, (s, t) => s + t.pricePerSeat);
+        final uniqueDrivers = trips.map((t) => t.driverId).toSet().length;
         final ratedDrivers =
             trips.where((t) => t.driverRating > 0).toList();
         final avgRating = ratedDrivers.isEmpty
@@ -3419,6 +4015,7 @@ class _PassengerHistoryBody extends ConsumerWidget {
             child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  if (trips.isNotEmpty) ...[
                   // Stats
                   Row(children: [
                     Expanded(
@@ -3436,11 +4033,9 @@ class _PassengerHistoryBody extends ConsumerWidget {
                     const SizedBox(width: 10),
                     Expanded(
                         child: _StatCard(
-                            icon: Icons.attach_money_rounded,
-                            value:
-                                '\$${(totalSpent / 1000).toStringAsFixed(0)}k',
-                            label: 'Gastado',
-                            valueFontSize: 20)),
+                            icon: Icons.people_rounded,
+                            value: '$uniqueDrivers',
+                            label: 'Conductores')),
                   ]),
                   const SizedBox(height: 28),
                   Builder(builder: (ctx) {
@@ -3477,6 +4072,18 @@ class _PassengerHistoryBody extends ConsumerWidget {
                   }),
                   const SizedBox(height: 12),
                   ...trips.map((t) => _PassengerCompletedTripCard(trip: t)),
+                  ], // end if trips.isNotEmpty
+                  if (closedRequests.isNotEmpty || expiredAlerts.isNotEmpty) ...[
+                    const SizedBox(height: 28),
+                    const Text('Solicitudes cerradas',
+                        style: TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textPrimary)),
+                    const SizedBox(height: 12),
+                    ...closedRequests.map((r) => _ClosedRequestCard(request: r)),
+                    ...expiredAlerts.map((a) => _ClosedAlertCard(alert: a)),
+                  ],
                 ]),
           ),
         );
@@ -3517,8 +4124,7 @@ class _PassengerCompletedTripCard extends ConsumerWidget {
       child: Column(children: [
         Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Expanded(
-            child:
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(children: [
                 Flexible(
                     child: Text(trip.originAddress,
@@ -3540,14 +4146,11 @@ class _PassengerCompletedTripCard extends ConsumerWidget {
                         overflow: TextOverflow.ellipsis)),
               ]),
               const SizedBox(height: 5),
-              Row(children: [
-                const Icon(Icons.calendar_today_rounded,
-                    size: 14, color: AppColors.textSecondary),
-                const SizedBox(width: 4),
-                Text(_formatDate(trip.departureDate),
-                    style: const TextStyle(
-                        fontSize: 13, color: AppColors.textSecondary)),
-              ]),
+              Text('-\$${_formatNum(trip.pricePerSeat)}',
+                  style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary)),
             ]),
           ),
           Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
@@ -3562,18 +4165,16 @@ class _PassengerCompletedTripCard extends ConsumerWidget {
                       color: AppColors.textPrimary)),
             ]),
             const SizedBox(height: 4),
-            Text('-\$${_formatNum(trip.pricePerSeat)}',
+            Text(_formatDate(trip.departureDate),
                 style: const TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textPrimary)),
+                    fontSize: 12,
+                    color: AppColors.textSecondary)),
           ]),
         ]),
         const SizedBox(height: 10),
         const Divider(height: 1, color: AppColors.border),
         const SizedBox(height: 10),
         Row(children: [
-          // Driver name + rating already-done badge
           const Icon(Icons.person_rounded,
               size: 15, color: AppColors.textSecondary),
           const SizedBox(width: 4),
@@ -3582,89 +4183,72 @@ class _PassengerCompletedTripCard extends ConsumerWidget {
                   style: const TextStyle(
                       fontSize: 13, color: AppColors.textSecondary),
                   overflow: TextOverflow.ellipsis)),
-          if (trip.hasRated)
-            Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                  color: const Color(0xFFFEF9C3),
-                  borderRadius: BorderRadius.circular(10)),
-              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                const Icon(Icons.star_rounded,
-                    size: 12, color: Color(0xFFEAB308)),
-                const SizedBox(width: 3),
-                Text('${trip.myRating}',
-                    style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF713F12))),
-              ]),
-            ),
-          const SizedBox(width: 8),
-          GestureDetector(
-            onTap: () => showModalBottomSheet(
-              context: context,
-              isScrollControlled: true,
-              backgroundColor: Colors.transparent,
-              builder: (_) => _PassengerCompletedTripDetailSheet(
-                  trip: trip,
-                  onRated: () =>
-                      ref.refresh(passengerCompletedTripsProvider)),
-            ),
-            child: const Text('Ver detalles',
-                style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.primary)),
-          ),
         ]),
         const SizedBox(height: 10),
-        Row(children: [
-          if (!trip.hasRated) ...[
-            Expanded(
-              child: ElevatedButton.icon(
-                onPressed: () => showModalBottomSheet(
-                  context: context,
-                  isScrollControlled: true,
-                  backgroundColor: Colors.transparent,
-                  builder: (_) => _PassengerCompletedTripDetailSheet(
-                      trip: trip,
-                      onRated: () =>
-                          ref.refresh(passengerCompletedTripsProvider)),
-                ),
-                icon: const Icon(Icons.star_rounded, size: 15),
-                label: const Text('Mi opinión',
-                    style: TextStyle(fontSize: 13)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFFEF9C3),
-                  foregroundColor: const Color(0xFF92400E),
-                  minimumSize: const Size(0, 40),
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10)),
-                ),
+        if (!trip.hasRated) ...[
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () => showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                backgroundColor: Colors.transparent,
+                builder: (_) => _PassengerCompletedTripDetailSheet(
+                    trip: trip,
+                    onRated: () => ref.refresh(passengerCompletedTripsProvider)),
+              ),
+              icon: const Icon(Icons.star_rounded, size: 15),
+              label: const Text('Mi opinión', style: TextStyle(fontSize: 13)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFEF9C3),
+                foregroundColor: const Color(0xFF92400E),
+                minimumSize: const Size(0, 40),
+                elevation: 0,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               ),
             ),
-            const SizedBox(width: 10),
-          ],
+          ),
+          const SizedBox(height: 8),
+        ],
+        Row(children: [
           Expanded(
-            child: OutlinedButton.icon(
-              onPressed: () => context.push(
-                '/passenger/search-results',
-                extra: {
-                  'origin': trip.originAddress,
-                  'destination': trip.destinationAddress,
-                },
+            child: OutlinedButton(
+              onPressed: () => showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                backgroundColor: Colors.transparent,
+                builder: (_) => _PassengerCompletedTripDetailSheet(
+                    trip: trip,
+                    onRated: () => ref.refresh(passengerCompletedTripsProvider)),
               ),
-              icon: const Icon(Icons.search_rounded, size: 15),
-              label: const Text('Buscar viaje',
-                  style: TextStyle(fontSize: 13)),
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppColors.primary,
                 side: const BorderSide(color: AppColors.primary),
                 minimumSize: const Size(0, 40),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10)),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              child: const Text('Ver detalles', style: TextStyle(fontSize: 13)),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: ElevatedButton.icon(
+              onPressed: () => context.push(
+                '/passenger/search-trips',
+                extra: {
+                  'origin': trip.originAddress,
+                  'destination': trip.destinationAddress,
+                  'maxPrice': trip.pricePerSeat > 0 ? trip.pricePerSeat.toString() : null,
+                },
+              ),
+              icon: const Icon(Icons.search_rounded, size: 15),
+              label: const Text('Buscar viaje', style: TextStyle(fontSize: 13)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                minimumSize: const Size(0, 40),
+                elevation: 0,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               ),
             ),
           ),
