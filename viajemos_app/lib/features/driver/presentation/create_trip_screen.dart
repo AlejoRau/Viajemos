@@ -1743,6 +1743,7 @@ class _TripHistoryPickerSheetState extends State<_TripHistoryPickerSheet> {
   @override
   Widget build(BuildContext context) {
     return DraggableScrollableSheet(
+      expand: false,
       initialChildSize: 0.6,
       minChildSize: 0.4,
       maxChildSize: 0.92,

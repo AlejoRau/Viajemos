@@ -1629,6 +1629,7 @@ class _TripRequestsSheetState extends ConsumerState<_TripRequestsSheet> {
     final trip = widget.trip;
 
     return DraggableScrollableSheet(
+      expand: false,
       initialChildSize: 0.85,
       minChildSize: 0.4,
       maxChildSize: 0.95,
@@ -2806,6 +2807,7 @@ class _PassengerRequestDetailSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final req = request;
     return DraggableScrollableSheet(
+      expand: false,
       initialChildSize: 0.7,
       minChildSize: 0.4,
       maxChildSize: 0.9,
@@ -3683,6 +3685,7 @@ class _PassengerCompletedTripDetailSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DraggableScrollableSheet(
+      expand: false,
       initialChildSize: 0.88,
       minChildSize: 0.5,
       maxChildSize: 0.95,
@@ -4020,6 +4023,7 @@ class _DriverTripDetailSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DraggableScrollableSheet(
+      expand: false,
       initialChildSize: 0.88,
       minChildSize: 0.5,
       maxChildSize: 0.95,
