@@ -1,5 +1,7 @@
 import 'dart:ui';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 import '../providers/trip_success_provider.dart';
 
@@ -36,7 +38,7 @@ class _TripSuccessOverlayState extends State<_TripSuccessOverlay>
     final date =
         '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}';
     final timeStr = t.departureTime.isNotEmpty ? ' a las ${t.departureTime}' : '';
-    final link = 'viajemos://viaje/${t.id}';
+    final link = 'viajemos://viaje/${t.tripId}';
     return '¡Unite a mi viaje de ${t.originCity} a ${t.destinationCity} el $date$timeStr! 🚗\n\n'
         'Abrí el viaje directo en Viajemos:\n$link';
   }
@@ -65,7 +67,18 @@ class _TripSuccessOverlayState extends State<_TripSuccessOverlay>
     widget.onDismiss();
   }
 
-  void _shareNative() => Share.share(_shareText);
+  Future<void> _shareNative() async {
+    if (kIsWeb) {
+      await Clipboard.setData(ClipboardData(text: _shareText));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Texto copiado al portapapeles')),
+        );
+      }
+    } else {
+      Share.share(_shareText);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {

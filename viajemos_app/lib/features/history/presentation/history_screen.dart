@@ -1,6 +1,8 @@
 import 'dart:math';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
@@ -282,7 +284,7 @@ class _ActiveTripCardState extends ConsumerState<_ActiveTripCard> {
     }
   }
 
-  void _shareTrip() {
+  Future<void> _shareTrip() async {
     final trip = widget.trip;
     final date = _formatDate(trip.departureDate);
     final time = trip.departureTime != null ? '  ·  ${trip.departureTime}' : '';
@@ -293,7 +295,13 @@ class _ActiveTripCardState extends ConsumerState<_ActiveTripCard> {
         '💺 $seats lugar${seats != 1 ? 'es' : ''} disponible${seats != 1 ? 's' : ''}\n'
         '💰 \$${_formatNum(trip.pricePerSeat)} por asiento\n\n'
         '¡Sumate al viaje! 👉 $link';
-    Share.share(text);
+    if (kIsWeb) {
+      await Clipboard.setData(ClipboardData(text: text));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Copiado al portapapeles')));
+    } else {
+      Share.share(text);
+    }
   }
 
   void _showPassengerList(BuildContext context, List<String> names,
@@ -2441,7 +2449,7 @@ class _ActivePassengerRequestCardState
     );
   }
 
-  void _shareRequest() {
+  Future<void> _shareRequest() async {
     final req = widget.request;
     final date = _formatDate(req.departureDate);
     final time = req.departureTime != null ? '  ·  ${req.departureTime}' : '';
@@ -2451,7 +2459,13 @@ class _ActivePassengerRequestCardState
         '💰 \$${_formatNum(req.pricePerSeat)} por asiento\n'
         '🚘 ${req.driverName}\n\n'
         '¡Encontré este viaje en Viajemos! 👉 $link';
-    Share.share(text);
+    if (kIsWeb) {
+      await Clipboard.setData(ClipboardData(text: text));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Copiado al portapapeles')));
+    } else {
+      Share.share(text);
+    }
   }
 
   Future<void> _confirmCancel() async {
