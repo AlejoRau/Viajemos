@@ -145,7 +145,20 @@ class _MainShellState extends ConsumerState<MainShell> {
     }
 
     return Scaffold(
-      body: widget.child,
+      body: Stack(
+        children: [
+          widget.child,
+          SafeArea(
+            child: Align(
+              alignment: Alignment.topRight,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 12, right: 16),
+                child: _RoleBadge(isDriver: isDriver),
+              ),
+            ),
+          ),
+        ],
+      ),
       bottomNavigationBar: Container(
         decoration: const BoxDecoration(
           color: Colors.white,
@@ -202,6 +215,62 @@ class _MainShellState extends ConsumerState<MainShell> {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RoleBadge extends StatelessWidget {
+  const _RoleBadge({required this.isDriver});
+  final bool isDriver;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 300),
+      child: Container(
+        key: ValueKey(isDriver),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: isDriver
+              ? const Color(0xFFEFF6FF)
+              : const Color(0xFFF0FDF4),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isDriver
+                ? const Color(0xFFBFDBFE)
+                : const Color(0xFFBBF7D0),
+            width: 1.2,
+          ),
+          boxShadow: const [
+            BoxShadow(color: Color(0x14000000), blurRadius: 6, offset: Offset(0, 2)),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              isDriver
+                  ? Icons.directions_car_rounded
+                  : Icons.airline_seat_recline_normal_rounded,
+              size: 13,
+              color: isDriver
+                  ? const Color(0xFF1D4ED8)
+                  : const Color(0xFF16A34A),
+            ),
+            const SizedBox(width: 5),
+            Text(
+              isDriver ? 'Conductor' : 'Pasajero',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: isDriver
+                    ? const Color(0xFF1D4ED8)
+                    : const Color(0xFF16A34A),
+              ),
+            ),
+          ],
         ),
       ),
     );
