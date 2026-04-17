@@ -392,25 +392,30 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
                   ),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: _tripInfo != null
-                        ? Text(
-                            '${widget.contactName} · ${_tripInfo!.originCity}→${_tripInfo!.destinationCity} ${_tripInfo!.shortDate}',
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.textPrimary,
+                    child: GestureDetector(
+                      onTap: widget.contactId != null
+                          ? () => showPublicProfile(context, widget.contactId!)
+                          : null,
+                      child: _tripInfo != null
+                          ? Text(
+                              '${widget.contactName} · ${_tripInfo!.originCity}→${_tripInfo!.destinationCity} ${_tripInfo!.shortDate}',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textPrimary,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            )
+                          : Text(
+                              widget.contactName,
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textPrimary,
+                              ),
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            overflow: TextOverflow.ellipsis,
-                          )
-                        : Text(
-                            widget.contactName,
-                            style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.textPrimary,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
+                    ),
                   ),
                 ],
               ),
@@ -1103,12 +1108,15 @@ class _GroupMembersSheetState extends State<_GroupMembersSheet> {
                             ),
                             const SizedBox(width: 14),
                             Expanded(
-                              child: Text(
-                                p.fullName,
-                                style: const TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w500,
-                                  color: AppColors.textPrimary,
+                              child: GestureDetector(
+                                onTap: () => showPublicProfile(context, p.userId),
+                                child: Text(
+                                  p.fullName,
+                                  style: const TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w500,
+                                    color: AppColors.textPrimary,
+                                  ),
                                 ),
                               ),
                             ),

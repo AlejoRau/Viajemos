@@ -184,14 +184,19 @@ class _ChatTile extends StatelessWidget {
                   Row(
                     children: [
                       Expanded(
-                        child: Text(
-                          conv.contactName,
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textPrimary,
+                        child: GestureDetector(
+                          onTap: !isGroup && conv.contactId != null
+                              ? () => showPublicProfile(context, conv.contactId!)
+                              : null,
+                          child: Text(
+                            conv.contactName,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textPrimary,
+                            ),
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       const SizedBox(width: 8),
