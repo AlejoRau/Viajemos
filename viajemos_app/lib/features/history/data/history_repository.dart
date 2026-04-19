@@ -23,6 +23,9 @@ class DriverTripHistory {
     this.destinationExactAddress,
     this.departureTime,
     this.avgTripRating,
+    this.vehicleBrand,
+    this.vehicleModel,
+    this.vehicleColor,
   });
 
   final String id;
@@ -37,8 +40,16 @@ class DriverTripHistory {
   final List<PassengerInTrip> passengers;
   final String? departureTime;
   final double? avgTripRating;
+  final String? vehicleBrand;
+  final String? vehicleModel;
+  final String? vehicleColor;
 
   int get earnings => pricePerSeat * seatsTaken;
+
+  String get vehicleDisplay {
+    if (vehicleBrand == null) return '';
+    return '$vehicleBrand $vehicleModel · $vehicleColor';
+  }
 }
 
 class PassengerTripHistory {
@@ -451,6 +462,9 @@ class HistoryRepository {
             : null,
         avgTripRating: (row['avg_trip_rating'] as num?)?.toDouble(),
         passengers: passengers,
+        vehicleBrand: row['vehicle_brand'] as String?,
+        vehicleModel: row['vehicle_model'] as String?,
+        vehicleColor: row['vehicle_color'] as String?,
       );
     }).toList();
   }

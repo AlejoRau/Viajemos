@@ -164,6 +164,8 @@ class TripSearchRepository {
     required String tripId,
     required int seatsRequested,
     String? message,
+    String? passengerPickupAddress,
+    String? passengerDropoffAddress,
   }) async {
     final user = _client.auth.currentUser;
     if (user == null) throw Exception('No authenticated user');
@@ -173,6 +175,10 @@ class TripSearchRepository {
       'seats_requested': seatsRequested,
       'status': 'pending',
       if (message != null && message.isNotEmpty) 'message': message,
+      if (passengerPickupAddress?.isNotEmpty == true)
+        'passenger_pickup_address': passengerPickupAddress,
+      if (passengerDropoffAddress?.isNotEmpty == true)
+        'passenger_dropoff_address': passengerDropoffAddress,
     });
   }
 }

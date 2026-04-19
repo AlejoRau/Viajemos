@@ -10,7 +10,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/providers/role_provider.dart';
 import '../../../shared/widgets/public_profile_sheet.dart';
+import '../../../shared/widgets/sheet_handle.dart';
 import '../data/history_repository.dart';
+import '../../driver/data/trip_repository.dart';
 import '../../driver/presentation/create_trip_screen.dart';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -32,6 +34,66 @@ String _formatNum(int n) {
     buf.write(s[i]);
   }
   return buf.toString();
+}
+
+// ── Standard confirm dialog ────────────────────────────────────────────────
+//
+// Uso: await _AppConfirmDialog.show(context, title: ..., content: ...,
+//        confirmLabel: ..., confirmColor: ...)
+//
+class _AppConfirmDialog {
+  static const _red   = Color(0xFFDC2626);
+  static const _green = Color(0xFF16A34A);
+
+  static ButtonStyle _btn(Color bg) => ElevatedButton.styleFrom(
+        backgroundColor: bg,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        minimumSize: const Size.fromHeight(44),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        padding: const EdgeInsets.symmetric(vertical: 12),
+      );
+
+  // confirmOnLeft=true  → botón destructivo a la izquierda (rojo), seguro a la derecha (verde)
+  // confirmOnLeft=false → botón seguro a la izquierda (rojo), destructivo a la derecha (verde)
+  static Future<bool> show(
+    BuildContext context, {
+    required String title,
+    required Widget content,
+    String cancelLabel = 'No',
+    String confirmLabel = 'Sí',
+    bool confirmOnLeft = false,
+  }) async {
+    final confirmBtn = ElevatedButton(
+      onPressed: () => Navigator.pop(context, true),
+      style: _btn(confirmOnLeft ? _red : _green),
+      child: Text(confirmLabel, style: const TextStyle(fontWeight: FontWeight.w600)),
+    );
+    final cancelBtn = ElevatedButton(
+      onPressed: () => Navigator.pop(context, false),
+      style: _btn(confirmOnLeft ? _green : _red),
+      child: Text(cancelLabel, style: const TextStyle(fontWeight: FontWeight.w600)),
+    );
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(title,
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+        content: content,
+        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        actions: [
+          Row(
+            children: confirmOnLeft
+                ? [Expanded(child: confirmBtn), const SizedBox(width: 12), Expanded(child: cancelBtn)]
+                : [Expanded(child: cancelBtn),  const SizedBox(width: 12), Expanded(child: confirmBtn)],
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
+  }
 }
 
 // ── Screen ─────────────────────────────────────────────────────────────────
@@ -224,39 +286,15 @@ class _ActiveTripCardState extends ConsumerState<_ActiveTripCard> {
 
     // Confirm before making the trip private
     if (newValue) {
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Text(
-            '¿Hacer viaje privado?',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-          ),
-          content: const Text(
-            '¿Estás seguro que querés hacer privado tu viaje? Ya no lo mostraremos en la búsqueda de los usuarios.',
-            style: TextStyle(fontSize: 14, height: 1.4),
-          ),
-          actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancelar'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.orange.shade700,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10)),
-                elevation: 0,
-              ),
-              child: const Text('Sí, hacer privado'),
-            ),
-          ],
+      final confirmed = await _AppConfirmDialog.show(
+        context,
+        title: '¿Hacer viaje privado?',
+        content: const Text(
+          'Ya no aparecerá en la búsqueda de los usuarios.',
+          style: TextStyle(fontSize: 14, height: 1.4),
         ),
       );
-      if (confirmed != true) return;
+      if (!confirmed) return;
     }
 
     setState(() {
@@ -322,58 +360,47 @@ class _ActiveTripCardState extends ConsumerState<_ActiveTripCard> {
     final hasPassengers = widget.trip.acceptedPassengerNames.isNotEmpty;
     final msgController = TextEditingController();
 
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Cancelar viaje'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              hasPassengers
-                  ? '¿Seguro que querés cancelar el viaje '
-                    '${widget.trip.originAddress} → ${widget.trip.destinationAddress}?\n\n'
-                    'Tenés ${widget.trip.acceptedPassengerNames.length} pasajero(s) aceptado(s). '
-                    'Esta cancelación quedará registrada en tu perfil.'
-                  : '¿Seguro que querés cancelar el viaje '
-                    '${widget.trip.originAddress} → ${widget.trip.destinationAddress}?',
-            ),
-            if (hasPassengers) ...[
-              const SizedBox(height: 16),
-              TextField(
-                controller: msgController,
-                maxLines: 3,
-                maxLength: 200,
-                decoration: const InputDecoration(
-                  hintText:
-                      'Mensaje para los pasajeros (opcional)\nEj: Por motivos personales debo cancelar.',
-                  border: OutlineInputBorder(),
-                  contentPadding:
-                      EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                ),
+    final confirmed = await _AppConfirmDialog.show(
+      context,
+      title: 'Cancelar viaje',
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            hasPassengers
+                ? '¿Seguro que querés cancelar el viaje '
+                  '${widget.trip.originAddress} → ${widget.trip.destinationAddress}?\n\n'
+                  'Tenés ${widget.trip.acceptedPassengerNames.length} pasajero(s) aceptado(s). '
+                  'Esta cancelación quedará registrada en tu perfil.'
+                : '¿Seguro que querés cancelar el viaje '
+                  '${widget.trip.originAddress} → ${widget.trip.destinationAddress}?',
+            style: const TextStyle(fontSize: 14, height: 1.4),
+          ),
+          if (hasPassengers) ...[
+            const SizedBox(height: 16),
+            TextField(
+              controller: msgController,
+              maxLines: 3,
+              maxLength: 200,
+              decoration: const InputDecoration(
+                hintText: 'Mensaje para los pasajeros (opcional)\nEj: Por motivos personales debo cancelar.',
+                border: OutlineInputBorder(),
+                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               ),
-            ],
+            ),
           ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Volver'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Cancelar viaje'),
-          ),
         ],
       ),
+      cancelLabel: 'Volver',
+      confirmLabel: 'Cancelar viaje',
+      confirmOnLeft: true,
     );
 
     final message = msgController.text.trim();
     msgController.dispose();
 
-    if (confirmed != true || !mounted) return;
+    if (!confirmed || !mounted) return;
 
     setState(() => _deleting = true);
     try {
@@ -705,6 +732,7 @@ class _DriverTripDetailsSheetState
   late List<String> _passengerIds;
   late List<String> _passengerRequestIds;
   final Set<String> _expelling = {};
+  late int _availableSeats;
 
   @override
   void initState() {
@@ -712,6 +740,87 @@ class _DriverTripDetailsSheetState
     _passengerNames = List.from(widget.trip.acceptedPassengerNames);
     _passengerIds = List.from(widget.trip.acceptedPassengerIds);
     _passengerRequestIds = List.from(widget.trip.acceptedPassengerRequestIds);
+    _availableSeats = widget.trip.availableSeats;
+  }
+
+  Future<void> _editSeats(BuildContext context) async {
+    final minSeats = widget.trip.seatsTaken.clamp(1, 8);
+    int tempSeats = _availableSeats;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlg) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('Ajustar asientos',
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                minSeats > 0
+                    ? 'Mínimo $minSeats (pasajeros confirmados)'
+                    : 'Sin pasajeros confirmados aún',
+                style: const TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  IconButton(
+                    onPressed: tempSeats > minSeats
+                        ? () => setDlg(() => tempSeats--)
+                        : null,
+                    icon: const Icon(Icons.remove_circle_outline_rounded, size: 32),
+                    color: AppColors.primary,
+                    disabledColor: const Color(0xFFCBD5E1),
+                  ),
+                  const SizedBox(width: 16),
+                  Text('$tempSeats',
+                      style: const TextStyle(
+                          fontSize: 36,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF1E293B))),
+                  const SizedBox(width: 16),
+                  IconButton(
+                    onPressed: tempSeats < 8
+                        ? () => setDlg(() => tempSeats++)
+                        : null,
+                    icon: const Icon(Icons.add_circle_outline_rounded, size: 32),
+                    color: AppColors.primary,
+                    disabledColor: const Color(0xFFCBD5E1),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancelar'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Guardar'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+    try {
+      await TripRepository().updateAvailableSeats(widget.trip.id, tempSeats);
+      if (!mounted) return;
+      setState(() => _availableSeats = tempSeats);
+      ref.refresh(activeDriverTripsProvider);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+      );
+    }
   }
 
   ActiveDriverTrip get trip => widget.trip;
@@ -818,16 +927,7 @@ class _DriverTripDetailsSheetState
       ),
       child: Column(
         children: [
-          const SizedBox(height: 12),
-          Center(
-            child: Container(
-              width: 40, height: 4,
-              decoration: BoxDecoration(
-                  color: const Color(0xFFE2E8F0),
-                  borderRadius: BorderRadius.circular(2)),
-            ),
-          ),
-          const SizedBox(height: 20),
+          const SheetHandle(),
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -965,11 +1065,30 @@ class _DriverTripDetailsSheetState
                               color: Color(0xFF1E293B))),
                       const Spacer(),
                       Text(
-                        '${trip.seatsTaken}/${trip.availableSeats} ocupados',
+                        '${trip.seatsTaken}/$_availableSeats ocupados',
                         style: const TextStyle(
-                            fontSize: 12,
-                            color: AppColors.textSecondary,
-                            fontWeight: FontWeight.w500),
+                            fontSize: 14,
+                            color: AppColors.textPrimary,
+                            fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(width: 8),
+                      GestureDetector(
+                        onTap: () => _editSeats(context),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.edit_rounded, size: 13, color: Colors.white),
+                              SizedBox(width: 4),
+                              Text('Editar', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white)),
+                            ],
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -1442,15 +1561,7 @@ class _PassengerListSheetState extends ConsumerState<_PassengerListSheet> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Center(
-            child: Container(
-              width: 40, height: 4,
-              decoration: BoxDecoration(
-                  color: const Color(0xFFE2E8F0),
-                  borderRadius: BorderRadius.circular(2)),
-            ),
-          ),
-          const SizedBox(height: 16),
+          const SheetHandle(bottomSpacing: 4),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Align(
@@ -1640,15 +1751,7 @@ class _TripRequestsSheetState extends ConsumerState<_TripRequestsSheet> {
         ),
         child: Column(
           children: [
-            // Handle
-            const SizedBox(height: 12),
-            Container(
-              width: 40, height: 4,
-              decoration: BoxDecoration(
-                  color: AppColors.border,
-                  borderRadius: BorderRadius.circular(2)),
-            ),
-            const SizedBox(height: 16),
+            const SheetHandle(bottomSpacing: 4),
 
             // Trip header
             Padding(
@@ -2810,14 +2913,7 @@ class _PassengerRequestDetailSheet extends StatelessWidget {
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
         child: Column(children: [
-          const SizedBox(height: 12),
-          Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                  color: AppColors.border,
-                  borderRadius: BorderRadius.circular(2))),
-          const SizedBox(height: 16),
+          const SheetHandle(bottomSpacing: 4),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24),
             child: Row(children: [
@@ -3616,15 +3712,7 @@ class _ClosedRequestDetailSheet extends StatelessWidget {
           controller: controller,
           padding: EdgeInsets.zero,
           children: [
-            // Handle
-            const SizedBox(height: 12),
-            Center(
-              child: Container(
-                width: 40, height: 4,
-                decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(2)),
-              ),
-            ),
-            const SizedBox(height: 20),
+            const SheetHandle(bottomSpacing: 8),
 
             // ── Route header ────────────────────────────────────────────────
             Padding(
@@ -3797,15 +3885,7 @@ class _ClosedAlertDetailSheet extends StatelessWidget {
           controller: controller,
           padding: EdgeInsets.zero,
           children: [
-            // Handle
-            const SizedBox(height: 12),
-            Center(
-              child: Container(
-                width: 40, height: 4,
-                decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(2)),
-              ),
-            ),
-            const SizedBox(height: 20),
+            const SheetHandle(bottomSpacing: 8),
 
             // ── Route header ────────────────────────────────────────────────
             Padding(
@@ -4279,14 +4359,7 @@ class _PassengerCompletedTripDetailSheet extends StatelessWidget {
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
         child: Column(children: [
-          const SizedBox(height: 12),
-          Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                  color: AppColors.border,
-                  borderRadius: BorderRadius.circular(2))),
-          const SizedBox(height: 16),
+          const SheetHandle(bottomSpacing: 4),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24),
             child: Row(children: [
@@ -4368,7 +4441,7 @@ class _PassengerCompletedTripDetailSheet extends StatelessWidget {
                 ),
                 const SizedBox(height: 16),
                 _DetailSection(
-                  icon: Icons.place_rounded,
+                  icon: Icons.alt_route_rounded,
                   title: 'Ruta',
                   child: _StopsTimeline(
                     origin: trip.originAddress,
@@ -4380,44 +4453,70 @@ class _PassengerCompletedTripDetailSheet extends StatelessWidget {
                 _DetailSection(
                   icon: Icons.person_rounded,
                   title: 'Conductor',
-                  child: Row(children: [
-                    CircleAvatar(
-                      radius: 22,
-                      backgroundColor: AppColors.primaryLight,
-                      backgroundImage: trip.driverAvatarUrl != null
-                          ? NetworkImage(trip.driverAvatarUrl!)
-                          : null,
-                      child: trip.driverAvatarUrl == null
-                          ? Text(_initials(trip.driverName),
-                              style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.primary))
-                          : null,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(trip.driverName,
+                  child: GestureDetector(
+                    onTap: () => showPublicProfile(context, trip.driverId, viewerIsDriver: true),
+                    child: Row(children: [
+                      CircleAvatar(
+                        radius: 22,
+                        backgroundColor: AppColors.primaryLight,
+                        backgroundImage: trip.driverAvatarUrl != null
+                            ? NetworkImage(trip.driverAvatarUrl!)
+                            : null,
+                        child: trip.driverAvatarUrl == null
+                            ? Text(_initials(trip.driverName),
                                 style: const TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w600,
-                                    color: AppColors.textPrimary)),
-                            const SizedBox(height: 2),
-                            Row(children: [
-                              const Icon(Icons.star_rounded,
-                                  size: 14, color: Color(0xFFFACC15)),
-                              const SizedBox(width: 3),
-                              Text(trip.driverRating.toStringAsFixed(1),
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.primary))
+                            : null,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(trip.driverName,
                                   style: const TextStyle(
-                                      fontSize: 13,
-                                      color: AppColors.textSecondary)),
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.textPrimary)),
+                              const SizedBox(height: 2),
+                              Row(children: [
+                                const Icon(Icons.star_rounded,
+                                    size: 14, color: Color(0xFFFACC15)),
+                                const SizedBox(width: 3),
+                                Text(trip.driverRating.toStringAsFixed(1),
+                                    style: const TextStyle(
+                                        fontSize: 13,
+                                        color: AppColors.textSecondary)),
+                                const SizedBox(width: 8),
+                                const Text('· Ver perfil',
+                                    style: TextStyle(
+                                        fontSize: 13,
+                                        color: AppColors.primary,
+                                        fontWeight: FontWeight.w500)),
+                              ]),
                             ]),
-                          ]),
-                    ),
-                  ]),
+                      ),
+                      const Icon(Icons.chevron_right, color: AppColors.primary, size: 22),
+                    ]),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _DetailSection(
+                  icon: Icons.directions_car_rounded,
+                  title: 'Vehículo',
+                  child: Text(
+                    trip.vehicleDisplay.isNotEmpty
+                        ? trip.vehicleDisplay
+                        : 'Sin vehículo registrado',
+                    style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w500,
+                        color: trip.vehicleDisplay.isNotEmpty
+                            ? AppColors.textPrimary
+                            : AppColors.textSecondary),
+                  ),
                 ),
                 const SizedBox(height: 24),
                 // Rate driver button
@@ -4617,13 +4716,7 @@ class _DriverTripDetailSheet extends StatelessWidget {
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
         child: Column(children: [
-          const SizedBox(height: 12),
-          Container(
-              width: 40, height: 4,
-              decoration: BoxDecoration(
-                  color: AppColors.border,
-                  borderRadius: BorderRadius.circular(2))),
-          const SizedBox(height: 16),
+          const SheetHandle(bottomSpacing: 4),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24),
             child: Row(children: [
@@ -4701,12 +4794,28 @@ class _DriverTripDetailSheet extends StatelessWidget {
                 ),
                 const SizedBox(height: 16),
                 _DetailSection(
-                  icon: Icons.place_rounded,
+                  icon: Icons.alt_route_rounded,
                   title: 'Ruta',
                   child: _StopsTimeline(
                     origin: trip.originAddress,
                     destination: trip.destinationAddress,
                     stops: trip.via.isEmpty ? null : trip.via,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _DetailSection(
+                  icon: Icons.directions_car_rounded,
+                  title: 'Vehículo',
+                  child: Text(
+                    trip.vehicleDisplay.isNotEmpty
+                        ? trip.vehicleDisplay
+                        : 'Sin vehículo registrado',
+                    style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w500,
+                        color: trip.vehicleDisplay.isNotEmpty
+                            ? AppColors.textPrimary
+                            : AppColors.textSecondary),
                   ),
                 ),
                 const SizedBox(height: 16),

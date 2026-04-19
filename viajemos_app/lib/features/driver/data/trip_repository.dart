@@ -86,6 +86,13 @@ class TripRepository {
         .maybeSingle();
   }
 
+  Future<void> updateAvailableSeats(String tripId, int seats) async {
+    await _client
+        .from('trips')
+        .update({'available_seats': seats})
+        .eq('id', tripId);
+  }
+
   Future<int> countActiveTrips() async {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) return 0;

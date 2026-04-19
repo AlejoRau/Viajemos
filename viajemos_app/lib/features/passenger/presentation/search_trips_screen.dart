@@ -1,14 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
-import '../../../shared/formatters/date_formatter.dart';
 import '../../../shared/services/city_search_service.dart';
 import '../../../shared/widgets/city_autocomplete_field.dart';
 
-// ── Sanitización de inputs ────────────────────────────────────────────────────
-
 // Permite letras (incluyendo acentos y ñ), espacios y guiones.
-// Bloquea cualquier carácter que no tenga sentido en un nombre de ciudad.
 final _cityInputFormatter = FilteringTextInputFormatter.allow(
   RegExp(r"[a-zA-ZáéíóúÁÉÍÓÚäëïöüÄËÏÖÜñÑüÜ ',\-\.]"),
 );
@@ -83,9 +79,13 @@ class _FilterCard extends StatefulWidget {
 class _FilterCardState extends State<_FilterCard> {
   late final TextEditingController _fromController;
   late final TextEditingController _toController;
-  final _fromDateController = TextEditingController();
-  final _toDateController = TextEditingController();
   late final TextEditingController _priceController;
+
+  DateTime? _fromDate;
+
+  bool _onlyPets = false;
+  bool _picksUp = false;
+  bool _dropsOff = false;
 
   @override
   void initState() {
@@ -99,8 +99,6 @@ class _FilterCardState extends State<_FilterCard> {
   void dispose() {
     _fromController.dispose();
     _toController.dispose();
-    _fromDateController.dispose();
-    _toDateController.dispose();
     _priceController.dispose();
     super.dispose();
   }
@@ -113,6 +111,25 @@ class _FilterCardState extends State<_FilterCard> {
     });
   }
 
+  String _formatDate(DateTime date) =>
+      '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}';
+
+  Future<void> _pickDate() async {
+    final now = DateTime.now();
+    final initial = _fromDate ?? now;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial.isBefore(now) ? now : initial,
+      firstDate: now,
+      lastDate: DateTime(now.year + 2, 12, 31),
+      helpText: 'Buscar a partir de',
+      confirmText: 'Aceptar',
+      cancelText: 'Cancelar',
+    );
+    if (picked == null) return;
+    setState(() => _fromDate = picked);
+  }
+
   void _onSearch() {
     final origin = _sanitizeCity(_fromController.text);
     if (origin.isEmpty) {
@@ -123,18 +140,18 @@ class _FilterCardState extends State<_FilterCard> {
     }
 
     final destination = _sanitizeCity(_toController.text);
-    final dateFrom = _fromDateController.text.trim();
-    final dateTo = _toDateController.text.trim();
-    // Price is digits-only by formatter, still clamp to avoid absurd values.
+    final dateFrom = _fromDate != null ? _formatDate(_fromDate!) : null;
     final rawPrice = int.tryParse(_priceController.text.trim()) ?? 0;
     final maxPrice = rawPrice.clamp(0, 9999999);
 
     context.push('/passenger/search-results', extra: {
       'origin': origin,
       'destination': destination.isEmpty ? null : destination,
-      'dateFrom': dateFrom.isEmpty ? null : dateFrom,
-      'dateTo': dateTo.isEmpty ? null : dateTo,
+      'dateFrom': dateFrom,
       'maxPrice': maxPrice == 0 ? null : maxPrice.toString(),
+      'onlyPets': _onlyPets,
+      'picksUp': _picksUp,
+      'dropsOff': _dropsOff,
     });
   }
 
@@ -159,7 +176,6 @@ class _FilterCardState extends State<_FilterCard> {
           // ORIGEN
           _buildInputLabel('ORIGEN'),
           _buildOriginField(),
-
           const SizedBox(height: 12),
 
           // DESTINO
@@ -167,14 +183,8 @@ class _FilterCardState extends State<_FilterCard> {
           _buildDestinationField(),
           const SizedBox(height: 20),
 
-          // Fechas
-          Row(
-            children: [
-              Expanded(child: _buildDateInput('DESDE', _fromDateController)),
-              const SizedBox(width: 12),
-              Expanded(child: _buildDateInput('HASTA', _toDateController)),
-            ],
-          ),
+          // Fecha a partir de
+          _buildDateInput('A PARTIR DE', _fromDate),
           const SizedBox(height: 20),
 
           // Precio
@@ -199,6 +209,34 @@ class _FilterCardState extends State<_FilterCard> {
                 hintStyle: TextStyle(color: Color(0xFF94A3B8), fontSize: 15),
               ),
             ),
+          ),
+          const SizedBox(height: 20),
+
+          // Filtros previos a buscar
+          _buildInputLabel('FILTROS'),
+          Row(
+            children: [
+              Expanded(child: _buildToggle(
+                'Mascotas',
+                Icons.pets_rounded,
+                _onlyPets,
+                (v) => setState(() => _onlyPets = v),
+              )),
+              const SizedBox(width: 8),
+              Expanded(child: _buildToggle(
+                'Pasa a buscarte',
+                Icons.home_rounded,
+                _picksUp,
+                (v) => setState(() => _picksUp = v),
+              )),
+              const SizedBox(width: 8),
+              Expanded(child: _buildToggle(
+                'Te deja en destino',
+                Icons.where_to_vote_rounded,
+                _dropsOff,
+                (v) => setState(() => _dropsOff = v),
+              )),
+            ],
           ),
           const SizedBox(height: 24),
 
@@ -262,31 +300,79 @@ class _FilterCardState extends State<_FilterCard> {
     );
   }
 
-  Widget _buildDateInput(String label, TextEditingController controller) {
-    final isOptional = label == 'HASTA' || label == 'DESDE';
+  Widget _buildDateInput(String label, DateTime? date) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildInputLabel(label),
-        Container(
-          decoration: BoxDecoration(
-            color: const Color(0xFFF1F5F9),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: TextField(
-            controller: controller,
-            keyboardType: TextInputType.number,
-            inputFormatters: [DayMonthFormatter()],
-            decoration: InputDecoration(
-              hintText: isOptional ? 'DD/MM  (opcional)' : 'DD/MM',
-              suffixIcon: const Icon(Icons.calendar_month, color: Color(0xFF64748B), size: 18),
-              border: InputBorder.none,
-              contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-              hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
+        GestureDetector(
+          onTap: _pickDate,
+          child: Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+            child: Row(
+              children: [
+                const Icon(Icons.calendar_month, color: Color(0xFF64748B), size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    date != null ? _formatDate(date) : 'Cualquier fecha  (opcional)',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: date != null ? const Color(0xFF1E293B) : const Color(0xFF94A3B8),
+                    ),
+                  ),
+                ),
+                if (date != null)
+                  GestureDetector(
+                    onTap: () => setState(() => _fromDate = null),
+                    child: const Icon(Icons.close, size: 16, color: Color(0xFF94A3B8)),
+                  ),
+              ],
             ),
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildToggle(String label, IconData icon, bool active, ValueChanged<bool> onChanged) {
+    return GestureDetector(
+      onTap: () => onChanged(!active),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        decoration: BoxDecoration(
+          color: active ? const Color(0xFF1A73E8) : const Color(0xFFF1F5F9),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: active ? const Color(0xFF1A73E8) : const Color(0xFFE2E8F0),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.max,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 13, color: active ? Colors.white : const Color(0xFF64748B)),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(
+                label,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: active ? Colors.white : const Color(0xFF64748B),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

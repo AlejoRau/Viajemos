@@ -3,6 +3,7 @@ import '../../core/theme/app_theme.dart';
 import '../../features/passenger/domain/trip_search_result.dart';
 import '../../features/profile/data/profile_repository.dart';
 import '../../features/profile/domain/user_profile.dart';
+import 'sheet_handle.dart';
 
 /// Shows a public profile bottom sheet for any user by their ID.
 /// [viewerIsDriver]: true = viewer is a driver (shows passenger profile of the other),
@@ -66,16 +67,7 @@ class _PublicProfileSheetState extends State<_PublicProfileSheet> {
       ),
       child: Column(
         children: [
-          const SizedBox(height: 12),
-          Center(
-            child: Container(
-              width: 40, height: 4,
-              decoration: BoxDecoration(
-                  color: const Color(0xFFE2E8F0),
-                  borderRadius: BorderRadius.circular(2)),
-            ),
-          ),
-          const SizedBox(height: 20),
+          const SheetHandle(),
           if (_loading)
             const Expanded(child: Center(child: CircularProgressIndicator()))
           else if (_error != null)
@@ -390,15 +382,30 @@ class _PassengerStats extends StatelessWidget {
           label: 'Viajes como pasajero',
           icon: Icons.airline_seat_recline_normal_rounded,
         ),
-        if (profile.kickedOutCount > 0) ...[
-          const SizedBox(height: 12),
-          _StatBox(
-            value: '${profile.kickedOutCount}',
-            label: 'Viajes\nque lo bajaron',
-            icon: Icons.directions_walk_rounded,
-            negative: true,
-          ),
-        ],
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            if (profile.kickedOutCount > 0) ...[
+              Expanded(
+                child: _StatBox(
+                  value: '${profile.kickedOutCount}',
+                  label: 'Viajes\nque lo bajaron',
+                  icon: Icons.directions_walk_rounded,
+                  negative: true,
+                ),
+              ),
+              const SizedBox(width: 12),
+            ],
+            Expanded(
+              child: _StatBox(
+                value: '${profile.lateCancellationsCount}',
+                label: 'Bajas en\ncorto aviso',
+                icon: Icons.alarm_off_rounded,
+                negative: true,
+              ),
+            ),
+          ],
+        ),
       ],
     );
   }

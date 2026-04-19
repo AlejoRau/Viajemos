@@ -708,6 +708,30 @@ class _RequestBanner extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
           ],
+          if (request.passengerPickupAddress?.isNotEmpty == true) ...[
+            const SizedBox(height: 4),
+            Row(children: [
+              const Icon(Icons.home_rounded, size: 13, color: Color(0xFF92400E)),
+              const SizedBox(width: 4),
+              Flexible(child: Text(
+                'Recogida: ${request.passengerPickupAddress}',
+                style: const TextStyle(fontSize: 12, color: Color(0xFF92400E)),
+                overflow: TextOverflow.ellipsis,
+              )),
+            ]),
+          ],
+          if (request.passengerDropoffAddress?.isNotEmpty == true) ...[
+            const SizedBox(height: 2),
+            Row(children: [
+              const Icon(Icons.where_to_vote_rounded, size: 13, color: Color(0xFF92400E)),
+              const SizedBox(width: 4),
+              Flexible(child: Text(
+                'Destino: ${request.passengerDropoffAddress}',
+                style: const TextStyle(fontSize: 12, color: Color(0xFF92400E)),
+                overflow: TextOverflow.ellipsis,
+              )),
+            ]),
+          ],
           const SizedBox(height: 10),
           processing
               ? const Center(

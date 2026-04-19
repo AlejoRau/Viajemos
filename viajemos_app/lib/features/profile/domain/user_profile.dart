@@ -12,6 +12,7 @@ class UserProfile {
     this.cancelledTripsCount = 0,
     this.expelledPassengersCount = 0,
     this.kickedOutCount = 0,
+    this.lateCancellationsCount = 0,
     this.avatarUrl,
     this.phone,
     this.birthDate,
@@ -32,6 +33,7 @@ class UserProfile {
   final int cancelledTripsCount;
   final int expelledPassengersCount;
   final int kickedOutCount; // veces que fue expulsado como pasajero
+  final int lateCancellationsCount; // bajas con menos de 12 h de anticipación
   final String? avatarUrl;
   final String? phone;
   final DateTime? birthDate;
@@ -91,7 +93,7 @@ enum ProfileTrustLevel { basic, identified, verified, complete }
 
 extension ProfileTrustLevelX on ProfileTrustLevel {
   String get spanishName => switch (this) {
-    ProfileTrustLevel.basic      => 'Básico',
+    ProfileTrustLevel.basic      => 'Verificación básica',
     ProfileTrustLevel.identified => 'Identificado',
     ProfileTrustLevel.verified   => 'Verificado',
     ProfileTrustLevel.complete   => 'Completo',

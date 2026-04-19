@@ -8,6 +8,7 @@ import '../../features/history/data/history_repository.dart';
 import '../../features/trip_completion/data/trip_completion_repository.dart';
 import '../../features/trip_completion/presentation/trip_completion_dialog.dart';
 import '../../features/trip_completion/presentation/passenger_review_dialog.dart';
+import '../providers/dirty_form_provider.dart';
 
 class MainShell extends ConsumerStatefulWidget {
   const MainShell({super.key, required this.child});
@@ -19,6 +20,39 @@ class MainShell extends ConsumerStatefulWidget {
 }
 
 class _MainShellState extends ConsumerState<MainShell> {
+  Future<void> _safeTap(String route) async {
+    final isDirty = ref.read(dirtyFormProvider);
+    if (isDirty) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('¿Salir sin guardar?',
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+          content: const Text(
+            'Si salís ahora, los cambios que hiciste se van a perder.',
+            style: TextStyle(fontSize: 14, height: 1.5),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Seguir editando'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: TextButton.styleFrom(
+                  foregroundColor: const Color(0xFFDC2626)),
+              child: const Text('Descartar cambios'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+      ref.read(dirtyFormProvider.notifier).state = false;
+    }
+    if (mounted) context.go(route);
+  }
+
   int _selectedIndex(BuildContext context) {
     final location = GoRouterState.of(context).uri.toString();
     if (location.startsWith('/history')) return 1;
@@ -186,7 +220,7 @@ class _MainShellState extends ConsumerState<MainShell> {
                   activeIcon: Icons.home_rounded,
                   label: 'Inicio',
                   selected: idx == 0,
-                  onTap: () => context.go(roleHome),
+                  onTap: () => _safeTap(roleHome),
                 ),
                 _NavItem(
                   icon: Icons.history_rounded,
@@ -194,7 +228,7 @@ class _MainShellState extends ConsumerState<MainShell> {
                   label: 'Historial',
                   selected: idx == 1,
                   badge: pendingCount,
-                  onTap: () => context.go('/history'),
+                  onTap: () => _safeTap('/history'),
                 ),
                 _NavItem(
                   icon: Icons.chat_bubble_outline_rounded,
@@ -202,14 +236,14 @@ class _MainShellState extends ConsumerState<MainShell> {
                   label: 'Chats',
                   selected: idx == 2,
                   badge: unreadCount,
-                  onTap: () => context.go('/chats'),
+                  onTap: () => _safeTap('/chats'),
                 ),
                 _NavItem(
                   icon: Icons.person_outline_rounded,
                   activeIcon: Icons.person_rounded,
                   label: 'Perfil',
                   selected: idx == 3,
-                  onTap: () => context.go('/profile'),
+                  onTap: () => _safeTap('/profile'),
                 ),
               ],
             ),

@@ -596,6 +596,12 @@ class _InfoPersonalTab extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
 
+                // ── Descripción personal ───────────────────────────────
+                _ProfileSectionLabel(label: 'Descripción personal', trailing: _AutoSaveIndicator(bioSaveStatus)),
+                const SizedBox(height: 10),
+                _BioField(controller: bioController),
+                const SizedBox(height: 24),
+
                 // ── Redes sociales ─────────────────────────────────────
                 _ProfileSectionLabel(label: 'Redes sociales', trailing: _AutoSaveIndicator(socialSaveStatus)),
                 const SizedBox(height: 10),

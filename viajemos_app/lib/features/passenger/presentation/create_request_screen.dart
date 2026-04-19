@@ -7,6 +7,8 @@ import '../../../shared/formatters/date_formatter.dart';
 import '../../../shared/services/city_search_service.dart';
 import '../../../shared/widgets/city_autocomplete_field.dart';
 import '../../../shared/widgets/app_toast.dart';
+import '../../../shared/providers/request_success_provider.dart';
+import '../../../shared/providers/dirty_form_provider.dart';
 import '../data/passenger_request_repository.dart';
 import '../../history/data/history_repository.dart';
 
@@ -85,7 +87,16 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
       _destinationController.text.trim().isNotEmpty ||
       _dateFrom != null;
 
+  void _markDirty() {
+    if (!ref.read(dirtyFormProvider)) {
+      ref.read(dirtyFormProvider.notifier).state = true;
+    }
+  }
+
+  void _clearDirty() => ref.read(dirtyFormProvider.notifier).state = false;
+
   void _onOriginChanged() {
+    _markDirty();
     if (_lastValidatedOrigin != null &&
         _lastValidatedOrigin!.toLowerCase() !=
             _originController.text.trim().toLowerCase()) {
@@ -95,6 +106,7 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
   }
 
   void _onDestChanged() {
+    _markDirty();
     if (_lastValidatedDest != null &&
         _lastValidatedDest!.toLowerCase() !=
             _destinationController.text.trim().toLowerCase()) {
@@ -158,6 +170,7 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
 
   @override
   void dispose() {
+    _clearDirty();
     _originController.removeListener(_onOriginChanged);
     _destinationController.removeListener(_onDestChanged);
     _originController.dispose();
@@ -225,7 +238,19 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
             : _descriptionController.text.trim(),
       );
       if (mounted) {
-        AppToast.show(context, message: '¡Pedido publicado con éxito!', type: ToastType.success);
+        final RequestSuccess success = (
+          originCity: _originController.text.trim(),
+          destinationCity: _destinationController.text.trim(),
+          dateFrom: _dateFrom!,
+          dateTo: _dateTo,
+          timeFrom: _timeFromController.text.trim(),
+          timeTo: _timeToController.text.trim(),
+          seats: _seats,
+          maxPrice: _price,
+          hasPet: _hasPet,
+        );
+        ref.read(requestSuccessProvider.notifier).state = success;
+        _clearDirty();
         context.go('/passenger');
       }
     } catch (e) {
@@ -259,7 +284,7 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
       canPop: false,
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return;
-        if (await _confirmDiscard() && mounted) context.go('/passenger');
+        if (await _confirmDiscard() && mounted) { _clearDirty(); context.go('/passenger'); }
       },
       child: Scaffold(
       appBar: AppBar(
@@ -267,7 +292,7 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () async {
-            if (await _confirmDiscard() && mounted) context.go('/passenger');
+            if (await _confirmDiscard() && mounted) { _clearDirty(); context.go('/passenger'); }
           },
         ),
         actions: [
@@ -279,13 +304,13 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
         ],
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // ── RUTA ──────────────────────────────────────────────────────
             const _SectionHeader(icon: Icons.alt_route_rounded, title: 'Ruta'),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
             IntrinsicHeight(
               child: Row(
                 children: [
@@ -363,11 +388,18 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
             ),
 
             const SizedBox(height: 32),
+            const Divider(height: 1, thickness: 2.5, color: Color(0xFFE2E8F0)),
+            const SizedBox(height: 40),
 
             // ── FECHA Y HORA ───────────────────────────────────────────────
             const _SectionHeader(icon: Icons.calendar_today_rounded, title: 'Fecha y hora'),
-            const SizedBox(height: 16),
-            const _SubLabel('FECHA DE VIAJE'),
+            const SizedBox(height: 8),
+            const Text(
+              'Indicá en qué período querés salir. No es ida y vuelta.',
+              style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+            ),
+            const SizedBox(height: 20),
+            const _SubLabel('RANGO DE SALIDA'),
             const SizedBox(height: 8),
             Row(
               children: [
@@ -376,12 +408,12 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _DatePickerInput(
-                        label: 'Desde',
+                        label: 'No antes del',
                         value: _dateFrom,
-                        onPicked: (d) => setState(() {
+                        onPicked: (d) { _markDirty(); setState(() {
                           _dateFrom = d;
                           if (_dateTo != null && _dateTo!.isBefore(d)) _dateTo = d;
-                        }),
+                        }); },
                       ),
                       if (_showErrors && _dateFrom == null)
                         const Padding(
@@ -401,7 +433,7 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
                 ),
                 Expanded(
                   child: _DatePickerInput(
-                    label: 'Hasta (opcional)',
+                    label: 'No después del (opc.)',
                     value: _dateTo,
                     onPicked: (d) => setState(() => _dateTo = d),
                     firstDate: _dateFrom,
@@ -424,10 +456,12 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
             ),
 
             const SizedBox(height: 32),
+            const Divider(height: 1, thickness: 2.5, color: Color(0xFFE2E8F0)),
+            const SizedBox(height: 40),
 
             // ── ASIENTOS Y PRECIO ─────────────────────────────────────────
             const _SectionHeader(icon: Icons.payments_outlined, title: 'Asientos y precio'),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
             _SeatsAndPriceCard(
               seats: _seats,
               price: _price,
@@ -436,10 +470,12 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
             ),
 
             const SizedBox(height: 32),
+            const Divider(height: 1, thickness: 2.5, color: Color(0xFFE2E8F0)),
+            const SizedBox(height: 40),
 
             // ── PREFERENCIAS ──────────────────────────────────────────────
             const _SectionHeader(icon: Icons.tune_rounded, title: 'Mis preferencias'),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             _PreferenceToggle(
               icon: Icons.pets_rounded,
               title: 'Tengo mascota',
@@ -448,10 +484,12 @@ class _CreateRequestScreenState extends ConsumerState<CreateRequestScreen> {
             ),
 
             const SizedBox(height: 32),
+            const Divider(height: 1, thickness: 2.5, color: Color(0xFFE2E8F0)),
+            const SizedBox(height: 40),
 
             // ── DESCRIPCIÓN ───────────────────────────────────────────────
             const _SubLabel('DESCRIPCIÓN (OPCIONAL)'),
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
             _DescriptionField(controller: _descriptionController),
 
             const SizedBox(height: 40),

@@ -129,10 +129,16 @@ class _SuggestionChipInputState extends State<SuggestionChipInput> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (widget.label.isNotEmpty) ...[
-          Text(
-            widget.label,
-            style: const TextStyle(fontSize: 14, color: AppColors.textSecondary),
-          ),
+          Builder(builder: (_) {
+            const base = TextStyle(fontSize: 14, color: AppColors.textSecondary);
+            const kOpc = '(Opcional)';
+            final idx = widget.label.indexOf(kOpc);
+            if (idx < 0) return Text(widget.label, style: base);
+            return Text.rich(TextSpan(style: base, children: [
+              TextSpan(text: widget.label.substring(0, idx)),
+              const TextSpan(text: kOpc, style: TextStyle(fontWeight: FontWeight.w800)),
+            ]));
+          }),
           const SizedBox(height: 8),
         ],
         TextFormField(

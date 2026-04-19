@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/widgets/suggestion_chip_input.dart';
 import '../../../shared/formatters/date_formatter.dart';
@@ -14,6 +15,7 @@ import '../../../shared/widgets/city_autocomplete_field.dart';
 import '../data/trip_repository.dart';
 import 'trip_map_screen.dart';
 import '../../../shared/providers/trip_success_provider.dart';
+import '../../../shared/providers/dirty_form_provider.dart';
 
 const _routeSuggestions = [
   // Nacionales principales
@@ -73,6 +75,10 @@ class CreateTripPrefill {
     this.departureTime,
     this.description,
     this.vehicleId,
+    this.alertId,
+    this.departureDate,
+    this.seats,
+    this.price,
   });
 
   final String originAddress;
@@ -85,6 +91,11 @@ class CreateTripPrefill {
   final String? departureTime;
   final String? description;
   final String? vehicleId;
+  // When set, auto-sends a trip invitation to this alert after creation
+  final String? alertId;
+  final DateTime? departureDate;
+  final int? seats;
+  final int? price;
 }
 
 class CreateTripScreen extends ConsumerStatefulWidget {
@@ -163,10 +174,14 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
       // Prefilled values came from a previously validated trip
       if (p.originAddress.isNotEmpty) _lastValidatedOrigin = p.originAddress;
       if (p.destinationAddress.isNotEmpty) _lastValidatedDest = p.destinationAddress;
+      if (p.departureDate != null) _departureDate = p.departureDate;
+      if (p.seats != null) _seats = p.seats!;
+      if (p.price != null) _price = p.price!;
     }
   }
 
   void _onFieldChanged() {
+    _markDirty();
     // Reset city validation when the user manually edits the field
     if (_lastValidatedOrigin != null &&
         _lastValidatedOrigin!.toLowerCase() !=
@@ -183,6 +198,7 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
 
   @override
   void dispose() {
+    _clearDirty();
     _originController.dispose();
     _destinationController.dispose();
     _timeFromController.dispose();
@@ -271,6 +287,7 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
                 );
             ref.invalidate(vehiclesProvider);
             setState(() => _selectedVehicle = newVehicle);
+            _markDirty();
           } catch (e) {
             if (mounted) {
               AppToast.show(context, message: 'Error al guardar el vehículo: $e');
@@ -279,7 +296,7 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
         },
       ),
     );
-    if (selected != null) setState(() => _selectedVehicle = selected);
+    if (selected != null) { setState(() => _selectedVehicle = selected); _markDirty(); }
   }
 
   /// Parses "HH:mm" → minutes from midnight, or null if invalid.
@@ -353,6 +370,19 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
       _departureDate != null ||
       _timeFromController.text.trim().isNotEmpty ||
       _selectedVehicle != null;
+
+  void _markDirty() {
+    if (!ref.read(dirtyFormProvider)) {
+      ref.read(dirtyFormProvider.notifier).state = true;
+    }
+  }
+
+  void _clearDirty() => ref.read(dirtyFormProvider.notifier).state = false;
+
+  void _navigateBack() {
+    _clearDirty();
+    if (context.canPop()) context.pop(); else context.go('/driver');
+  }
 
   Future<bool> _confirmDiscard() async {
     if (!_hasAnyData) return true;
@@ -561,6 +591,17 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
         description: _descriptionController.text.trim(),
         vehicleId: _selectedVehicle?.id,
       );
+      if (widget.prefill?.alertId != null) {
+        try {
+          await Supabase.instance.client.rpc('send_trip_invitation', params: {
+            'p_trip_alert_id': widget.prefill!.alertId!,
+            'p_trip_id': tripId,
+            'p_message': null,
+          });
+        } catch (_) {
+          // Invitation send failed — trip was still created, driver can offer manually
+        }
+      }
       if (mounted) {
         final originAddr = _picksUpPassengers
             ? originCity
@@ -587,6 +628,7 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
           routes: List<String>.from(_routes),
           stops: List<String>.from(_stops),
         );
+        _clearDirty();
         context.go('/driver');
       }
     } catch (e) {
@@ -621,7 +663,7 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
       canPop: false,
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return;
-        if (await _confirmDiscard() && mounted) context.go('/driver');
+        if (await _confirmDiscard() && mounted) _navigateBack();
       },
       child: Scaffold(
       appBar: AppBar(
@@ -629,7 +671,7 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () async {
-            if (await _confirmDiscard() && mounted) context.go('/driver');
+            if (await _confirmDiscard() && mounted) _navigateBack();
           },
         ),
         actions: [
@@ -641,14 +683,14 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
         ],
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // ── RUTA ──────────────────────────────────────────────────────
             const _SectionHeader(
                 icon: Icons.alt_route_rounded, title: 'Ruta'),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
             IntrinsicHeight(
               child: Row(
                 children: [
@@ -746,7 +788,9 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
                 ],
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 32),
+            const Divider(height: 1, thickness: 2.5, color: Color(0xFFE2E8F0)),
+            const SizedBox(height: 40),
             Row(
               children: [
                 const _SectionHeader(
@@ -803,11 +847,13 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
                   query,
                   overrideSource: CitySearchSource.georef,
                 );
-                return results.map((s) => s.name).toList();
+                return results.map((s) => s.displayName).toList();
               },
             ),
 
             const SizedBox(height: 32),
+            const Divider(height: 1, thickness: 2.5, color: Color(0xFFE2E8F0)),
+            const SizedBox(height: 40),
 
             // ── VEHÍCULO ───────────────────────────────────────────────────
             const _SectionHeader(
@@ -839,12 +885,14 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
             ),
 
             const SizedBox(height: 32),
+            const Divider(height: 1, thickness: 2.5, color: Color(0xFFE2E8F0)),
+            const SizedBox(height: 40),
 
             // ── VÍAS / RUTAS ───────────────────────────────────────────────
             const _SectionHeader(
                 icon: Icons.directions_rounded,
                 title: 'Vías / Rutas'),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
             SuggestionChipInput(
               label: 'Rutas (Opcional)',
               hint: 'Añadir vía o número de ruta...',
@@ -856,6 +904,8 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
             ),
 
             const SizedBox(height: 32),
+            const Divider(height: 1, thickness: 2.5, color: Color(0xFFE2E8F0)),
+            const SizedBox(height: 40),
 
             // ── FECHA Y HORA ───────────────────────────────────────────────
             const _SectionHeader(
@@ -892,6 +942,7 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
                 );
                 if (picked != null) {
                   setState(() => _departureDate = picked);
+                  _markDirty();
                 }
               },
               child: Container(
@@ -939,8 +990,8 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
             ),
             const SizedBox(height: 8),
             _RangeInputRow(
-              label1: 'Salgo a las',
-              label2: 'Hasta las (opcional)',
+              label1: 'Salgo entre las',
+              label2: 'Y las (Opcional)',
               controller1: _timeFromController,
               controller2: _timeToController,
               formatter: TimeFormatter(),
@@ -965,12 +1016,14 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
             ],
 
             const SizedBox(height: 32),
+            const Divider(height: 1, thickness: 2.5, color: Color(0xFFE2E8F0)),
+            const SizedBox(height: 40),
 
             // ── ASIENTOS Y PRECIO ─────────────────────────────────────────
             const _SectionHeader(
                 icon: Icons.payments_outlined,
                 title: 'Asientos y precio'),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
             _SeatsAndPriceCard(
               seats: _seats,
               price: _price,
@@ -981,15 +1034,18 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
             ),
 
             const SizedBox(height: 32),
+            const Divider(height: 1, thickness: 2.5, color: Color(0xFFE2E8F0)),
+            const SizedBox(height: 40),
 
             // ── PREFERENCIAS ──────────────────────────────────────────────
             const _SectionHeader(
                 icon: Icons.tune_rounded,
                 title: 'Preferencias del conductor'),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             _PreferenceToggle(
               icon: Icons.pets_rounded,
               title: 'Acepta mascotas',
+              subtitle: 'Los pasajeros pueden subir al auto con sus mascotas.',
               value: _acceptsPets,
               onChanged: (v) => setState(() => _acceptsPets = v),
             ),
@@ -997,24 +1053,26 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
             _PreferenceToggle(
               icon: Icons.house_rounded,
               title: 'Paso a buscar a cada pasajero',
+              subtitle: 'Salís desde el domicilio de cada pasajero en lugar de un punto de encuentro.',
               value: _picksUpPassengers,
-              onChanged: (v) =>
-                  setState(() => _picksUpPassengers = v),
+              onChanged: (v) => setState(() => _picksUpPassengers = v),
             ),
             const SizedBox(height: 8),
             _PreferenceToggle(
               icon: Icons.door_front_door_rounded,
               title: 'Dejo a cada pasajero en su destino',
+              subtitle: 'Llevás a cada pasajero hasta la puerta de su destino final.',
               value: _dropsOffPassengers,
-              onChanged: (v) =>
-                  setState(() => _dropsOffPassengers = v),
+              onChanged: (v) => setState(() => _dropsOffPassengers = v),
             ),
 
             const SizedBox(height: 32),
+            const Divider(height: 1, thickness: 2.5, color: Color(0xFFE2E8F0)),
+            const SizedBox(height: 40),
 
             // ── DESCRIPCIÓN ───────────────────────────────────────────────
             const _SubLabel('DESCRIPCIÓN (OPCIONAL)'),
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
             _DescriptionField(controller: _descriptionController),
 
             const SizedBox(height: 40),
@@ -1342,12 +1400,20 @@ class _RangeInputRow extends StatelessWidget {
 
   Widget _buildBox(
       String label, TextEditingController controller, String hint) {
+    const base = TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF475569));
+    final optIdx = label.indexOf('(Opcional)');
+    final labelWidget = optIdx < 0
+        ? Text(label, style: base)
+        : Text.rich(TextSpan(style: base, children: [
+            TextSpan(text: label.substring(0, optIdx)),
+            const TextSpan(
+                text: '(Opcional)',
+                style: TextStyle(fontWeight: FontWeight.w800)),
+          ]));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label,
-            style: const TextStyle(
-                fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF475569))),
+        labelWidget,
         const SizedBox(height: 4),
         Container(
           decoration: BoxDecoration(
@@ -1467,7 +1533,7 @@ class _SeatsAndPriceCardState extends State<_SeatsAndPriceCard> {
                   Text(
                     'Excluyéndote a ti',
                     style: TextStyle(
-                        fontSize: 12, color: Color(0xFF64748B)),
+                        fontSize: 14, color: Color(0xFF64748B)),
                   ),
                 ],
               ),
@@ -1493,11 +1559,11 @@ class _SeatsAndPriceCardState extends State<_SeatsAndPriceCard> {
                           color: Color(0xFF1E293B)),
                     ),
                     IconButton(
-                      onPressed: widget.seats < 5
+                      onPressed: widget.seats < 9
                           ? () => widget.onSeatsChanged(widget.seats + 1)
                           : null,
                       icon: Icon(Icons.add,
-                          color: widget.seats < 5
+                          color: widget.seats < 9
                               ? AppColors.primary
                               : const Color(0xFFCBD5E1)),
                     ),
@@ -1528,7 +1594,7 @@ class _SeatsAndPriceCardState extends State<_SeatsAndPriceCard> {
                   Text(
                     r'Recomendado: $4.500',
                     style: TextStyle(
-                        fontSize: 12, color: Color(0xFF64748B)),
+                        fontSize: 14, color: Color(0xFF64748B)),
                   ),
                 ],
               ),
@@ -1632,44 +1698,54 @@ class _PreferenceToggle extends StatelessWidget {
   const _PreferenceToggle({
     required this.icon,
     required this.title,
+    required this.subtitle,
     required this.value,
     required this.onChanged,
   });
 
   final IconData icon;
   final String title;
+  final String subtitle;
   final bool value;
   final ValueChanged<bool> onChanged;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding:
-          const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
         color: const Color(0xFFF8FAFC),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: const Color(0xFFE2E8F0)),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Icon(icon,
-              color: value
-                  ? AppColors.primary
-                  : const Color(0xFF94A3B8),
-              size: 22),
-          const SizedBox(width: 12),
+              color: value ? AppColors.primary : const Color(0xFF94A3B8),
+              size: 24),
+          const SizedBox(width: 14),
           Expanded(
-            child: Text(title,
-                style: TextStyle(
-                    fontSize: 14,
-                    color: value
-                        ? const Color(0xFF1E293B)
-                        : const Color(0xFF64748B),
-                    fontWeight: value
-                        ? FontWeight.w600
-                        : FontWeight.normal)),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title,
+                    style: TextStyle(
+                        fontSize: 15,
+                        color: value
+                            ? const Color(0xFF1E293B)
+                            : const Color(0xFF475569),
+                        fontWeight: value ? FontWeight.w700 : FontWeight.w600)),
+                const SizedBox(height: 3),
+                Text(subtitle,
+                    style: const TextStyle(
+                        fontSize: 13,
+                        color: Color(0xFF94A3B8),
+                        height: 1.3)),
+              ],
+            ),
           ),
+          const SizedBox(width: 8),
           Switch(
             value: value,
             onChanged: onChanged,

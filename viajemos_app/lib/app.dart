@@ -131,6 +131,9 @@ final _router = GoRouter(
               dateFromStr: extra['dateFrom'] as String?,
               dateToStr: extra['dateTo'] as String?,
               maxPriceStr: extra['maxPrice'] as String?,
+              initOnlyPets: extra['onlyPets'] as bool? ?? false,
+              initPicksUp: extra['picksUp'] as bool? ?? false,
+              initDropsOff: extra['dropsOff'] as bool? ?? false,
             );
           },
         ),

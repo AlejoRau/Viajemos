@@ -72,6 +72,8 @@ class PendingRequestInfo {
     required this.seatsRequested,
     required this.departureDate,
     this.message,
+    this.passengerPickupAddress,
+    this.passengerDropoffAddress,
   });
 
   final String requestId;
@@ -81,6 +83,8 @@ class PendingRequestInfo {
   final int seatsRequested;
   final DateTime departureDate;
   final String? message;
+  final String? passengerPickupAddress;
+  final String? passengerDropoffAddress;
 }
 
 class AcceptedTripInfo {
@@ -385,6 +389,8 @@ class ChatRepository {
       seatsRequested: (row['seats_requested'] as int?) ?? 1,
       message: row['message'] as String?,
       departureDate: DateTime.parse(row['departure_date'] as String),
+      passengerPickupAddress: row['passenger_pickup_address'] as String?,
+      passengerDropoffAddress: row['passenger_dropoff_address'] as String?,
     );
   }
 

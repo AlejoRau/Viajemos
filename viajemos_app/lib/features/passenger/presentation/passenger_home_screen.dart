@@ -4,12 +4,34 @@ import 'package:go_router/go_router.dart';
 import '../../../shared/widgets/role_option_card.dart';
 import '../../../shared/widgets/role_switcher_title.dart';
 import '../../../shared/widgets/notification_bell.dart';
+import '../../../shared/providers/request_success_provider.dart';
+import '../../../shared/widgets/request_success_overlay.dart';
 
-class PassengerHomeScreen extends ConsumerWidget {
+class PassengerHomeScreen extends ConsumerStatefulWidget {
   const PassengerHomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<PassengerHomeScreen> createState() =>
+      _PassengerHomeScreenState();
+}
+
+class _PassengerHomeScreenState extends ConsumerState<PassengerHomeScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkSuccess());
+  }
+
+  void _checkSuccess() {
+    final success = ref.read(requestSuccessProvider);
+    if (success != null && mounted) {
+      ref.read(requestSuccessProvider.notifier).state = null;
+      showRequestSuccessOverlay(context, request: success);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const RoleSwitcherTitle(),

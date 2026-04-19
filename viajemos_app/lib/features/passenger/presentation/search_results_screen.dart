@@ -5,8 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/widgets/public_profile_sheet.dart';
+import '../../../shared/widgets/sheet_handle.dart';
 import '../../../shared/widgets/app_toast.dart';
 import '../data/trip_search_repository.dart';
 import '../domain/trip_search_result.dart';
@@ -97,6 +99,9 @@ class SearchResultsScreen extends ConsumerStatefulWidget {
     this.dateFromStr,
     this.dateToStr,
     this.maxPriceStr,
+    this.initOnlyPets = false,
+    this.initPicksUp = false,
+    this.initDropsOff = false,
   });
 
   final String origin;
@@ -104,36 +109,48 @@ class SearchResultsScreen extends ConsumerStatefulWidget {
   final String? dateFromStr; // "DD/MM"
   final String? dateToStr;
   final String? maxPriceStr;
+  final bool initOnlyPets;
+  final bool initPicksUp;
+  final bool initDropsOff;
 
   @override
   ConsumerState<SearchResultsScreen> createState() =>
       _SearchResultsScreenState();
 }
 
-enum _SortMode { date, price }
+enum _SortField { date, price, rating }
 
 class _SearchResultsScreenState
     extends ConsumerState<SearchResultsScreen> {
   late Future<List<TripSearchResult>> _future;
+  Future<List<TripSearchResult>>? _nearbyFuture;
 
-  // ── Active filters ────────────────────────────────────────────────────────
-  bool _onlyAvailable = false;
-  bool _onlyPets = false;
-  _SortMode _sort = _SortMode.date;
+  // ── Sort state ────────────────────────────────────────────────────────────
+  _SortField _sortField = _SortField.date;
+  bool _sortAsc = true; // true = nearest/cheapest/worst, false = farthest/expensive/best
+
+  // Pre-search filters (applied silently, not shown as chips)
+  late bool _filterPets;
+  late bool _filterPicksUp;
+  late bool _filterDropsOff;
 
   List<TripSearchResult> _applyFilters(List<TripSearchResult> all) {
     var list = all.where((t) {
-      if (_onlyAvailable && t.freeSeats == 0) return false;
-      if (_onlyPets && !t.allowsPets) return false;
+      if (_filterPets && !t.allowsPets) return false;
+      if (_filterPicksUp && !t.picksUpAtDoor) return false;
+      if (_filterDropsOff && !t.dropsOffAtDoor) return false;
       return true;
     }).toList();
     list.sort((a, b) {
-      // Always put full trips last
       final aFull = a.freeSeats == 0 ? 1 : 0;
       final bFull = b.freeSeats == 0 ? 1 : 0;
       if (aFull != bFull) return aFull.compareTo(bFull);
-      if (_sort == _SortMode.price) return a.pricePerSeat.compareTo(b.pricePerSeat);
-      return a.departureDate.compareTo(b.departureDate);
+      final cmp = switch (_sortField) {
+        _SortField.date => a.departureDate.compareTo(b.departureDate),
+        _SortField.price => a.pricePerSeat.compareTo(b.pricePerSeat),
+        _SortField.rating => a.driverRating.compareTo(b.driverRating),
+      };
+      return _sortAsc ? cmp : -cmp;
     });
     return list;
   }
@@ -152,6 +169,9 @@ class _SearchResultsScreenState
   @override
   void initState() {
     super.initState();
+    _filterPets = widget.initOnlyPets;
+    _filterPicksUp = widget.initPicksUp;
+    _filterDropsOff = widget.initDropsOff;
     _future = TripSearchRepository().searchTrips(
       origin: widget.origin,
       destination: widget.destination,
@@ -159,6 +179,11 @@ class _SearchResultsScreenState
       dateTo: _parseDate(widget.dateToStr),
       maxPrice: int.tryParse(widget.maxPriceStr ?? ''),
     );
+    if (widget.destination?.isNotEmpty == true) {
+      _nearbyFuture = TripSearchRepository().searchTrips(
+        origin: widget.origin,
+      );
+    }
   }
 
   String get _title {
@@ -211,56 +236,31 @@ class _SearchResultsScreenState
               destination: widget.destination,
               dateFrom: _parseDate(widget.dateFromStr),
               dateTo: _parseDate(widget.dateToStr),
+              nearbyFuture: _nearbyFuture,
             );
           }
 
           return Column(
             children: [
-              // ── Filter bar ──────────────────────────────────────────────
-              _FilterBar(
-                onlyAvailable: _onlyAvailable,
-                onlyPets: _onlyPets,
-                sort: _sort,
+              // ── Sort bar ────────────────────────────────────────────────
+              _SortBar(
+                sortField: _sortField,
+                sortAsc: _sortAsc,
                 total: all.length,
                 filtered: trips.length,
-                onAvailableChanged: (v) => setState(() => _onlyAvailable = v),
-                onPetsChanged: (v) => setState(() => _onlyPets = v),
-                onSortChanged: (v) => setState(() => _sort = v),
+                onSortChanged: (field, asc) => setState(() {
+                  _sortField = field;
+                  _sortAsc = asc;
+                }),
               ),
               // ── Results ─────────────────────────────────────────────────
               Expanded(
-                child: trips.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.filter_list_off_rounded,
-                                size: 48, color: Color(0xFFCBD5E1)),
-                            const SizedBox(height: 12),
-                            const Text(
-                              'Ningún viaje coincide\ncon los filtros activos',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                  fontSize: 15, color: Color(0xFF64748B)),
-                            ),
-                            const SizedBox(height: 12),
-                            TextButton(
-                              onPressed: () => setState(() {
-                                _onlyAvailable = false;
-                                _onlyPets = false;
-                                _sort = _SortMode.date;
-                              }),
-                              child: const Text('Limpiar filtros'),
-                            ),
-                          ],
-                        ),
-                      )
-                    : ListView.separated(
-                        padding: const EdgeInsets.all(16),
-                        itemCount: trips.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 14),
-                        itemBuilder: (_, i) => _TripCard(trip: trips[i]),
-                      ),
+                child: ListView.separated(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: trips.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 14),
+                  itemBuilder: (_, i) => _TripCard(trip: trips[i]),
+                ),
               ),
             ],
           );
@@ -278,114 +278,178 @@ class _EmptyState extends StatelessWidget {
     required this.destination,
     this.dateFrom,
     this.dateTo,
+    this.nearbyFuture,
   });
   final String origin;
   final String? destination;
   final DateTime? dateFrom;
   final DateTime? dateTo;
+  final Future<List<TripSearchResult>>? nearbyFuture;
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                color: const Color(0xFFF1F5F9),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.search_off_rounded,
-                  size: 40, color: Color(0xFFCBD5E1)),
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+      child: Column(
+        children: [
+          // ── Header ──────────────────────────────────────────────────────
+          Container(
+            width: 80,
+            height: 80,
+            decoration: const BoxDecoration(
+              color: Color(0xFFF1F5F9),
+              shape: BoxShape.circle,
             ),
+            child: const Icon(Icons.search_off_rounded,
+                size: 40, color: Color(0xFFCBD5E1)),
+          ),
+          const SizedBox(height: 20),
+          const Text(
+            'No hay viajes disponibles',
+            style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF1E293B)),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Todavía nadie publicó este trayecto.\nCreá una alerta y te avisamos cuando haya uno.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 14, color: Color(0xFF64748B), height: 1.5),
+          ),
+          const SizedBox(height: 28),
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: ElevatedButton.icon(
+              onPressed: () => context.push(
+                '/passenger/create-request',
+                extra: {
+                  'origin': origin,
+                  if (destination != null && destination!.isNotEmpty)
+                    'destination': destination,
+                  if (dateFrom != null) 'dateFrom': dateFrom,
+                  if (dateTo != null) 'dateTo': dateTo,
+                },
+              ),
+              icon: const Icon(Icons.notifications_active_rounded,
+                  size: 18, color: Colors.white),
+              label: const Text(
+                'Crear alerta para este viaje',
+                style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(25)),
+                elevation: 0,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextButton(
+            onPressed: () => context.pop(),
+            child: const Text('Modificar búsqueda',
+                style: TextStyle(color: AppColors.textSecondary)),
+          ),
+
+          // ── Viajes cercanos ──────────────────────────────────────────────
+          if (nearbyFuture != null) ...[
+            const SizedBox(height: 24),
+            const Divider(color: Color(0xFFE2E8F0)),
             const SizedBox(height: 20),
-            const Text(
-              'No hay viajes disponibles',
-              style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF1E293B)),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Todavía nadie publicó este trayecto.\nCreá una alerta y te avisamos cuando haya uno.',
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                  fontSize: 14,
-                  color: Color(0xFF64748B),
-                  height: 1.5),
-            ),
-            const SizedBox(height: 28),
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: ElevatedButton.icon(
-                onPressed: () => context.push(
-                  '/passenger/create-request',
-                  extra: {
-                    'origin': origin,
-                    if (destination != null && destination!.isNotEmpty)
-                      'destination': destination,
-                    if (dateFrom != null) 'dateFrom': dateFrom,
-                    if (dateTo != null) 'dateTo': dateTo,
-                  },
-                ),
-                icon: const Icon(Icons.notifications_active_rounded,
-                    size: 18, color: Colors.white),
-                label: const Text(
-                  'Crear alerta para este viaje',
+            Row(
+              children: [
+                const Icon(Icons.explore_rounded,
+                    size: 18, color: AppColors.primary),
+                const SizedBox(width: 8),
+                const Text(
+                  'Resultados cercanos',
                   style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white),
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF1E293B)),
                 ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(25)),
-                  elevation: 0,
-                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Viajes que salen desde $origin hacia otros destinos',
+                style: const TextStyle(fontSize: 13, color: Color(0xFF64748B)),
               ),
             ),
-            const SizedBox(height: 12),
-            TextButton(
-              onPressed: () => context.pop(),
-              child: const Text('Modificar búsqueda',
-                  style: TextStyle(color: AppColors.textSecondary)),
+            const SizedBox(height: 16),
+            FutureBuilder<List<TripSearchResult>>(
+              future: nearbyFuture,
+              builder: (ctx, snap) {
+                if (snap.connectionState == ConnectionState.waiting) {
+                  return const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                }
+                final nearby = (snap.data ?? [])
+                    .where((t) =>
+                        destination == null ||
+                        destination!.isEmpty ||
+                        !t.destinationCity
+                            .toLowerCase()
+                            .contains(destination!.toLowerCase()))
+                    .toList();
+                if (nearby.isEmpty) {
+                  return const Text(
+                    'No hay viajes cercanos disponibles.',
+                    style: TextStyle(fontSize: 14, color: Color(0xFF94A3B8)),
+                  );
+                }
+                return Column(
+                  children: [
+                    for (final trip in nearby.take(5)) ...[
+                      _TripCard(trip: trip),
+                      const SizedBox(height: 14),
+                    ],
+                  ],
+                );
+              },
             ),
           ],
-        ),
+        ],
       ),
     );
   }
 }
 
-// ── Filter Bar ────────────────────────────────────────────────────────────────
+// ── Sort Bar ──────────────────────────────────────────────────────────────────
 
-class _FilterBar extends StatelessWidget {
-  const _FilterBar({
-    required this.onlyAvailable,
-    required this.onlyPets,
-    required this.sort,
+class _SortBar extends StatelessWidget {
+  const _SortBar({
+    required this.sortField,
+    required this.sortAsc,
     required this.total,
     required this.filtered,
-    required this.onAvailableChanged,
-    required this.onPetsChanged,
     required this.onSortChanged,
   });
 
-  final bool onlyAvailable;
-  final bool onlyPets;
-  final _SortMode sort;
+  final _SortField sortField;
+  final bool sortAsc;
   final int total;
   final int filtered;
-  final ValueChanged<bool> onAvailableChanged;
-  final ValueChanged<bool> onPetsChanged;
-  final ValueChanged<_SortMode> onSortChanged;
+  final void Function(_SortField field, bool asc) onSortChanged;
+
+  void _tap(_SortField field, bool defaultAsc) {
+    if (sortField == field) {
+      onSortChanged(field, !sortAsc);
+    } else {
+      onSortChanged(field, defaultAsc);
+    }
+  }
+
+  String _arrow(bool asc) => asc ? ' ↑' : ' ↓';
 
   @override
   Widget build(BuildContext context) {
@@ -402,26 +466,25 @@ class _FilterBar extends StatelessWidget {
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
-                  _FilterChip(
-                    label: 'Disponibles',
-                    icon: Icons.event_seat_rounded,
-                    active: onlyAvailable,
-                    onTap: () => onAvailableChanged(!onlyAvailable),
+                  _SortChip(
+                    label: 'Fecha${sortField == _SortField.date ? _arrow(sortAsc) : ''}',
+                    icon: Icons.calendar_today_rounded,
+                    active: sortField == _SortField.date,
+                    onTap: () => _tap(_SortField.date, true),
                   ),
                   const SizedBox(width: 8),
-                  _FilterChip(
-                    label: 'Mascotas',
-                    icon: Icons.pets_rounded,
-                    active: onlyPets,
-                    onTap: () => onPetsChanged(!onlyPets),
+                  _SortChip(
+                    label: 'Precio${sortField == _SortField.price ? _arrow(sortAsc) : ''}',
+                    icon: Icons.attach_money_rounded,
+                    active: sortField == _SortField.price,
+                    onTap: () => _tap(_SortField.price, true),
                   ),
                   const SizedBox(width: 8),
-                  _FilterChip(
-                    label: sort == _SortMode.date ? 'Fecha ↑' : 'Precio ↑',
-                    icon: Icons.sort_rounded,
-                    active: sort == _SortMode.price,
-                    onTap: () => onSortChanged(
-                        sort == _SortMode.date ? _SortMode.price : _SortMode.date),
+                  _SortChip(
+                    label: 'Valoración${sortField == _SortField.rating ? _arrow(sortAsc) : ''}',
+                    icon: Icons.star_rounded,
+                    active: sortField == _SortField.rating,
+                    onTap: () => _tap(_SortField.rating, false),
                   ),
                 ],
               ),
@@ -443,8 +506,8 @@ class _FilterBar extends StatelessWidget {
   }
 }
 
-class _FilterChip extends StatelessWidget {
-  const _FilterChip({
+class _SortChip extends StatelessWidget {
+  const _SortChip({
     required this.label,
     required this.icon,
     required this.active,
@@ -558,9 +621,12 @@ class _TripCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isFull = trip.freeSeats == 0;
-    return GestureDetector(
-      onTap: () => _showDetails(context),
-      child: Stack(
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _showDetails(context),
+        borderRadius: BorderRadius.circular(20),
+        child: Stack(
         clipBehavior: Clip.none,
         children: [
           Container(
@@ -717,40 +783,39 @@ class _TripCard extends StatelessWidget {
 
             // Date & time
             Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 const Icon(Icons.calendar_today_rounded,
-                    size: 14,
-                    color: AppColors.textSecondary),
+                    size: 14, color: Color(0xFF64748B)),
                 const SizedBox(width: 5),
                 Text(
-                  trip.formattedTime.isNotEmpty
-                      ? '${trip.formattedDate}  •  ${trip.formattedTime}'
-                      : trip.formattedDate,
+                  trip.formattedDate,
                   style: const TextStyle(
-                      fontSize: 13,
-                      color: AppColors.textSecondary),
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF1E293B)),
                 ),
+                if (trip.formattedTime.isNotEmpty) ...[
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 6),
+                    child: Text('·',
+                        style: TextStyle(
+                            color: Color(0xFF94A3B8), fontSize: 15)),
+                  ),
+                  const Icon(Icons.access_time_rounded,
+                      size: 14, color: Color(0xFF64748B)),
+                  const SizedBox(width: 4),
+                  Text(
+                    trip.formattedTime,
+                    style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF1E293B)),
+                  ),
+                ],
               ],
             ),
-            const SizedBox(height: 6),
-
-            // Seats available
-            Row(
-              children: [
-                const Icon(Icons.event_seat_rounded,
-                    size: 14,
-                    color: AppColors.textSecondary),
-                const SizedBox(width: 5),
-                Text(
-                  '${trip.freeSeats} lugar${trip.freeSeats != 1 ? 'es' : ''} disponible${trip.freeSeats != 1 ? 's' : ''}',
-                  style: const TextStyle(
-                      fontSize: 13,
-                      color: AppColors.textSecondary),
-                ),
-              ],
-            ),
-
-            // Badges — siempre visibles, grises si inactivos
+            // Badges — siempre visibles
             const SizedBox(height: 10),
             Wrap(
               spacing: 6,
@@ -759,24 +824,21 @@ class _TripCard extends StatelessWidget {
                 _Badge(
                     label: 'Mascotas',
                     icon: Icons.pets_rounded,
-                    bg: AppColors.greenLight,
-                    fg: AppColors.green,
-                    active: trip.allowsPets,
-                    large: true),
+                    activeColor: const Color(0xFF16A34A),
+                    description: 'El conductor acepta que viajes con tu mascota. Podés llevarla al auto sin problema.',
+                    active: trip.allowsPets),
                 _Badge(
                     label: 'Pasa a buscarte',
                     icon: Icons.home_rounded,
-                    bg: const Color(0xFFEFF6FF),
-                    fg: const Color(0xFF1D4ED8),
-                    active: trip.picksUpAtDoor,
-                    large: true),
+                    activeColor: const Color(0xFF1D4ED8),
+                    description: 'El conductor pasa a buscarte por tu domicilio. No necesitás ir a ningún punto de encuentro.',
+                    active: trip.picksUpAtDoor),
                 _Badge(
                     label: 'Te deja en destino',
                     icon: Icons.where_to_vote_rounded,
-                    bg: const Color(0xFFF5F3FF),
-                    fg: const Color(0xFF6D28D9),
-                    active: trip.dropsOffAtDoor,
-                    large: true),
+                    activeColor: const Color(0xFF7C3AED),
+                    description: 'El conductor te lleva hasta la puerta de tu destino final. No necesitás bajarte antes.',
+                    active: trip.dropsOffAtDoor),
               ],
             ),
 
@@ -848,10 +910,36 @@ class _TripCard extends StatelessWidget {
                 ],
               ),
             ],
+            // Ver detalles hint
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Text(
+                  'Ver detalles',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: isFull
+                        ? const Color(0xFF94A3B8)
+                        : AppColors.primary,
+                  ),
+                ),
+                const SizedBox(width: 3),
+                Icon(
+                  Icons.arrow_forward_rounded,
+                  size: 13,
+                  color: isFull
+                      ? const Color(0xFF94A3B8)
+                      : AppColors.primary,
+                ),
+              ],
+            ),
           ],
         ),
           ),
         ],
+      ),
       ),
     );
   }
@@ -871,6 +959,8 @@ class _TripDetailsSheetState extends State<_TripDetailsSheet> {
   bool _sending = false;
   bool _sent = false;
   final _messageController = TextEditingController();
+  final _pickupZoneController  = TextEditingController();
+  final _dropoffZoneController = TextEditingController();
   List<Map<String, String?>> _passengers = [];
 
   @override
@@ -897,10 +987,21 @@ class _TripDetailsSheetState extends State<_TripDetailsSheet> {
   @override
   void dispose() {
     _messageController.dispose();
+    _pickupZoneController.dispose();
+    _dropoffZoneController.dispose();
     super.dispose();
   }
 
   TripSearchResult get trip => widget.trip;
+
+  Future<void> _openInMaps(String address) async {
+    final uri = Uri.parse(
+      'https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(address)}',
+    );
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      if (mounted) AppToast.show(context, message: 'No se pudo abrir Maps');
+    }
+  }
 
   String _formatPrice(int price) => '\$${price.toString().replaceAllMapped(
         RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
@@ -923,7 +1024,7 @@ class _TripDetailsSheetState extends State<_TripDetailsSheet> {
       },
       pageBuilder: (ctx, _, __) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(24, 28, 24, 20),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -980,6 +1081,43 @@ class _TripDetailsSheetState extends State<_TripDetailsSheet> {
                           : '${_formatPrice(trip.pricePerSeat)} por asiento',
                     ),
                   ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              if (trip.picksUpAtDoor) ...[
+                _ZoneField(
+                  controller: _pickupZoneController,
+                  label: '¿Dónde te pasamos a buscar?',
+                  hint: 'Ej: Av. Corrientes 1234, Piso 3',
+                  icon: Icons.home_rounded,
+                ),
+                const SizedBox(height: 10),
+              ],
+              if (trip.dropsOffAtDoor) ...[
+                _ZoneField(
+                  controller: _dropoffZoneController,
+                  label: '¿Dónde te dejamos?',
+                  hint: 'Ej: Rivadavia 5678, Dto. 2A',
+                  icon: Icons.where_to_vote_rounded,
+                ),
+                const SizedBox(height: 10),
+              ],
+              TextField(
+                controller: _messageController,
+                maxLines: 2,
+                minLines: 1,
+                maxLength: 100,
+                textCapitalization: TextCapitalization.sentences,
+                decoration: InputDecoration(
+                  hintText: 'Mensaje para el conductor (opcional)',
+                  hintStyle: const TextStyle(fontSize: 13, color: Color(0xFF94A3B8)),
+                  filled: true,
+                  fillColor: const Color(0xFFF1F5F9),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
                 ),
               ),
               const SizedBox(height: 20),
@@ -1045,6 +1183,12 @@ class _TripDetailsSheetState extends State<_TripDetailsSheet> {
         tripId: trip.id,
         seatsRequested: 1,
         message: fullMessage,
+        passengerPickupAddress: trip.picksUpAtDoor
+            ? _pickupZoneController.text.trim()
+            : null,
+        passengerDropoffAddress: trip.dropsOffAtDoor
+            ? _dropoffZoneController.text.trim()
+            : null,
       );
       if (mounted) setState(() => _sent = true);
     } catch (e) {
@@ -1072,17 +1216,7 @@ class _TripDetailsSheetState extends State<_TripDetailsSheet> {
       ),
       child: Column(
         children: [
-          const SizedBox(height: 12),
-          Center(
-            child: Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                  color: const Color(0xFFE2E8F0),
-                  borderRadius: BorderRadius.circular(2)),
-            ),
-          ),
-          const SizedBox(height: 20),
+          const SheetHandle(),
           Expanded(
             child: SingleChildScrollView(
               padding:
@@ -1090,31 +1224,54 @@ class _TripDetailsSheetState extends State<_TripDetailsSheet> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Date title
+                  // Date + time title
                   Text(
                     trip.formattedDate,
                     style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
+                        fontSize: 24,
+                        fontWeight: FontWeight.w800,
                         color: Color(0xFF1E293B)),
                   ),
+                  if (trip.formattedTime.isNotEmpty) ...[
+                    const SizedBox(height: 3),
+                    Row(
+                      children: [
+                        const Icon(Icons.access_time_rounded,
+                            size: 16, color: Color(0xFF1D4ED8)),
+                        const SizedBox(width: 5),
+                        Text(
+                          trip.formattedTime,
+                          style: const TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF1D4ED8)),
+                        ),
+                      ],
+                    ),
+                  ],
                   const SizedBox(height: 4),
 
                   // Route — effective passenger route
                   _RouteRow(trip: trip, detailed: true),
-                  // Specific pickup/dropoff addresses (when driver set them)
+                  // Specific pickup/dropoff addresses (when driver set them) — tap to open Maps
                   if (trip.pickupAddress != null ||
                       trip.dropoffAddress != null) ...[
                     const SizedBox(height: 10),
                     if (trip.pickupAddress != null)
-                      _DetailRow(
-                          icon: Icons.trip_origin_rounded,
-                          text: 'Dirección de partida: ${trip.pickupAddress!}'),
+                      _TappableAddressRow(
+                        icon: Icons.trip_origin_rounded,
+                        label: 'Punto de salida',
+                        address: trip.pickupAddress!,
+                        onTap: () => _openInMaps(trip.pickupAddress!),
+                      ),
                     if (trip.dropoffAddress != null) ...[
                       const SizedBox(height: 6),
-                      _DetailRow(
-                          icon: Icons.place_rounded,
-                          text: 'Dirección de destino: ${trip.dropoffAddress!}'),
+                      _TappableAddressRow(
+                        icon: Icons.place_rounded,
+                        label: 'Punto de llegada',
+                        address: trip.dropoffAddress!,
+                        onTap: () => _openInMaps(trip.dropoffAddress!),
+                      ),
                     ],
                   ],
                   const SizedBox(height: 24),
@@ -1141,7 +1298,9 @@ class _TripDetailsSheetState extends State<_TripDetailsSheet> {
                                   style: const TextStyle(
                                       fontWeight: FontWeight.w700,
                                       fontSize: 15,
-                                      color: Color(0xFF1E293B))),
+                                      color: AppColors.primary,
+                                      decoration: TextDecoration.underline,
+                                      decorationColor: AppColors.primary)),
                               const SizedBox(height: 3),
                               Row(
                                 children: [
@@ -1175,11 +1334,6 @@ class _TripDetailsSheetState extends State<_TripDetailsSheet> {
                   const SizedBox(height: 16),
 
                   // Details
-                  if (trip.formattedTime.isNotEmpty)
-                    _DetailRow(
-                        icon: Icons.access_time_rounded,
-                        text:
-                            '${trip.formattedDate}  ·  ${trip.formattedTime}'),
                   if (trip.vehicleDisplay.isNotEmpty) ...[
                     const SizedBox(height: 10),
                     _DetailRow(
@@ -1200,7 +1354,7 @@ class _TripDetailsSheetState extends State<_TripDetailsSheet> {
                         text: 'Rutas: ${trip.via.join(', ')}'),
                   ],
 
-                  // Badges — siempre visibles, grises si inactivos
+                  // Badges — siempre visibles
                   const SizedBox(height: 10),
                   Wrap(
                     spacing: 6,
@@ -1209,20 +1363,20 @@ class _TripDetailsSheetState extends State<_TripDetailsSheet> {
                       _Badge(
                           label: 'Mascotas',
                           icon: Icons.pets_rounded,
-                          bg: AppColors.greenLight,
-                          fg: AppColors.green,
+                          activeColor: const Color(0xFF16A34A),
+                          description: 'El conductor acepta que viajes con tu mascota. Podés llevarla al auto sin problema.',
                           active: trip.allowsPets),
                       _Badge(
                           label: 'Pasa a buscarte',
                           icon: Icons.home_rounded,
-                          bg: const Color(0xFFEFF6FF),
-                          fg: const Color(0xFF1D4ED8),
+                          activeColor: const Color(0xFF1D4ED8),
+                          description: 'El conductor pasa a buscarte por tu domicilio. No necesitás ir a ningún punto de encuentro.',
                           active: trip.picksUpAtDoor),
                       _Badge(
                           label: 'Te deja en destino',
                           icon: Icons.where_to_vote_rounded,
-                          bg: const Color(0xFFF5F3FF),
-                          fg: const Color(0xFF6D28D9),
+                          activeColor: const Color(0xFF7C3AED),
+                          description: 'El conductor te lleva hasta la puerta de tu destino final. No necesitás bajarte antes.',
                           active: trip.dropsOffAtDoor),
                     ],
                   ),
@@ -1369,28 +1523,6 @@ class _TripDetailsSheetState extends State<_TripDetailsSheet> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (trip.freeSeats > 0) ...[
-                  TextField(
-                    controller: _messageController,
-                    maxLines: 2,
-                    minLines: 1,
-                    textCapitalization: TextCapitalization.sentences,
-                    decoration: InputDecoration(
-                      hintText: 'Mensaje para el conductor (opcional)',
-                      hintStyle: const TextStyle(
-                          fontSize: 13, color: Color(0xFF94A3B8)),
-                      filled: true,
-                      fillColor: const Color(0xFFF1F5F9),
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 10),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide.none,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                ],
                 SizedBox(
                   width: double.infinity,
                   height: 54,
@@ -1518,6 +1650,104 @@ class _SentConfirmation extends StatelessWidget {
 }
 
 // ── Shared small widgets ──────────────────────────────────────────────────────
+
+class _TappableAddressRow extends StatelessWidget {
+  const _TappableAddressRow({
+    required this.icon,
+    required this.label,
+    required this.address,
+    required this.onTap,
+  });
+  final IconData icon;
+  final String label;
+  final String address;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 16, color: AppColors.textSecondary),
+          const SizedBox(width: 8),
+          Expanded(
+            child: RichText(
+              text: TextSpan(
+                style: const TextStyle(fontSize: 13, color: Color(0xFF475569)),
+                children: [
+                  TextSpan(text: '$label: '),
+                  TextSpan(
+                    text: address,
+                    style: const TextStyle(
+                      color: Color(0xFF1A73E8),
+                      decoration: TextDecoration.underline,
+                      decorationColor: Color(0xFF1A73E8),
+                    ),
+                  ),
+                  const WidgetSpan(
+                    alignment: PlaceholderAlignment.middle,
+                    child: Padding(
+                      padding: EdgeInsets.only(left: 3),
+                      child: Icon(Icons.open_in_new, size: 12, color: Color(0xFF1A73E8)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ZoneField extends StatelessWidget {
+  const _ZoneField({
+    required this.controller,
+    required this.label,
+    required this.hint,
+    required this.icon,
+  });
+  final TextEditingController controller;
+  final String label;
+  final String hint;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(children: [
+          Icon(icon, size: 14, color: AppColors.primary),
+          const SizedBox(width: 6),
+          Text(label, style: const TextStyle(
+              fontSize: 12, fontWeight: FontWeight.w600,
+              color: AppColors.textPrimary)),
+        ]),
+        const SizedBox(height: 6),
+        TextField(
+          controller: controller,
+          maxLength: 100,
+          textCapitalization: TextCapitalization.sentences,
+          decoration: InputDecoration(
+            hintText: hint,
+            counterText: '',
+            filled: true,
+            fillColor: const Color(0xFFF1F5F9),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide.none,
+            ),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          ),
+        ),
+      ],
+    );
+  }
+}
 
 class _DetailRow extends StatelessWidget {
   const _DetailRow({required this.icon, required this.text});
@@ -1809,49 +2039,124 @@ class _Badge extends StatelessWidget {
   const _Badge({
     required this.label,
     required this.icon,
-    required this.bg,
-    required this.fg,
+    required this.activeColor,
+    required this.description,
     this.active = true,
-    this.large = false,
   });
   final String label;
   final IconData icon;
-  final Color bg;
-  final Color fg;
+  final Color activeColor;
+  final String description;
   final bool active;
-  final bool large;
 
-  static const _inactiveBg = Color(0xFFF1F5F9);
-  static const _inactiveFg = Color(0xFFCBD5E1);
+  void _showInfo(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        contentPadding: const EdgeInsets.fromLTRB(24, 28, 24, 8),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 54,
+              height: 54,
+              decoration: BoxDecoration(
+                color: active
+                    ? activeColor.withValues(alpha: 0.12)
+                    : const Color(0xFFF1F5F9),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, size: 26,
+                  color: active ? activeColor : const Color(0xFF94A3B8)),
+            ),
+            const SizedBox(height: 14),
+            Text(label,
+                style: const TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1E293B))),
+            const SizedBox(height: 8),
+            Text(description,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                    fontSize: 14,
+                    color: Color(0xFF64748B),
+                    height: 1.5)),
+            if (!active) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF7ED),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFFDE68A)),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.info_outline_rounded,
+                        size: 14, color: Color(0xFFF59E0B)),
+                    SizedBox(width: 6),
+                    Flexible(
+                      child: Text('No disponible en este viaje',
+                          style: TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFFF59E0B),
+                              fontWeight: FontWeight.w600)),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Entendido',
+                style: TextStyle(fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    final bgColor = active ? bg : _inactiveBg;
-    final fgColor = active ? fg : _inactiveFg;
-    final iconSize = large ? 15.0 : 12.0;
-    final fontSize = large ? 13.0 : 11.0;
-    final hPad = large ? 11.0 : 8.0;
-    final vPad = large ? 6.0 : 4.0;
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: hPad, vertical: vPad),
-      decoration: BoxDecoration(
-          color: bgColor, borderRadius: BorderRadius.circular(20)),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: iconSize, color: fgColor),
-          const SizedBox(width: 5),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: fontSize,
-              color: fgColor,
-              fontWeight: FontWeight.w600,
-              decoration: active ? null : TextDecoration.lineThrough,
-              decorationColor: _inactiveFg,
-            ),
+    return GestureDetector(
+      onTap: () => _showInfo(context),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding:
+            const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+        decoration: BoxDecoration(
+          color: active ? activeColor : Colors.transparent,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: active ? activeColor : const Color(0xFFE2E8F0),
+            width: 1.5,
           ),
-        ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon,
+                size: 14,
+                color: active ? Colors.white : const Color(0xFFCBD5E1)),
+            const SizedBox(width: 5),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight:
+                    active ? FontWeight.w700 : FontWeight.w500,
+                color:
+                    active ? Colors.white : const Color(0xFFCBD5E1),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
