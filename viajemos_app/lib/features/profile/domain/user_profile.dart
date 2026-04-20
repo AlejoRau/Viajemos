@@ -5,7 +5,8 @@ class UserProfile {
     required this.id,
     required this.fullName,
     required this.email,
-    required this.avgRating,
+    required this.avgRatingDriver,
+    required this.avgRatingPassenger,
     required this.tripsDriver,
     required this.tripsPassenger,
     required this.memberSince,
@@ -26,7 +27,8 @@ class UserProfile {
   final String id;
   final String fullName;
   final String email;
-  final double avgRating;
+  final double avgRatingDriver;
+  final double avgRatingPassenger;
   final int tripsDriver;
   final int tripsPassenger;
   final DateTime memberSince;

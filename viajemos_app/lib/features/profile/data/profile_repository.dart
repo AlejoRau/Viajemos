@@ -13,7 +13,7 @@ class ProfileRepository {
     var data = await _client
         .from('profiles')
         .select(
-            'full_name, avg_rating, trips_driven, trips_taken, bio_driver, bio_passenger, instagram, facebook, phone, birth_date, avatar_url, home_city')
+            'full_name, avg_rating_driver, avg_rating_passenger, trips_driven, trips_taken, bio_driver, bio_passenger, instagram, facebook, phone, birth_date, avatar_url, home_city')
         .eq('id', user.id)
         .maybeSingle();
 
@@ -21,7 +21,8 @@ class ProfileRepository {
       await _client.from('profiles').insert({'id': user.id});
       data = {
         'full_name': null,
-        'avg_rating': 0.0,
+        'avg_rating_driver': 0.0,
+        'avg_rating_passenger': 0.0,
         'trips_driven': 0,
         'trips_taken': 0,
         'bio_driver': null,
@@ -47,7 +48,8 @@ class ProfileRepository {
       id: user.id,
       fullName: fullName,
       email: user.email ?? '',
-      avgRating: double.tryParse('${data['avg_rating'] ?? ''}') ?? 0.0,
+      avgRatingDriver: (data['avg_rating_driver'] as num?)?.toDouble() ?? 0.0,
+      avgRatingPassenger: (data['avg_rating_passenger'] as num?)?.toDouble() ?? 0.0,
       tripsDriver: (data['trips_driven'] as int?) ?? 0,
       tripsPassenger: (data['trips_taken'] as int?) ?? 0,
       memberSince: DateTime.parse(user.createdAt),
@@ -118,7 +120,7 @@ class ProfileRepository {
   Future<UserProfile> fetchPublicProfile(String userId) async {
     final data = await _client
         .from('profiles')
-        .select('full_name, avg_rating, trips_driven, trips_taken, cancelled_trips_count, expelled_passengers_count, late_cancellations_count, bio_driver, bio_passenger, instagram, facebook, created_at, birth_date, home_city')
+        .select('full_name, avg_rating_driver, avg_rating_passenger, trips_driven, trips_taken, cancelled_trips_count, expelled_passengers_count, late_cancellations_count, bio_driver, bio_passenger, instagram, facebook, created_at, birth_date, home_city')
         .eq('id', userId)
         .single();
 
@@ -130,7 +132,8 @@ class ProfileRepository {
           ? data['full_name'] as String
           : 'Usuario',
       email: '',
-      avgRating: double.tryParse('${data['avg_rating'] ?? ''}') ?? 0.0,
+      avgRatingDriver: (data['avg_rating_driver'] as num?)?.toDouble() ?? 0.0,
+      avgRatingPassenger: (data['avg_rating_passenger'] as num?)?.toDouble() ?? 0.0,
       tripsDriver: (data['trips_driven'] as int?) ?? 0,
       tripsPassenger: (data['trips_taken'] as int?) ?? 0,
       cancelledTripsCount: (data['cancelled_trips_count'] as int?) ?? 0,

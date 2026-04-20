@@ -70,7 +70,7 @@ class PassengerRequest {
       departureTimeTo: json['departure_time_to'] as String?,
       maxPrice: json['max_price'] as int?,
       description: json['description'] as String?,
-      avgRating: (profile['avg_rating'] as num?)?.toDouble(),
+      avgRating: (profile['avg_rating_passenger'] as num?)?.toDouble(),
     );
   }
 }
@@ -121,7 +121,7 @@ class PassengerRequestRepository {
   }) async {
     var query = _client
         .from('trip_alerts')
-        .select('*, profiles!user_id(full_name, avg_rating)')
+        .select('*, profiles!user_id(full_name, avg_rating_passenger)')
         .eq('is_active', true);
 
     if (origin != null && origin.isNotEmpty) {

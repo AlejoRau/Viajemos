@@ -23,7 +23,7 @@ class TripSearchRepository {
       via,
       stops,
       description,
-      profiles!owner_id(full_name, avg_rating, avatar_url),
+      profiles!owner_id(full_name, avg_rating_driver, avatar_url, trips_driven),
       vehicles!vehicle_id(brand, model, color),
       trip_requests!trip_id(status, passenger_id, profiles!passenger_id(full_name, avatar_url))
     ''';

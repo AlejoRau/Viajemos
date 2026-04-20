@@ -12,6 +12,7 @@ class TripSearchResult {
     required this.driverName,
     required this.driverRating,
     this.driverAvatarUrl,
+    this.driverTripsCount = 0,
     required this.originAddress,
     required this.destinationAddress,
     required this.departureDate,
@@ -41,6 +42,7 @@ class TripSearchResult {
   final String driverName;
   final double driverRating;
   final String? driverAvatarUrl;
+  final int driverTripsCount;
   final String originAddress;
   final String destinationAddress;
   final String departureDate; // ISO "YYYY-MM-DD"
@@ -132,6 +134,7 @@ class TripSearchResult {
       driverName: driverName,
       driverRating: driverRating,
       driverAvatarUrl: driverAvatarUrl,
+      driverTripsCount: driverTripsCount,
       originAddress: originAddress,
       destinationAddress: destinationAddress,
       departureDate: departureDate,
@@ -164,8 +167,9 @@ class TripSearchResult {
       id: json['id'] as String,
       driverId: json['owner_id'] as String,
       driverName: (profile['full_name'] as String?) ?? 'Conductor',
-      driverRating: (profile['avg_rating'] as num?)?.toDouble() ?? 0.0,
+      driverRating: (profile['avg_rating_driver'] as num?)?.toDouble() ?? 0.0,
       driverAvatarUrl: profile['avatar_url'] as String?,
+      driverTripsCount: (profile['trips_driven'] as int?) ?? 0,
       originAddress: json['origin_address'] as String,
       destinationAddress: json['destination_address'] as String,
       departureDate: json['departure_date'] as String,

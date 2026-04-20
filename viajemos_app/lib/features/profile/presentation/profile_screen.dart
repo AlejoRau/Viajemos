@@ -518,24 +518,16 @@ class _InfoPersonalTab extends StatelessWidget {
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.star_rounded, size: 17, color: Color(0xFFFACC15)),
-                    const SizedBox(width: 4),
-                    Text(
-                      profile.avgRating.toStringAsFixed(1),
-                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                    _RatingChip(
+                      label: 'Conductor',
+                      icon: Icons.directions_car_rounded,
+                      rating: profile.avgRatingDriver,
                     ),
-                    const SizedBox(width: 10),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFEEF2FF),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: const Color(0xFFC7D2FE)),
-                      ),
-                      child: Text(
-                        isDriver ? 'Conductor' : 'Pasajero',
-                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.primary),
-                      ),
+                    const SizedBox(width: 8),
+                    _RatingChip(
+                      label: 'Pasajero',
+                      icon: Icons.airline_seat_recline_normal_rounded,
+                      rating: profile.avgRatingPassenger,
                     ),
                   ],
                 ),
@@ -2768,6 +2760,54 @@ class _PhoneVerificationSheetState
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ── Rating chip — muestra ⭐ valor · ícono · label ────────────────────────────
+
+class _RatingChip extends StatelessWidget {
+  const _RatingChip({
+    required this.label,
+    required this.icon,
+    required this.rating,
+  });
+  final String label;
+  final IconData icon;
+  final double rating;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasRating = rating > 0;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF1F5F9),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.star_rounded, size: 13, color: Color(0xFFFACC15)),
+          const SizedBox(width: 3),
+          Text(
+            hasRating ? rating.toStringAsFixed(1) : '-',
+            style: const TextStyle(
+                fontSize: 13, fontWeight: FontWeight.w700,
+                color: Color(0xFF1E293B)),
+          ),
+          const SizedBox(width: 5),
+          Icon(icon, size: 13, color: AppColors.textSecondary),
+          const SizedBox(width: 3),
+          Text(
+            label,
+            style: const TextStyle(
+                fontSize: 11, fontWeight: FontWeight.w500,
+                color: AppColors.textSecondary),
+          ),
+        ],
       ),
     );
   }

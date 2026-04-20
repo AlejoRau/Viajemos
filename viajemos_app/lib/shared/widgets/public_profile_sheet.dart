@@ -169,17 +169,13 @@ class _ProfileBodyState extends State<_ProfileBody> {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    Row(children: [
-                      const Icon(Icons.star_rounded, size: 15, color: Color(0xFFFACC15)),
-                      const SizedBox(width: 3),
-                      Text(
-                        p.avgRating > 0
-                            ? p.avgRating.toStringAsFixed(1)
-                            : 'Sin calificación',
-                        style: const TextStyle(fontSize: 13,
-                            fontWeight: FontWeight.w600, color: Color(0xFF1E293B)),
-                      ),
-                    ]),
+                    _RatingRow(
+                      labelDriver: _showingDriver ? null : 'Conductor',
+                      labelPassenger: _showingDriver ? null : 'Pasajero',
+                      ratingDriver: p.avgRatingDriver,
+                      ratingPassenger: p.avgRatingPassenger,
+                      showingDriver: _showingDriver,
+                    ),
                     const SizedBox(height: 3),
                     Text('Miembro desde ${_formatYear(p.memberSince)}',
                         style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
@@ -458,6 +454,53 @@ class _StatBox extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+// ── Rating row — muestra conductor y/o pasajero según el tab activo ──────────
+
+class _RatingRow extends StatelessWidget {
+  const _RatingRow({
+    required this.ratingDriver,
+    required this.ratingPassenger,
+    required this.showingDriver,
+    this.labelDriver,
+    this.labelPassenger,
+  });
+  final double ratingDriver;
+  final double ratingPassenger;
+  final bool showingDriver;
+  final String? labelDriver;
+  final String? labelPassenger;
+
+  Widget _chip(double rating, String label) {
+    final hasRating = rating > 0;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Icon(Icons.star_rounded, size: 14, color: Color(0xFFFACC15)),
+        const SizedBox(width: 3),
+        Text(
+          hasRating ? rating.toStringAsFixed(1) : 'Sin cal.',
+          style: const TextStyle(
+              fontSize: 13, fontWeight: FontWeight.w600,
+              color: Color(0xFF1E293B)),
+        ),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: const TextStyle(fontSize: 11, color: Color(0xFF94A3B8)),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (showingDriver) {
+      return _chip(ratingDriver, 'conductor');
+    }
+    return _chip(ratingPassenger, 'pasajero');
   }
 }
 

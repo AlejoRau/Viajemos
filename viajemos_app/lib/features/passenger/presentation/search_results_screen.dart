@@ -1249,14 +1249,14 @@ class _TripDetailsSheetState extends State<_TripDetailsSheet> {
                     Row(
                       children: [
                         const Icon(Icons.access_time_rounded,
-                            size: 16, color: Color(0xFF1D4ED8)),
+                            size: 16, color: Color(0xFF1E293B)),
                         const SizedBox(width: 5),
                         Text(
                           trip.formattedTime,
                           style: const TextStyle(
                               fontSize: 17,
                               fontWeight: FontWeight.w600,
-                              color: Color(0xFF1D4ED8)),
+                              color: Color(0xFF1E293B)),
                         ),
                       ],
                     ),
@@ -1310,9 +1310,7 @@ class _TripDetailsSheetState extends State<_TripDetailsSheet> {
                                   style: const TextStyle(
                                       fontWeight: FontWeight.w700,
                                       fontSize: 15,
-                                      color: AppColors.primary,
-                                      decoration: TextDecoration.underline,
-                                      decorationColor: AppColors.primary)),
+                                      color: Color(0xFF1E293B))),
                               const SizedBox(height: 3),
                               Row(
                                 children: [
@@ -1329,6 +1327,13 @@ class _TripDetailsSheetState extends State<_TripDetailsSheet> {
                                         fontSize: 13,
                                         fontWeight: FontWeight.w600,
                                         color: Color(0xFF1E293B)),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    '· ${trip.driverTripsCount} viaje${trip.driverTripsCount == 1 ? '' : 's'}',
+                                    style: const TextStyle(
+                                        fontSize: 12,
+                                        color: Color(0xFF64748B)),
                                   ),
                                 ],
                               ),
