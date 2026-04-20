@@ -64,33 +64,34 @@ class _AppConfirmDialog {
     String confirmLabel = 'Sí',
     bool confirmOnLeft = false,
   }) async {
-    final confirmBtn = ElevatedButton(
-      onPressed: () => Navigator.pop(context, true),
-      style: _btn(confirmOnLeft ? _red : _green),
-      child: Text(confirmLabel, style: const TextStyle(fontWeight: FontWeight.w600)),
-    );
-    final cancelBtn = ElevatedButton(
-      onPressed: () => Navigator.pop(context, false),
-      style: _btn(confirmOnLeft ? _green : _red),
-      child: Text(cancelLabel, style: const TextStyle(fontWeight: FontWeight.w600)),
-    );
-
     final result = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(title,
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-        content: content,
-        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        actions: [
-          Row(
-            children: confirmOnLeft
-                ? [Expanded(child: confirmBtn), const SizedBox(width: 12), Expanded(child: cancelBtn)]
-                : [Expanded(child: cancelBtn),  const SizedBox(width: 12), Expanded(child: confirmBtn)],
-          ),
-        ],
-      ),
+      builder: (ctx) {
+        final confirmBtn = ElevatedButton(
+          onPressed: () => Navigator.pop(ctx, true),
+          style: _btn(confirmOnLeft ? _red : _green),
+          child: Text(confirmLabel, style: const TextStyle(fontWeight: FontWeight.w600)),
+        );
+        final cancelBtn = ElevatedButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          style: _btn(confirmOnLeft ? _green : _red),
+          child: Text(cancelLabel, style: const TextStyle(fontWeight: FontWeight.w600)),
+        );
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text(title,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+          content: content,
+          actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          actions: [
+            Row(
+              children: confirmOnLeft
+                  ? [Expanded(child: confirmBtn), const SizedBox(width: 12), Expanded(child: cancelBtn)]
+                  : [Expanded(child: cancelBtn),  const SizedBox(width: 12), Expanded(child: confirmBtn)],
+            ),
+          ],
+        );
+      },
     );
     return result ?? false;
   }
@@ -297,6 +298,7 @@ class _ActiveTripCardState extends ConsumerState<_ActiveTripCard> {
       if (!confirmed) return;
     }
 
+    if (!mounted) return;
     setState(() {
       _isPrivate = newValue;
       _togglingPrivacy = true;
@@ -392,9 +394,8 @@ class _ActiveTripCardState extends ConsumerState<_ActiveTripCard> {
           ],
         ],
       ),
-      cancelLabel: 'Volver',
-      confirmLabel: 'Cancelar viaje',
-      confirmOnLeft: true,
+      cancelLabel: 'No, volver',
+      confirmLabel: 'Sí, cancelar',
     );
 
     final message = msgController.text.trim();
@@ -589,53 +590,19 @@ class _ActiveTripCardState extends ConsumerState<_ActiveTripCard> {
                   const SizedBox(height: 8),
 
                   // Date · time · seats
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
+                  Wrap(
+                    spacing: 12,
                     children: [
-                      const Icon(Icons.calendar_today_rounded,
-                          size: 14, color: Color(0xFF64748B)),
-                      const SizedBox(width: 5),
-                      Text(
-                        _formatDate(trip.departureDate),
-                        style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                            color: Color(0xFF1E293B)),
-                      ),
-                      if (trip.departureTime != null) ...[
-                        const Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 6),
-                          child: Text('·',
-                              style: TextStyle(
-                                  color: Color(0xFF94A3B8), fontSize: 15)),
-                        ),
-                        const Icon(Icons.access_time_rounded,
-                            size: 14, color: Color(0xFF64748B)),
-                        const SizedBox(width: 4),
-                        Text(
-                          trip.departureTime!,
-                          style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFF1E293B)),
-                        ),
-                      ],
-                      const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 6),
-                        child: Text('·',
-                            style: TextStyle(
-                                color: Color(0xFF94A3B8), fontSize: 15)),
-                      ),
-                      const Icon(Icons.event_seat_rounded,
-                          size: 14, color: Color(0xFF64748B)),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${trip.freeSeats}/${trip.availableSeats} libres',
-                        style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                            color: Color(0xFF1E293B)),
-                      ),
+                      _InfoChip(
+                          icon: Icons.calendar_today_rounded,
+                          label: _formatDate(trip.departureDate)),
+                      if (trip.departureTime != null)
+                        _InfoChip(
+                            icon: Icons.access_time_rounded,
+                            label: trip.departureTime!),
+                      _InfoChip(
+                          icon: Icons.event_seat_rounded,
+                          label: '${trip.freeSeats}/${trip.availableSeats} libres'),
                     ],
                   ),
                   const SizedBox(height: 10),
@@ -645,12 +612,9 @@ class _ActiveTripCardState extends ConsumerState<_ActiveTripCard> {
                     trip.splitCosts
                         ? 'Gastos divididos'
                         : '\$${_formatNum(trip.pricePerSeat)} por asiento',
-                    style: TextStyle(
-                      fontSize: 19,
-                      fontWeight: FontWeight.bold,
-                      color: trip.splitCosts
-                          ? const Color(0xFF1D4ED8)
-                          : AppColors.primary,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: AppColors.textSecondary,
                     ),
                   ),
 

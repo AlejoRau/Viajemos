@@ -1187,7 +1187,7 @@ class _InputBar extends StatefulWidget {
 class _InputBarState extends State<_InputBar> {
   bool _hasText = false;
   int _charCount = 0;
-  static const int _maxChars = 50;
+  static const int _maxChars = 100;
 
   @override
   void initState() {
