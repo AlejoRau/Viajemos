@@ -569,15 +569,33 @@ class _CreateTripScreenState extends ConsumerState<CreateTripScreen> {
       final repo = TripRepository();
       final originCity = _originController.text.trim();
       final destCity = _destinationController.text.trim();
+
+      // Use exact map-pin coords if available; silently fall back to city centroid
+      // so geographic nearby search works even for "picks up at door" trips.
+      double? finalOriginLat = _originResult?.lat;
+      double? finalOriginLng = _originResult?.lng;
+      double? finalDestLat   = _destResult?.lat;
+      double? finalDestLng   = _destResult?.lng;
+      if (finalOriginLat == null || finalOriginLng == null) {
+        final c = await CitySearchService.instance.geocodeCity(originCity);
+        finalOriginLat = c?.$1;
+        finalOriginLng = c?.$2;
+      }
+      if (finalDestLat == null || finalDestLng == null) {
+        final c = await CitySearchService.instance.geocodeCity(destCity);
+        finalDestLat = c?.$1;
+        finalDestLng = c?.$2;
+      }
+
       final tripId = await repo.createTrip(
         originAddress: originCity,
         destinationAddress: destCity,
         pickupAddress: _picksUpPassengers ? null : _originResult?.address,
         dropoffAddress: _dropsOffPassengers ? null : _destResult?.address,
-        originLat: _originResult?.lat,
-        originLng: _originResult?.lng,
-        destLat: _destResult?.lat,
-        destLng: _destResult?.lng,
+        originLat: finalOriginLat,
+        originLng: finalOriginLng,
+        destLat: finalDestLat,
+        destLng: finalDestLng,
         availableSeats: _seats,
         pricePerSeat: _splitCosts ? 0 : _price,
         departureDate: _departureDate!,
@@ -1592,9 +1610,9 @@ class _SeatsAndPriceCardState extends State<_SeatsAndPriceCard> {
                         color: Color(0xFF1E293B)),
                   ),
                   Text(
-                    r'Recomendado: $4.500',
+                    'En pesos argentinos (ARS)',
                     style: TextStyle(
-                        fontSize: 14, color: Color(0xFF64748B)),
+                        fontSize: 12, color: Color(0xFF94A3B8)),
                   ),
                 ],
               ),
@@ -1663,17 +1681,17 @@ class _SeatsAndPriceCardState extends State<_SeatsAndPriceCard> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'Dividir gastos',
+                      'Dividir gastos de combustible',
                       style: TextStyle(
                           fontWeight: FontWeight.w600,
-                          fontSize: 15,
+                          fontSize: 16,
                           color: Color(0xFF1E293B)),
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'Activa esta opción si el precio del viaje será la división de los gastos totales del mismo',
-                      style: const TextStyle(
-                          fontSize: 11,
+                    const SizedBox(height: 4),
+                    const Text(
+                      'El precio que ingresás es la parte del gasto de combustible del viaje que le corresponde a cada pasajero.',
+                      style: TextStyle(
+                          fontSize: 13,
                           color: Color(0xFF64748B),
                           height: 1.4),
                     ),

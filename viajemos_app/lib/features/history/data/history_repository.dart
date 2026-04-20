@@ -238,6 +238,7 @@ class ActiveDriverTrip {
     required this.picksUpAtDoor,
     required this.dropsOffAtDoor,
     required this.isPrivate,
+    this.splitCosts = false,
     this.originExactAddress,
     this.destinationExactAddress,
     this.departureTime,
@@ -268,6 +269,7 @@ class ActiveDriverTrip {
   final bool picksUpAtDoor;
   final bool dropsOffAtDoor;
   final bool isPrivate;
+  final bool splitCosts;
   final String? departureTime;
   final String? description;
   final String? vehicleBrand;
@@ -368,6 +370,7 @@ class HistoryRepository {
         picksUpAtDoor: row['picks_up_at_door'] as bool? ?? false,
         dropsOffAtDoor: row['drops_off_at_door'] as bool? ?? false,
         isPrivate: row['is_private'] as bool? ?? false,
+        splitCosts: row['split_costs'] as bool? ?? false,
         departureTime: timeRaw != null && timeRaw.length >= 5
             ? timeRaw.substring(0, 5)
             : null,

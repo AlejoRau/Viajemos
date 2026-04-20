@@ -10,6 +10,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../shared/widgets/public_profile_sheet.dart';
 import '../../../shared/widgets/sheet_handle.dart';
 import '../../../shared/widgets/app_toast.dart';
+import '../../../shared/services/city_search_service.dart';
 import '../data/trip_search_repository.dart';
 import '../domain/trip_search_result.dart';
 
@@ -180,10 +181,28 @@ class _SearchResultsScreenState
       maxPrice: int.tryParse(widget.maxPriceStr ?? ''),
     );
     if (widget.destination?.isNotEmpty == true) {
-      _nearbyFuture = TripSearchRepository().searchTrips(
-        origin: widget.origin,
-      );
+      _nearbyFuture = _fetchNearbyTrips();
     }
+  }
+
+  Future<List<TripSearchResult>> _fetchNearbyTrips() async {
+    final svc = CitySearchService.instance;
+    final originCoords = await svc.geocodeCity(widget.origin);
+    if (originCoords == null) return [];
+
+    double? destLat, destLng;
+    if (widget.destination?.isNotEmpty == true) {
+      final destCoords = await svc.geocodeCity(widget.destination!);
+      destLat = destCoords?.$1;
+      destLng = destCoords?.$2;
+    }
+
+    return TripSearchRepository().searchTripsNearby(
+      originLat: originCoords.$1,
+      originLng: originCoords.$2,
+      destLat: destLat,
+      destLng: destLng,
+    );
   }
 
   String get _title {
@@ -379,7 +398,7 @@ class _EmptyState extends StatelessWidget {
             Align(
               alignment: Alignment.centerLeft,
               child: Text(
-                'Viajes que salen desde $origin hacia otros destinos',
+                'Origen o destino a menos de 100 km de tu búsqueda',
                 style: const TextStyle(fontSize: 13, color: Color(0xFF64748B)),
               ),
             ),
@@ -393,14 +412,7 @@ class _EmptyState extends StatelessWidget {
                     child: Center(child: CircularProgressIndicator()),
                   );
                 }
-                final nearby = (snap.data ?? [])
-                    .where((t) =>
-                        destination == null ||
-                        destination!.isEmpty ||
-                        !t.destinationCity
-                            .toLowerCase()
-                            .contains(destination!.toLowerCase()))
-                    .toList();
+                final nearby = snap.data ?? [];
                 if (nearby.isEmpty) {
                   return const Text(
                     'No hay viajes cercanos disponibles.',

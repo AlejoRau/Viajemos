@@ -589,29 +589,68 @@ class _ActiveTripCardState extends ConsumerState<_ActiveTripCard> {
                   const SizedBox(height: 8),
 
                   // Date · time · seats
-                  Wrap(
-                    spacing: 12,
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      _InfoChip(
-                          icon: Icons.calendar_today_rounded,
-                          label: _formatDate(trip.departureDate)),
-                      if (trip.departureTime != null)
-                        _InfoChip(
-                            icon: Icons.access_time_rounded,
-                            label: trip.departureTime!),
-                      _InfoChip(
-                          icon: Icons.event_seat_rounded,
-                          label: '${trip.freeSeats}/${trip.availableSeats} libres'),
+                      const Icon(Icons.calendar_today_rounded,
+                          size: 14, color: Color(0xFF64748B)),
+                      const SizedBox(width: 5),
+                      Text(
+                        _formatDate(trip.departureDate),
+                        style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF1E293B)),
+                      ),
+                      if (trip.departureTime != null) ...[
+                        const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 6),
+                          child: Text('·',
+                              style: TextStyle(
+                                  color: Color(0xFF94A3B8), fontSize: 15)),
+                        ),
+                        const Icon(Icons.access_time_rounded,
+                            size: 14, color: Color(0xFF64748B)),
+                        const SizedBox(width: 4),
+                        Text(
+                          trip.departureTime!,
+                          style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF1E293B)),
+                        ),
+                      ],
+                      const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 6),
+                        child: Text('·',
+                            style: TextStyle(
+                                color: Color(0xFF94A3B8), fontSize: 15)),
+                      ),
+                      const Icon(Icons.event_seat_rounded,
+                          size: 14, color: Color(0xFF64748B)),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${trip.freeSeats}/${trip.availableSeats} libres',
+                        style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF1E293B)),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 10),
 
                   // Price
                   Text(
-                    '\$${_formatNum(trip.pricePerSeat)} por asiento',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: AppColors.textSecondary,
+                    trip.splitCosts
+                        ? 'Gastos divididos'
+                        : '\$${_formatNum(trip.pricePerSeat)} por asiento',
+                    style: TextStyle(
+                      fontSize: 19,
+                      fontWeight: FontWeight.bold,
+                      color: trip.splitCosts
+                          ? const Color(0xFF1D4ED8)
+                          : AppColors.primary,
                     ),
                   ),
 
@@ -757,14 +796,7 @@ class _DriverTripDetailsSheetState
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                minSeats > 0
-                    ? 'Mínimo $minSeats (pasajeros confirmados)'
-                    : 'Sin pasajeros confirmados aún',
-                style: const TextStyle(fontSize: 13, color: Color(0xFF64748B)),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 8),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [

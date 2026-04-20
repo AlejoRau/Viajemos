@@ -160,6 +160,30 @@ class TripSearchRepository {
     }).toList();
   }
 
+  Future<List<TripSearchResult>> searchTripsNearby({
+    required double originLat,
+    required double originLng,
+    double? destLat,
+    double? destLng,
+    double originRadiusM = 100000,
+    double destRadiusM = 80000,
+  }) async {
+    final params = <String, dynamic>{
+      'p_origin_lat': originLat,
+      'p_origin_lng': originLng,
+      'p_origin_radius_m': originRadiusM,
+      'p_dest_radius_m': destRadiusM,
+    };
+    if (destLat != null) params['p_dest_lat'] = destLat;
+    if (destLng != null) params['p_dest_lng'] = destLng;
+
+    final data = await _client.rpc('search_trips_nearby_v2', params: params) as List;
+    return data
+        .cast<Map<String, dynamic>>()
+        .map(TripSearchResult.fromJson)
+        .toList();
+  }
+
   Future<void> createTripRequest({
     required String tripId,
     required int seatsRequested,
