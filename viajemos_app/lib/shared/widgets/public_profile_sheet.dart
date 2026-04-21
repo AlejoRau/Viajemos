@@ -205,18 +205,25 @@ class _ProfileBodyState extends State<_ProfileBody> {
           const SizedBox(height: 20),
 
           // Bio — siempre visible, igual en los dos tabs
-          if ((p.bioDriver != null && p.bioDriver!.isNotEmpty) ||
-              (p.bioPassenger != null && p.bioPassenger!.isNotEmpty)) ...[
-            const Text('Sobre mí',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700,
-                    color: Color(0xFF1E293B))),
-            const SizedBox(height: 6),
-            Text(
-              p.bioDriver?.isNotEmpty == true ? p.bioDriver! : p.bioPassenger!,
-              style: const TextStyle(fontSize: 13, color: Color(0xFF475569), height: 1.5),
-            ),
-            const SizedBox(height: 16),
-          ],
+          Builder(builder: (_) {
+            final bio = _showingDriver
+                ? (p.bioDriver?.isNotEmpty == true ? p.bioDriver! : p.bioPassenger ?? '')
+                : (p.bioPassenger?.isNotEmpty == true ? p.bioPassenger! : p.bioDriver ?? '');
+            if (bio.isEmpty) return const SizedBox.shrink();
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Sobre mí',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700,
+                        color: Color(0xFF1E293B))),
+                const SizedBox(height: 6),
+                Text(bio,
+                    style: const TextStyle(
+                        fontSize: 13, color: Color(0xFF475569), height: 1.5)),
+                const SizedBox(height: 16),
+              ],
+            );
+          }),
 
           // Social
           const Divider(color: Color(0xFFE2E8F0)),
@@ -378,30 +385,33 @@ class _PassengerStats extends StatelessWidget {
           label: 'Viajes como pasajero',
           icon: Icons.airline_seat_recline_normal_rounded,
         ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            if (profile.kickedOutCount > 0) ...[
-              Expanded(
-                child: _StatBox(
-                  value: '${profile.kickedOutCount}',
-                  label: 'Viajes\nque lo bajaron',
-                  icon: Icons.directions_walk_rounded,
-                  negative: true,
+        if (profile.kickedOutCount > 0 || profile.lateCancellationsCount > 0) ...[
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              if (profile.kickedOutCount > 0) ...[
+                Expanded(
+                  child: _StatBox(
+                    value: '${profile.kickedOutCount}',
+                    label: 'Viajes\nque lo bajaron',
+                    icon: Icons.directions_walk_rounded,
+                    negative: true,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 12),
+                if (profile.lateCancellationsCount > 0) const SizedBox(width: 12),
+              ],
+              if (profile.lateCancellationsCount > 0)
+                Expanded(
+                  child: _StatBox(
+                    value: '${profile.lateCancellationsCount}',
+                    label: 'Bajas en\ncorto aviso',
+                    icon: Icons.alarm_off_rounded,
+                    negative: true,
+                  ),
+                ),
             ],
-            Expanded(
-              child: _StatBox(
-                value: '${profile.lateCancellationsCount}',
-                label: 'Bajas en\ncorto aviso',
-                icon: Icons.alarm_off_rounded,
-                negative: true,
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ],
     );
   }

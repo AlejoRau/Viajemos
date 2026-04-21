@@ -45,6 +45,8 @@ class _TripMapScreenState extends State<TripMapScreen>
   bool _reversing = false;
   bool _locating = false;
   bool _showSuggestions = false;
+  // [south, north, west, east] bounding box de la ciudad seleccionada
+  List<double>? _cityBbox;
 
   // Pin drop animation
   late AnimationController _pinCtrl;
@@ -101,10 +103,12 @@ class _TripMapScreenState extends State<TripMapScreen>
 
   Future<void> _centerOnCity(String city) async {
     try {
+      // Búsqueda estructurada con city= para evitar que Nominatim devuelva
+      // la provincia en lugar de la ciudad (ej: Buenos Aires provincia vs CABA)
       final uri = Uri.parse(
         'https://nominatim.openstreetmap.org/search'
-        '?q=${Uri.encodeComponent(city)}'
-        '&format=json&limit=1&countrycodes=ar',
+        '?city=${Uri.encodeComponent(city)}'
+        '&countrycodes=ar&format=json&limit=5',
       );
       final res = await http.get(uri, headers: {
         'Accept-Language': 'es',
@@ -113,9 +117,36 @@ class _TripMapScreenState extends State<TripMapScreen>
       if (res.statusCode == 200 && mounted) {
         final data = jsonDecode(res.body) as List;
         if (data.isNotEmpty) {
-          final lat = double.parse(data[0]['lat'] as String);
-          final lon = double.parse(data[0]['lon'] as String);
+          // De los resultados, elegir el de menor área de bounding box
+          // (una ciudad tiene bbox mucho más chico que una provincia)
+          Map<String, dynamic>? best;
+          double bestArea = double.infinity;
+          for (final item in data) {
+            final raw = item['boundingbox'] as List?;
+            if (raw != null && raw.length == 4) {
+              final south = double.parse(raw[0] as String);
+              final north = double.parse(raw[1] as String);
+              final west  = double.parse(raw[2] as String);
+              final east  = double.parse(raw[3] as String);
+              final area = (north - south) * (east - west);
+              if (area < bestArea) {
+                bestArea = area;
+                best = item as Map<String, dynamic>;
+              }
+            } else {
+              best ??= item as Map<String, dynamic>;
+            }
+          }
+          best ??= data[0] as Map<String, dynamic>;
+
+          final lat = double.parse(best['lat'] as String);
+          final lon = double.parse(best['lon'] as String);
           final point = LatLng(lat, lon);
+
+          final raw = best['boundingbox'] as List?;
+          if (raw != null && raw.length == 4) {
+            _cityBbox = raw.map((e) => double.parse(e as String)).toList();
+          }
           setState(() => _pin = point);
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) _mapController.move(point, 13);
@@ -158,10 +189,15 @@ class _TripMapScreenState extends State<TripMapScreen>
     setState(() => _loading = true);
     try {
       final q = _buildQuery(query);
+      // Si tenemos el bbox de la ciudad, restringimos los resultados a ese área
+      final bbox = _cityBbox;
+      final viewbox = bbox != null
+          ? '&viewbox=${bbox[2]},${bbox[1]},${bbox[3]},${bbox[0]}&bounded=1'
+          : '';
       final uri = Uri.parse(
         'https://nominatim.openstreetmap.org/search'
         '?q=${Uri.encodeComponent(q)}'
-        '&format=json&limit=6&countrycodes=ar&addressdetails=1',
+        '&format=json&limit=10&countrycodes=ar&addressdetails=1&dedupe=1$viewbox',
       );
       final res = await http.get(uri, headers: {
         'Accept-Language': 'es',
@@ -169,16 +205,29 @@ class _TripMapScreenState extends State<TripMapScreen>
       });
       if (res.statusCode == 200 && mounted) {
         final data = jsonDecode(res.body) as List;
+        final seen = <String>{};
+        final places = <_Place>[];
+        for (final e in data) {
+          final addr = (e['address'] as Map<String, dynamic>?) ?? {};
+          final road = addr['road'] as String? ?? e['display_name'] as String;
+          final city = addr['city'] as String? ??
+              addr['town'] as String? ??
+              addr['village'] as String? ??
+              '';
+          final key = '$road|$city'.toLowerCase();
+          if (seen.contains(key)) continue;
+          seen.add(key);
+          places.add(_Place(
+            lat: double.parse(e['lat'] as String),
+            lon: double.parse(e['lon'] as String),
+            display: e['display_name'] as String,
+            type: e['type'] as String? ?? '',
+            address: addr,
+          ));
+          if (places.length == 6) break;
+        }
         setState(() {
-          _suggestions = data
-              .map((e) => _Place(
-                    lat: double.parse(e['lat'] as String),
-                    lon: double.parse(e['lon'] as String),
-                    display: e['display_name'] as String,
-                    type: e['type'] as String? ?? '',
-                    address: (e['address'] as Map<String, dynamic>?) ?? {},
-                  ))
-              .toList();
+          _suggestions = places;
           _showSuggestions = true;
         });
       }
@@ -637,7 +686,7 @@ class _TripMapScreenState extends State<TripMapScreen>
           // ── Controles derecha ─────────────────────────────────────────
           Positioned(
             right: 14,
-            bottom: hasAddress ? 160 : 110,
+            bottom: (hasAddress ? 172 : 148) + MediaQuery.of(context).padding.bottom,
             child: Column(
               children: [
                 // Mi ubicación
